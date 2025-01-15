@@ -15,7 +15,7 @@ I will update/fix things as I have time but PR's are welcomed. Hoping to make th
 * Configure vnstat to monitor br-lan
 * Configure netify config file to listen on thr router ip (10.0.3.1 is my router as an example)
 
-* Download this shell script and run it every minute via a crontab on the Openwrt Router
+* Download this shell script and run it every minute via a crontab on the Openwrt Router. This shell script will create the vnstat, client list, and nlbw data and place it in the /www/ of the router. 
 *https://github.com/benisai/Openwalla/blob/main/Router/1-minute.sh
 
 ## Docker Setup 
