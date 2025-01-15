@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  openwalla:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - OPENWRT_IP=192.168.1.1
+      - NETDATA_URL=http://192.168.1.1:19999
+      - NETIFY_IP=192.168.1.1
+      - NETIFY_PORT=7150
+    volumes:
+      - ./src/database:/app/src/database

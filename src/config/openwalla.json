@@ -1,0 +1,7 @@
+{
+  "netdata_url": "http://192.168.1.1:19999",
+  "netify_ip": "192.168.1.1",
+  "netify_port": "7150",
+  "netify_enabled": true,
+  "data_plan_limit": "2.00"
+}
