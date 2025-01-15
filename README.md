@@ -3,18 +3,32 @@
 A modern dashboard interface for network monitoring and management built with React, TypeScript, and Tailwind CSS.
 
 
+## Dashboard 
+* System Resouces from Netdata
+* Monthly Usage from vnstat2
 ![Dashboard](https://github.com/user-attachments/assets/bacc4e74-aa46-4d18-bda6-a72bb1107620)
 
+## Flows 
+* Netify
 ![flows](https://github.com/user-attachments/assets/b4356288-4364-464d-8a91-fce4e2931217)
 
+## Devices Page
 ![devices](https://github.com/user-attachments/assets/6ce0e54b-258d-42db-a52d-d1c3307f2479)
 
+## Device Details 
+* Data usage from NLBWMON
 ![device-details](https://github.com/user-attachments/assets/df83fab2-90ca-4276-8def-59af12c7505d)
 
+## Device Top Flow Count 
+* Netify Sqlite DB
 ![devices-top](https://github.com/user-attachments/assets/7a568a0f-f4ed-4024-a92f-a9644541e2ae)
 
+## Device Flows 
+* MAC Based from Netify SQLITE
 ![device-flows](https://github.com/user-attachments/assets/eeaa6526-a352-4913-9a70-47374133dcb9)
 
+## Monthly / Daily Usage 
+* vnstat2
 ![data-usage](https://github.com/user-attachments/assets/90322cfd-4dea-4f01-a634-42dd09cefe2c)
 
 
