@@ -7,7 +7,7 @@ Inspiration came from the Firewalla app, thus the name 'Openwalla'.
 This software was created for my personal use, but I'm sharing it with others in hopes they find it useful. 
 
 SOFTWARE IS ALPHA at this point. Things are broken, and some things dont work. :) 
-I will update/fix things as I have time but I'd love PRs to make this into a nicer / polished project.
+I will update/fix things as I have time but PR's are welcomed. Hoping to make this into a nicer / polished project. (Maybe even add some small router functionality like reboots, etc)
 
 ## Router Setup
 * Install Software (nlbwnon, vnstat2, netdata)
