@@ -1,6 +1,25 @@
-# FWPSE Dashboard
+# Openwalla Dashboard
 
 A modern dashboard interface for network monitoring and management built with React, TypeScript, and Tailwind CSS.
+
+
+![Dashboard](https://github.com/user-attachments/assets/bacc4e74-aa46-4d18-bda6-a72bb1107620)
+
+![flows](https://github.com/user-attachments/assets/b4356288-4364-464d-8a91-fce4e2931217)
+
+![devices](https://github.com/user-attachments/assets/6ce0e54b-258d-42db-a52d-d1c3307f2479)
+
+![device-details](https://github.com/user-attachments/assets/df83fab2-90ca-4276-8def-59af12c7505d)
+
+![devices-top](https://github.com/user-attachments/assets/7a568a0f-f4ed-4024-a92f-a9644541e2ae)
+
+![device-flows](https://github.com/user-attachments/assets/eeaa6526-a352-4913-9a70-47374133dcb9)
+
+![data-usage](https://github.com/user-attachments/assets/90322cfd-4dea-4f01-a634-42dd09cefe2c)
+
+
+
+
 
 ## Components Structure
 
