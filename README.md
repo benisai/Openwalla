@@ -2,6 +2,13 @@
 
 A modern dashboard interface for network monitoring and management built with React, TypeScript, and Tailwind CSS.
 
+## Router Setup
+* Install Software (nlbwnon, vnstat2)
+
+* Download this shell script and run it every minute via a crontab
+*https://github.com/benisai/Openwalla/blob/main/Router/1-minute.sh
+
+
 
 ## Dashboard 
 * System Resouces from Netdata
