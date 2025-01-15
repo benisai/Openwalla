@@ -5,7 +5,7 @@ A modern dashboard interface for network monitoring and management built with Re
 ## Router Setup
 * Install Software (nlbwnon, vnstat2)
 
-* Download this shell script and run it every minute via a crontab
+* Download this shell script and run it every minute via a crontab on the Openwrt Router
 *https://github.com/benisai/Openwalla/blob/main/Router/1-minute.sh
 
 
