@@ -16,7 +16,7 @@ A modern dashboard interface for network monitoring and management built with Re
 ![devices](https://github.com/user-attachments/assets/6ce0e54b-258d-42db-a52d-d1c3307f2479)
 
 ## Device Details 
-* Data usage from NLBWMON
+* Data usage from NLBWMON - http://router-ip/nlbw.html
 ![device-details](https://github.com/user-attachments/assets/df83fab2-90ca-4276-8def-59af12c7505d)
 
 ## Device Top Flow Count 
@@ -28,7 +28,7 @@ A modern dashboard interface for network monitoring and management built with Re
 ![device-flows](https://github.com/user-attachments/assets/eeaa6526-a352-4913-9a70-47374133dcb9)
 
 ## Monthly / Daily Usage 
-* vnstat2
+* vnstat2 - http://router-ip/vnstat.txt
 ![data-usage](https://github.com/user-attachments/assets/90322cfd-4dea-4f01-a634-42dd09cefe2c)
 
 
