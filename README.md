@@ -1,6 +1,13 @@
 # Openwalla Dashboard
 
-A modern dashboard interface for network monitoring and management built with React, TypeScript, and Tailwind CSS.
+A modern dashboard interface for monitoring OpenWRT using React, TypeScript, and Tailwind CSS. 
+
+Inspiration came from the Firewalla app, thus the name 'Openwalla'. 
+
+This software was created for my personal use, but I'm sharing it with others in hopes they find it useful. 
+
+SOFTWARE IS ALPHA at this point. Things are broken, and some things dont work. :) 
+I will update/fix things as I have time but I'd love PRs to make this into a nicer / polished project.
 
 ## Router Setup
 * Install Software (nlbwnon, vnstat2, netdata)
