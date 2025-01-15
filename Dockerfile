@@ -1,15 +1,21 @@
-FROM node:18
+FROM node:16
 
+# Set working directory
 WORKDIR /app
 
-COPY package*.json ./
-COPY backend/package*.json ./backend/
-
-RUN npm install
-RUN cd backend && npm install
-
+# Copy the entire project directory into the container
 COPY . .
 
-EXPOSE 3000
+# Install Node.js dependencies
+RUN cd Openwalla/backend && npm install
 
-CMD ["npm", "start"]
+RUN cd Openwalla/src && npm install
+
+# Expose any necessary ports
+#EXPOSE 3000
+EXPOSE 8080
+
+RUN chmod +x ./entrypoint.sh
+
+# Command to run your application
+ENTRYPOINT ["./entrypoint.sh"]

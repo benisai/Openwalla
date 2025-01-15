@@ -4,10 +4,12 @@ services:
     build: .
     ports:
       - "3000:3000"
+      - "8080:8080"
     environment:
-      - OPENWRT_IP=192.168.1.1
-      - NETDATA_URL=http://192.168.1.1:19999
-      - NETIFY_IP=192.168.1.1
+      - OPENWRT_IP=10.0.3.1
+      - NETDATA_URL=http://10.0.3.1:19999
+      - NETIFY_IP=10.0.3.1
       - NETIFY_PORT=7150
+      - VNSTAT_URL=http://10.0.3.1/vnstat.txt
     volumes:
-      - ./src/database:/app/src/database
+      - ./database:/app/Openwalla/src/database
