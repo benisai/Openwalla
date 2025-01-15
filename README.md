@@ -10,9 +10,10 @@ SOFTWARE IS ALPHA at this point. Things are broken, and some things dont work. :
 I will update/fix things as I have time but PR's are welcomed. Hoping to make this into a nicer / polished project. (Maybe even add some small router functionality like reboots, etc)
 
 ## Router Setup
-* Install Software (nlbwnon, vnstat2, netdata)
+* Install Software (netify, nlbwnon, vnstat2, netdata)
 
 * Configure vnstat to monitor br-lan
+* Configure netify config file to listen on thr router ip (10.0.3.1 is my router as an example)
 
 * Download this shell script and run it every minute via a crontab on the Openwrt Router
 *https://github.com/benisai/Openwalla/blob/main/Router/1-minute.sh
