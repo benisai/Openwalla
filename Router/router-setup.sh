@@ -67,11 +67,9 @@ fi
 # === Update Netify Config with LAN IP Address === #
 LAN_IP=$(uci get network.lan.ipaddr)
 CONFIG_FILE="/etc/netifyd.conf"
-
 if [ -n "$LAN_IP" ] && [ -f "$CONFIG_FILE" ]; then
     # Backup the configuration file
     cp "$CONFIG_FILE" "$CONFIG_FILE.bak"
-
     # Check if listen_address[0] already exists
     if grep -q "^listen_address\[0\]" "$CONFIG_FILE"; then
         # Update the existing line
