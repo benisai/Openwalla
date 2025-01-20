@@ -62,11 +62,11 @@ fi
 
  #Copying scripts and lua files to router
  echo 'Copying shell scripts and files from Github to Router'
- wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/scripts/15-second-script.sh -O /usr/bin/15-second-script.sh && chmod +x /usr/bin/15-second-script.sh
- wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/scripts/1-minute-script.sh -O /usr/bin/1-minute-script.sh && chmod +x /usr/bin/1-minute-script.sh
- wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/scripts/1-hour-script.sh -O /usr/bin/1-hour-script.sh && chmod +x /usr/bin/1-hour-script.sh
- wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/scripts/5-minute-script.sh -O /usr/bin/5-minute-script.sh && chmod +x /usr/bin/5-minute-script.sh
- wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/scripts/12am-script.sh -O /usr/bin/12am-script.sh && chmod +x /usr/bin/12am-script.sh
+ wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/15-second-script.sh -O /usr/bin/15-second-script.sh && chmod +x /usr/bin/15-second-script.sh
+ wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/1-minute-script.sh -O /usr/bin/1-minute-script.sh && chmod +x /usr/bin/1-minute-script.sh
+ wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/1-hour-script.sh -O /usr/bin/1-hour-script.sh && chmod +x /usr/bin/1-hour-script.sh
+ wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/5-minute-script.sh -O /usr/bin/5-minute-script.sh && chmod +x /usr/bin/5-minute-script.sh
+ wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/12am-script.sh -O /usr/bin/12am-script.sh && chmod +x /usr/bin/12am-script.sh
 
 
 
