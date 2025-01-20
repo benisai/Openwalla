@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #---------------------------------------------------------------------------------------------------------#
-#service netifyd restart
+#service netifyd restart to keep memory in check. 
 PID=`ps | grep "netifyd" | grep -v "grep" | awk '{print $1}'`
 if test -d /proc/$PID/; then
     echo Netify Netcat Process Found, killing Process $PID
