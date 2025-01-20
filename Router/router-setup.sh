@@ -55,7 +55,6 @@ if [ "$extexist" -eq 1 ]; then
     echo "Updating vnStat configuration to use $VNSTAT_DIR"
     sed -i 's/;DatabaseDir /DatabaseDir /g' /etc/vnstat.conf
     sed -i "s,$DEFAULT_DB_DIR,$VNSTAT_DIR,g" /etc/vnstat.conf
-    sed -i 's/;SaveInterval 5 /SaveInterval 1 /g' /etc/vnstat.conf
     echo "vnStat database location updated to $VNSTAT_DIR"
 else
     echo "No mounted directory found. Keeping default vnStat configuration."
