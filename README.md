@@ -10,6 +10,13 @@ SOFTWARE IS ALPHA at this point. Things are broken, and some things dont work. :
 I will update/fix things as I have time but PR's are welcomed. Hoping to make this into a nicer / polished project. (Maybe even add some small router functionality like reboots, etc)
 
 ## Router Setup
+
+* Download the shell script to setup the router
+  * ```wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/router-setup.sh```
+  * chmod +x routersetup.sh
+* ```sh ./routersetup.sh```
+
+ -OR- MANUALLY INSTALL/Configure:
 * Install Software (netify, nlbwnon, vnstat2, netdata)
 
 * Configure vnstat to monitor br-lan
