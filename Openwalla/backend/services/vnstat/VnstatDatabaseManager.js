@@ -3,6 +3,7 @@ const { databases } = require('../../database');
 class VnstatDatabaseManager {
   static async saveHourlyData(hourData) {
     return new Promise((resolve, reject) => {
+      console.log('Saving hourly data:', hourData);
       databases.vnstat.run(`
         INSERT OR REPLACE INTO hourly 
         (year, month, day, hour, rx, tx, timestamp, interface_name)
