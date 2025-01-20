@@ -6,14 +6,24 @@ cat << "EOF" > /etc/profile.d/alias.sh
 alias cls="clear"
 EOF
 
+#----------------------------------------------------------------------------------------#  
+# === Check if SD or USB exist ============
+get_mounted_location() {
+    mount | grep -E '/dev/sd|/dev/mmcblk' | awk '{print $3}' | head -n 1
+}
+MOUNTED_DIR=$(get_mounted_location)
+if [ -n "$MOUNTED_DIR" ]; then
+    extexist=1
+else
+    extexist=0
+fi
+
+#----------------------------------------------------------------------------------------#  
 # === Update repo =============
  echo 'Updating software packages'
  opkg update
- 
 # List of software to check and install
 software="vnstat2 vnstati2 luci-app-vnstat2 netifyd netdata nlbwmon luci-app-nlbwmon"
-
-
 # Loop through the list of software
 for s in $software
 do
@@ -30,28 +40,20 @@ do
     echo "$s is already installed."
   fi
 done
-  
 
-#Changing vnstat backup location to USB or SD Card.
-dt=$(date '+%d%m%Y%H%M%S')
-# Default DatabaseDir location
-DEFAULT_DB_DIR="/var/lib/vnstat"
-get_mounted_location() {
-    mount | grep -E '/dev/sd|/dev/mmcblk' | awk '{print $3}' | head -n 1
-}
-# Detect the mounted directory
-MOUNTED_DIR=$(get_mounted_location)
-# Check if a mounted directory is found
-if [ -n "$MOUNTED_DIR" ]; then
-    echo "Mounted directory found: $MOUNTED_DIR"
+#----------------------------------------------------------------------------------------#  
+# === Changing vnstat backup location to USB or SD Card. === #
+if [ "$extexist" -eq 1 ]; then
+    dt=$(date '+%d%m%Y%H%M%S')
+    DEFAULT_DB_DIR="/var/lib/vnstat"
     VNSTAT_DIR="$MOUNTED_DIR/vnstat"
-    # Backing up the original vnstat.conf
+    # Backup the original vnstat.conf
     echo "Backing up /etc/vnstat.conf to /etc/vnstat.conf.$dt"
     cp /etc/vnstat.conf /etc/vnstat.conf.$dt
-    # Update vnstat configuration
+    # Update vnStat configuration
+    echo "Updating vnStat configuration to use $VNSTAT_DIR"
     sed -i 's/;DatabaseDir /DatabaseDir /g' /etc/vnstat.conf
     sed -i "s,$DEFAULT_DB_DIR,$VNSTAT_DIR,g" /etc/vnstat.conf
-    # Change VNStatDB save interval from 5 minutes to 1 minute
     sed -i 's/;SaveInterval 5 /SaveInterval 1 /g' /etc/vnstat.conf
     echo "vnStat database location updated to $VNSTAT_DIR"
 else
@@ -59,17 +61,49 @@ else
 fi
 
 
+#----------------------------------------------------------------------------------------#  
+# === Update Netify Config with LAN IP Address === #
+# Get the LAN IP address
+LAN_IP=$(uci get network.lan.ipaddr)
+# Configuration file path
+CONFIG_FILE="/etc/netifyd.conf"
+# Check if the LAN IP was retrieved
+if [ -z "$LAN_IP" ]; then
+    echo "Error: Could not retrieve LAN IP address."
+    return 1
+fi
+# Check if the configuration file exists
+if [ ! -f "$CONFIG_FILE" ]; then
+    # Skip actions if the file doesn't exist
+    echo "Config file not found: $CONFIG_FILE"
+    return 0  # Or continue without action
+fi
+# Backup the original configuration file
+cp "$CONFIG_FILE" "$CONFIG_FILE.bak"
+# Check if the configuration contains "listen_address[0]"
+if grep -q "listen_address\[0\]" "$CONFIG_FILE"; then
+    # Update the existing line with the LAN IP
+    sed -i "s|^listen_address\[0\].*|listen_address[0] = $LAN_IP|" "$CONFIG_FILE"
+    echo "Updated listen_address[0] with LAN IP: $LAN_IP"
+else
+    # Add the line with the LAN IP under the [socket] section
+    sed -i "/^\[socket\]/a listen_address[0] = $LAN_IP" "$CONFIG_FILE"
+    echo "Added listen_address[0] with LAN IP: $LAN_IP"
+fi
 
+
+
+#----------------------------------------------------------------------------------------#  
  #Copying scripts and lua files to router
  echo 'Copying shell scripts and files from Github to Router'
- wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/15-second-script.sh -O /usr/bin/15-second-script.sh && chmod +x /usr/bin/15-second-script.sh
- wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/1-minute-script.sh -O /usr/bin/1-minute-script.sh && chmod +x /usr/bin/1-minute-script.sh
- wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/1-hour-script.sh -O /usr/bin/1-hour-script.sh && chmod +x /usr/bin/1-hour-script.sh
- wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/5-minute-script.sh -O /usr/bin/5-minute-script.sh && chmod +x /usr/bin/5-minute-script.sh
- wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/12am-script.sh -O /usr/bin/12am-script.sh && chmod +x /usr/bin/12am-script.sh
+ wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/scripts/15-second-script.sh -O /usr/bin/15-second-script.sh && chmod +x /usr/bin/15-second-script.sh
+ wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/scripts/1-minute-script.sh -O /usr/bin/1-minute-script.sh && chmod +x /usr/bin/1-minute-script.sh
+ wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/scripts/1-hour-script.sh -O /usr/bin/1-hour-script.sh && chmod +x /usr/bin/1-hour-script.sh
+ wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/scripts/5-minute-script.sh -O /usr/bin/5-minute-script.sh && chmod +x /usr/bin/5-minute-script.sh
+ wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/scripts/12am-script.sh -O /usr/bin/12am-script.sh && chmod +x /usr/bin/12am-script.sh
 
 
-
+#----------------------------------------------------------------------------------------#  
  #Adding scripts to Crontab
  echo 'Add Scripts to crontab'
  C=$(crontab -l | grep "ready")
@@ -89,7 +123,7 @@ fi
 
  
 
-
+#----------------------------------------------------------------------------------------#  
 # === Setting Services to enable and restarting Services =============
  echo 'Enable and Restart services'
  /etc/init.d/cron start
@@ -101,5 +135,5 @@ fi
 
  
 
-# === 
+#----------------------------------------------------------------------------------------# 
 echo 'You should restart the router now for these changes to take effect...'
