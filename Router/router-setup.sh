@@ -63,28 +63,28 @@ else
 fi
 
 
-#----------------------------------------------------------------------------------------#  
-# === Update Netify Config with LAN IP Address === #
-LAN_IP=$(uci get network.lan.ipaddr)
-CONFIG_FILE="/etc/netifyd.conf"
+# #----------------------------------------------------------------------------------------#  
+# # === Update Netify Config with LAN IP Address === #
+# LAN_IP=$(uci get network.lan.ipaddr)
+# CONFIG_FILE="/etc/netifyd.conf"
 
-if [ -n "$LAN_IP" ] && [ -f "$CONFIG_FILE" ]; then
-    # Backup the configuration file
-    cp "$CONFIG_FILE" "$CONFIG_FILE.bak"
+# if [ -n "$LAN_IP" ] && [ -f "$CONFIG_FILE" ]; then
+#     # Backup the configuration file
+#     cp "$CONFIG_FILE" "$CONFIG_FILE.bak"
 
-    # Check if listen_address[0] already exists
-    if grep -q "^listen_address\[0\]" "$CONFIG_FILE"; then
-        # Update the existing line
-        sed -i "s|^listen_address\[0\].*|listen_address[0] = $LAN_IP|" "$CONFIG_FILE"
-        echo "Updated listen_address[0] with LAN IP: $LAN_IP"
-    else
-        # Add the line under the [socket] section
-        sed -i "/^\[socket\]/a listen_address[0] = $LAN_IP" "$CONFIG_FILE"
-        echo "Added listen_address[0] with LAN IP: $LAN_IP"
-    fi
-else
-    echo "Error: Could not retrieve LAN IP or configuration file not found."
-fi
+#     # Check if listen_address[0] already exists
+#     if grep -q "^listen_address\[0\]" "$CONFIG_FILE"; then
+#         # Update the existing line
+#         sed -i "s|^listen_address\[0\].*|listen_address[0] = $LAN_IP|" "$CONFIG_FILE"
+#         echo "Updated listen_address[0] with LAN IP: $LAN_IP"
+#     else
+#         # Add the line under the [socket] section
+#         sed -i "/^\[socket\]/a listen_address[0] = $LAN_IP" "$CONFIG_FILE"
+#         echo "Added listen_address[0] with LAN IP: $LAN_IP"
+#     fi
+# else
+#     echo "Error: Could not retrieve LAN IP or configuration file not found."
+# fi
 
 
 #----------------------------------------------------------------------------------------#  
@@ -97,30 +97,30 @@ fi
  wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/12am-script.sh -O /usr/bin/12am-script.sh && chmod +x /usr/bin/12am-script.sh
 
 
-#----------------------------------------------------------------------------------------#  
- #Adding scripts to Crontab
- echo 'Add Scripts to crontab'
- C=$(crontab -l | grep "ready")
- if [[ -z "$C" ]]; then
-   echo "Adding Scripts*.sh to crontab"
-   crontab -l | { cat; echo "59 * * 12 * /ready"; } | crontab -
-   crontab -l | { cat; echo "1 0 * * * /usr/bin/12am-script.sh"; } | crontab -
-   crontab -l | { cat; echo "0 * * * * /usr/bin/1-hour-script.sh"; } | crontab -
-   crontab -l | { cat; echo "*/1 * * * * /usr/bin/1-minute-script.sh"; } | crontab -
-   elif [[ -n "$C" ]]; then
-   echo "Keyword (ready) was found in crontab, no changes made"
- fi
+# #----------------------------------------------------------------------------------------#  
+#  #Adding scripts to Crontab
+#  echo 'Add Scripts to crontab'
+#  C=$(crontab -l | grep "ready")
+#  if [[ -z "$C" ]]; then
+#    echo "Adding Scripts*.sh to crontab"
+#    crontab -l | { cat; echo "59 * * 12 * /ready"; } | crontab -
+#    crontab -l | { cat; echo "1 0 * * * /usr/bin/12am-script.sh"; } | crontab -
+#    crontab -l | { cat; echo "0 * * * * /usr/bin/1-hour-script.sh"; } | crontab -
+#    crontab -l | { cat; echo "*/1 * * * * /usr/bin/1-minute-script.sh"; } | crontab -
+#    elif [[ -n "$C" ]]; then
+#    echo "Keyword (ready) was found in crontab, no changes made"
+#  fi
 
 
-#----------------------------------------------------------------------------------------#  
-# === Setting Services to enable and restarting Services =============
- echo 'Enable and Restart services'
- /etc/init.d/cron start
- /etc/init.d/cron enable
- /etc/init.d/cron restart
- /etc/init.d/vnstat restart
- /etc/init.d/dnsmasq restart
- /etc/init.d/firewall restart
+# #----------------------------------------------------------------------------------------#  
+# # === Setting Services to enable and restarting Services =============
+#  echo 'Enable and Restart services'
+#  /etc/init.d/cron start
+#  /etc/init.d/cron enable
+#  /etc/init.d/cron restart
+#  /etc/init.d/vnstat restart
+#  /etc/init.d/dnsmasq restart
+#  /etc/init.d/firewall restart
 
 #----------------------------------------------------------------------------------------# 
 echo 'You should restart the router now for these changes to take effect...'
