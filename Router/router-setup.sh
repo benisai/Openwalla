@@ -23,7 +23,7 @@ fi
  echo 'Updating software packages'
  opkg update
 # List of software to check and install
-software="vnstat2 vnstati2 luci-app-vnstat2 netifyd netdata nlbwmon luci-app-nlbwmon"
+software="nano vnstat2 vnstati2 luci-app-vnstat2 netifyd netdata nlbwmon luci-app-nlbwmon"
 # Loop through the list of software
 for s in $software
 do
@@ -63,34 +63,26 @@ fi
 
 #----------------------------------------------------------------------------------------#  
 # === Update Netify Config with LAN IP Address === #
-# Get the LAN IP address
 LAN_IP=$(uci get network.lan.ipaddr)
-# Configuration file path
 CONFIG_FILE="/etc/netifyd.conf"
-# Check if the LAN IP was retrieved
-if [ -z "$LAN_IP" ]; then
-    echo "Error: Could not retrieve LAN IP address."
-    return 1
-fi
-# Check if the configuration file exists
-if [ ! -f "$CONFIG_FILE" ]; then
-    # Skip actions if the file doesn't exist
-    echo "Config file not found: $CONFIG_FILE"
-    return 0  # Or continue without action
-fi
-# Backup the original configuration file
-cp "$CONFIG_FILE" "$CONFIG_FILE.bak"
-# Check if the configuration contains "listen_address[0]"
-if grep -q "listen_address\[0\]" "$CONFIG_FILE"; then
-    # Update the existing line with the LAN IP
-    sed -i "s|^listen_address\[0\].*|listen_address[0] = $LAN_IP|" "$CONFIG_FILE"
-    echo "Updated listen_address[0] with LAN IP: $LAN_IP"
-else
-    # Add the line with the LAN IP under the [socket] section
-    sed -i "/^\[socket\]/a listen_address[0] = $LAN_IP" "$CONFIG_FILE"
-    echo "Added listen_address[0] with LAN IP: $LAN_IP"
-fi
 
+if [ -n "$LAN_IP" ] && [ -f "$CONFIG_FILE" ]; then
+    # Backup the configuration file
+    cp "$CONFIG_FILE" "$CONFIG_FILE.bak"
+
+    # Check if listen_address[0] already exists
+    if grep -q "^listen_address\[0\]" "$CONFIG_FILE"; then
+        # Update the existing line
+        sed -i "s|^listen_address\[0\].*|listen_address[0] = $LAN_IP|" "$CONFIG_FILE"
+        echo "Updated listen_address[0] with LAN IP: $LAN_IP"
+    else
+        # Add the line under the [socket] section
+        sed -i "/^\[socket\]/a listen_address[0] = $LAN_IP" "$CONFIG_FILE"
+        echo "Added listen_address[0] with LAN IP: $LAN_IP"
+    fi
+else
+    echo "Error: Could not retrieve LAN IP or configuration file not found."
+fi
 
 
 #----------------------------------------------------------------------------------------#  
