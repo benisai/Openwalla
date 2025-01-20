@@ -2,11 +2,12 @@
 
 #---------------------------------------------------------------------------------------------------------#
 #---Adblock-Details--------#
-/etc/init.d/adblock report > /www/adblock.txt
+/etc/init.d/adblock report > /tmp/adblock.txt
+ln -s /tmp/adblock.txt /www/adblock.txt
 
 #---------------------------------------------------------------------------------------------------------#
 #########----------Device-Details-------------###############
-OUTPUT_FILE="/www/clientlist.html"
+OUTPUT_FILE="/tmp/clientlist.html"
 LEASES_FILE="/tmp/dhcp.leases"
 ARP_FILE="/proc/net/arp"
 # Remove the output file if it exists
@@ -32,11 +33,13 @@ else
     echo "ARP file not found: $ARP_FILE" >> "$OUTPUT_FILE"
 fi
 
+ln -s /tmp/clientlist.html /www/clientlist.html
 
 #---------------------------------------------------------------------------------------------------------#
 #########----------nlbwmon-------------###############
-nlbw -c csv -g ip,mac -o ip | tr -d '"' | tail -n +2 > /www/nlbw.html #/tmp/nlbwmon.out
+nlbw -c csv -g ip,mac -o ip | tr -d '"' | tail -n +2 > /tmp/nlbw.html
 
+ln -s /tmp/nlbwmon.html /www/nlbwmon.html
 
 
 #---------------------------------------------------------------------------------------------------------#
@@ -65,6 +68,8 @@ OUTPUT_FILE="/www/vnstat.txt"
 } > "$OUTPUT_FILE"
 # Notify the user
 echo "Cleaned output saved to $OUTPUT_FILE."
+
+ln -s /www/vnstat.txt /www/vnstat.txt
 
 
 #---------------------------------------------------------------------------------------------------------#
