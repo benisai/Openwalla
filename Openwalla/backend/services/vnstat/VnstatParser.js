@@ -32,32 +32,32 @@ class VnstatParser {
             year: parseInt(year),
             month: parseInt(month),
             day: parseInt(day),
-            timestamp: parseInt(dailyTimestamp),
             rx: parseInt(dailyRx),
             tx: parseInt(dailyTx)
           });
           break;
 
         case 'Hourly':
-          const [hourlyDay, hour, minute, hourlyTimestamp, hourlyRx, hourlyTx] = rest;
+          const [hourlyDay, hour, minute, hourlyRx, hourlyTx] = rest;
           data.hourly.push({
             interface_name,
             year: parseInt(year),
             month: parseInt(month),
             day: parseInt(hourlyDay),
             hour: parseInt(hour),
-            timestamp: parseInt(hourlyTimestamp),
             rx: parseInt(hourlyRx),
-            tx: parseInt(hourlyTx)
+            tx: parseInt(hourlyTx),
+            timestamp: Math.floor(new Date(`${year}-${month}-${hourlyDay} ${hour}:${minute}`).getTime() / 1000)
           });
           break;
       }
     });
 
-    console.log('Parsed data:', {
+    console.log('Parsed vnstat data:', {
       monthlyCount: data.monthly.length,
       dailyCount: data.daily.length,
-      hourlyCount: data.hourly.length
+      hourlyCount: data.hourly.length,
+      sampleHourly: data.hourly[0]
     });
 
     return data;
