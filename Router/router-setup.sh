@@ -88,10 +88,10 @@ fi
 #----------------------------------------------------------------------------------------#  
  #Copying scripts and lua files to router
  echo 'Copying shell scripts and files from Github to Router'
- wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/15-second-script.sh -O /usr/bin/15-second-script.sh && chmod +x /usr/bin/15-second-script.sh
+ #wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/15-second-script.sh -O /usr/bin/15-second-script.sh && chmod +x /usr/bin/15-second-script.sh
+ #wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/5-minute-script.sh -O /usr/bin/5-minute-script.sh && chmod +x /usr/bin/5-minute-script.sh
  wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/1-minute-script.sh -O /usr/bin/1-minute-script.sh && chmod +x /usr/bin/1-minute-script.sh
  wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/1-hour-script.sh -O /usr/bin/1-hour-script.sh && chmod +x /usr/bin/1-hour-script.sh
- wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/5-minute-script.sh -O /usr/bin/5-minute-script.sh && chmod +x /usr/bin/5-minute-script.sh
  wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/12am-script.sh -O /usr/bin/12am-script.sh && chmod +x /usr/bin/12am-script.sh
 
 
@@ -105,10 +105,6 @@ fi
    crontab -l | { cat; echo "1 0 * * * /usr/bin/12am-script.sh"; } | crontab -
    crontab -l | { cat; echo "0 * * * * /usr/bin/1-hour-script.sh"; } | crontab -
    crontab -l | { cat; echo "*/1 * * * * /usr/bin/1-minute-script.sh"; } | crontab -
-   crontab -l | { cat; echo "* * * * * /usr/bin/15-second-script.sh"; } | crontab -
-   crontab -l | { cat; echo "* * * * * sleep 15; /usr/bin/15-second-script.sh"; } | crontab -
-   crontab -l | { cat; echo "* * * * * sleep 30; /usr/bin/15-second-script.sh"; } | crontab -
-   crontab -l | { cat; echo "* * * * * sleep 45; /usr/bin/15-second-script.sh"; } | crontab -
    elif [[ -n "$C" ]]; then
    echo "Keyword (ready) was found in crontab, no changes made"
  fi
