@@ -117,8 +117,9 @@ done
 #  /etc/init.d/cron enable
 #  /etc/init.d/cron restart
 #  /etc/init.d/vnstat restart
-#  /etc/init.d/dnsmasq restart
-#  /etc/init.d/firewall restart
+#  /etc/init.d/vnstat restart
+#  service netifyd restart
+
 
 #----------------------------------------------------------------------------------------# 
 echo 'You should restart the router now for these changes to take effect...'
