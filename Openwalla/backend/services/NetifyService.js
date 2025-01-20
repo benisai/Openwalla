@@ -12,6 +12,7 @@ class NetifyService {
     this.RECONNECT_DELAY = 5000;
     this.deviceCache = new Map();
     this.CACHE_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
+    this.isShuttingDown = false; // New flag to track intentional shutdowns
   }
 
   async loadDeviceCache() {
@@ -47,6 +48,11 @@ class NetifyService {
   }
 
   connect() {
+    if (this.isShuttingDown) {
+      console.log('[NetifyService] Service is shutting down, not reconnecting');
+      return;
+    }
+
     console.log(`[NetifyService] Connecting to agent at ${this.host}:${this.port}`);
     
     this.startCacheRefresh();
@@ -84,21 +90,37 @@ class NetifyService {
 
     this.client.on('error', (error) => {
       console.error('[NetifyService] Connection error:', error.message);
-      
-      if (this.reconnectAttempts < this.MAX_RECONNECT_ATTEMPTS) {
-        this.reconnectAttempts++;
-        console.log(`[NetifyService] Reconnection attempt ${this.reconnectAttempts} of ${this.MAX_RECONNECT_ATTEMPTS}`);
-        setTimeout(() => this.connect(), this.RECONNECT_DELAY);
-      } else {
-        console.error('[NetifyService] Max reconnection attempts reached');
-        const errorMessage = `Failed to connect to Netify agent after ${this.MAX_RECONNECT_ATTEMPTS} attempts`;
-        this.saveNotification(errorMessage);
-      }
+      this.handleReconnection('error');
     });
 
     this.client.on('close', () => {
       console.log('[NetifyService] Connection closed');
+      this.handleReconnection('close');
     });
+  }
+
+  handleReconnection(trigger) {
+    if (this.isShuttingDown) {
+      console.log('[NetifyService] Service is shutting down, not attempting reconnection');
+      return;
+    }
+
+    if (this.reconnectAttempts < this.MAX_RECONNECT_ATTEMPTS) {
+      this.reconnectAttempts++;
+      console.log(`[NetifyService] Reconnection attempt ${this.reconnectAttempts} of ${this.MAX_RECONNECT_ATTEMPTS} (triggered by ${trigger})`);
+      setTimeout(() => this.connect(), this.RECONNECT_DELAY);
+    } else {
+      console.error('[NetifyService] Max reconnection attempts reached');
+      const errorMessage = `Failed to connect to Netify agent after ${this.MAX_RECONNECT_ATTEMPTS} attempts`;
+      this.saveNotification(errorMessage);
+      
+      // Reset reconnection attempts after a longer delay and try again
+      setTimeout(() => {
+        console.log('[NetifyService] Resetting reconnection attempts and trying again');
+        this.reconnectAttempts = 0;
+        this.connect();
+      }, this.RECONNECT_DELAY * 6); // Wait 30 seconds before starting fresh
+    }
   }
 
   getDeviceInfo(mac) {
@@ -196,10 +218,19 @@ class NetifyService {
   }
 
   stop() {
+    this.isShuttingDown = true;
     if (this.client) {
       this.client.destroy();
       this.client = null;
     }
+  }
+
+  // New method to restart the service
+  restart() {
+    this.isShuttingDown = false;
+    this.reconnectAttempts = 0;
+    this.stop();
+    this.connect();
   }
 }
 
