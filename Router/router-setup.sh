@@ -1,5 +1,7 @@
 #!/bin/sh
 
+#wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/router-setup.sh
+
 # === Set Custom Alias for clear as cls ============
 mkdir -p /etc/profile.d
 cat << "EOF" > /etc/profile.d/alias.sh
