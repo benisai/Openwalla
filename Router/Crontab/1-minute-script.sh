@@ -3,7 +3,7 @@
 #---------------------------------------------------------------------------------------------------------#
 #---Adblock-Details--------#
 /etc/init.d/adblock report > /tmp/adblock.txt
-/etc/init.d/adblock list | grep " x " > /tmp/adblock-list.txt
+/etc/init.d/adblock list | grep " x " | sed 's/+//g' | cut -d " " -f2- > /tmp/adblock-list.txt
 
 ln -s /tmp/adblock.txt /www/adblock.txt
 ln -s /tmp/adblock-list.txt /www/adblock-list.txt
