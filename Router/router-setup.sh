@@ -114,7 +114,6 @@ fi
    echo "Keyword (ready) was found in crontab, no changes made"
  fi
 
- 
 
 #----------------------------------------------------------------------------------------#  
 # === Setting Services to enable and restarting Services =============
@@ -125,8 +124,6 @@ fi
  /etc/init.d/vnstat restart
  /etc/init.d/dnsmasq restart
  /etc/init.d/firewall restart
-
- 
 
 #----------------------------------------------------------------------------------------# 
 echo 'You should restart the router now for these changes to take effect...'
