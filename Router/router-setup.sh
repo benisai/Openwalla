@@ -47,7 +47,6 @@ if [ "$extexist" -eq 1 ]; then
     dt=$(date '+%d%m%Y%H%M%S')
     DEFAULT_DB_DIR="/var/lib/vnstat"
     VNSTAT_DIR="$MOUNTED_DIR/vnstat"
-    mkdir -p "$VNSTAT_DIR"
     # Backup the original vnstat.conf
     echo "Backing up /etc/vnstat.conf to /etc/vnstat.conf.$dt"
     cp /etc/vnstat.conf /etc/vnstat.conf.$dt
