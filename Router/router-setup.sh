@@ -43,48 +43,48 @@ do
   fi
 done
 
-# #----------------------------------------------------------------------------------------#  
-# # === Changing vnstat backup location to USB or SD Card. === #
-# if [ "$extexist" -eq 1 ]; then
-#     dt=$(date '+%d%m%Y%H%M%S')
-#     DEFAULT_DB_DIR="/var/lib/vnstat"
-#     VNSTAT_DIR="$MOUNTED_DIR/vnstat"
-#     mkdir -p "$VNSTAT_DIR"
-#     # Backup the original vnstat.conf
-#     echo "Backing up /etc/vnstat.conf to /etc/vnstat.conf.$dt"
-#     cp /etc/vnstat.conf /etc/vnstat.conf.$dt
-#     # Update vnStat configuration
-#     echo "Updating vnStat configuration to use $VNSTAT_DIR"
-#     sed -i 's/;DatabaseDir /DatabaseDir /g' /etc/vnstat.conf
-#     sed -i "s,$DEFAULT_DB_DIR,$VNSTAT_DIR,g" /etc/vnstat.conf
-#     echo "vnStat database location updated to $VNSTAT_DIR"
-# else
-#     echo "No mounted directory found. Keeping default vnStat configuration."
-# fi
+#----------------------------------------------------------------------------------------#  
+# === Changing vnstat backup location to USB or SD Card. === #
+if [ "$extexist" -eq 1 ]; then
+    dt=$(date '+%d%m%Y%H%M%S')
+    DEFAULT_DB_DIR="/var/lib/vnstat"
+    VNSTAT_DIR="$MOUNTED_DIR/vnstat"
+    mkdir -p "$VNSTAT_DIR"
+    # Backup the original vnstat.conf
+    echo "Backing up /etc/vnstat.conf to /etc/vnstat.conf.$dt"
+    cp /etc/vnstat.conf /etc/vnstat.conf.$dt
+    # Update vnStat configuration
+    echo "Updating vnStat configuration to use $VNSTAT_DIR"
+    sed -i 's/;DatabaseDir /DatabaseDir /g' /etc/vnstat.conf
+    sed -i "s,$DEFAULT_DB_DIR,$VNSTAT_DIR,g" /etc/vnstat.conf
+    echo "vnStat database location updated to $VNSTAT_DIR"
+else
+    echo "No mounted directory found. Keeping default vnStat configuration."
+fi
 
 
-# #----------------------------------------------------------------------------------------#  
-# # === Update Netify Config with LAN IP Address === #
-# LAN_IP=$(uci get network.lan.ipaddr)
-# CONFIG_FILE="/etc/netifyd.conf"
+#----------------------------------------------------------------------------------------#  
+# === Update Netify Config with LAN IP Address === #
+LAN_IP=$(uci get network.lan.ipaddr)
+CONFIG_FILE="/etc/netifyd.conf"
 
-# if [ -n "$LAN_IP" ] && [ -f "$CONFIG_FILE" ]; then
-#     # Backup the configuration file
-#     cp "$CONFIG_FILE" "$CONFIG_FILE.bak"
+if [ -n "$LAN_IP" ] && [ -f "$CONFIG_FILE" ]; then
+    # Backup the configuration file
+    cp "$CONFIG_FILE" "$CONFIG_FILE.bak"
 
-#     # Check if listen_address[0] already exists
-#     if grep -q "^listen_address\[0\]" "$CONFIG_FILE"; then
-#         # Update the existing line
-#         sed -i "s|^listen_address\[0\].*|listen_address[0] = $LAN_IP|" "$CONFIG_FILE"
-#         echo "Updated listen_address[0] with LAN IP: $LAN_IP"
-#     else
-#         # Add the line under the [socket] section
-#         sed -i "/^\[socket\]/a listen_address[0] = $LAN_IP" "$CONFIG_FILE"
-#         echo "Added listen_address[0] with LAN IP: $LAN_IP"
-#     fi
-# else
-#     echo "Error: Could not retrieve LAN IP or configuration file not found."
-# fi
+    # Check if listen_address[0] already exists
+    if grep -q "^listen_address\[0\]" "$CONFIG_FILE"; then
+        # Update the existing line
+        sed -i "s|^listen_address\[0\].*|listen_address[0] = $LAN_IP|" "$CONFIG_FILE"
+        echo "Updated listen_address[0] with LAN IP: $LAN_IP"
+    else
+        # Add the line under the [socket] section
+        sed -i "/^\[socket\]/a listen_address[0] = $LAN_IP" "$CONFIG_FILE"
+        echo "Added listen_address[0] with LAN IP: $LAN_IP"
+    fi
+else
+    echo "Error: Could not retrieve LAN IP or configuration file not found."
+fi
 
 
 #----------------------------------------------------------------------------------------#  
