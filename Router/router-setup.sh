@@ -95,30 +95,30 @@ fi
  wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/12am-script.sh -O /usr/bin/12am-script.sh && chmod +x /usr/bin/12am-script.sh
 
 
-# #----------------------------------------------------------------------------------------#  
-#  #Adding scripts to Crontab
-#  echo 'Add Scripts to crontab'
-#  C=$(crontab -l | grep "ready")
-#  if [[ -z "$C" ]]; then
-#    echo "Adding Scripts*.sh to crontab"
-#    crontab -l | { cat; echo "59 * * 12 * /ready"; } | crontab -
-#    crontab -l | { cat; echo "1 0 * * * /usr/bin/12am-script.sh"; } | crontab -
-#    crontab -l | { cat; echo "0 * * * * /usr/bin/1-hour-script.sh"; } | crontab -
-#    crontab -l | { cat; echo "*/1 * * * * /usr/bin/1-minute-script.sh"; } | crontab -
-#    elif [[ -n "$C" ]]; then
-#    echo "Keyword (ready) was found in crontab, no changes made"
-#  fi
+#----------------------------------------------------------------------------------------#  
+ #Adding scripts to Crontab
+ echo 'Add Scripts to crontab'
+ C=$(crontab -l | grep "ready")
+ if [[ -z "$C" ]]; then
+   echo "Adding Scripts*.sh to crontab"
+   crontab -l | { cat; echo "59 * * 12 * /ready"; } | crontab -
+   crontab -l | { cat; echo "1 0 * * * /usr/bin/12am-script.sh"; } | crontab -
+   crontab -l | { cat; echo "0 * * * * /usr/bin/1-hour-script.sh"; } | crontab -
+   crontab -l | { cat; echo "*/1 * * * * /usr/bin/1-minute-script.sh"; } | crontab -
+   elif [[ -n "$C" ]]; then
+   echo "Keyword (ready) was found in crontab, no changes made"
+ fi
 
 
-# #----------------------------------------------------------------------------------------#  
-# # === Setting Services to enable and restarting Services =============
-#  echo 'Enable and Restart services'
-#  /etc/init.d/cron start
-#  /etc/init.d/cron enable
-#  /etc/init.d/cron restart
-#  /etc/init.d/vnstat restart
-#  /etc/init.d/vnstat restart
-#  service netifyd restart
+#----------------------------------------------------------------------------------------#  
+# === Setting Services to enable and restarting Services =============
+ echo 'Enable and Restart services'
+ /etc/init.d/cron start
+ /etc/init.d/cron enable
+ /etc/init.d/cron restart
+ /etc/init.d/vnstat restart
+ /etc/init.d/vnstat restart
+ service netifyd restart
 
 
 #----------------------------------------------------------------------------------------# 
