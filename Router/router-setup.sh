@@ -43,24 +43,24 @@ do
   fi
 done
 
-#----------------------------------------------------------------------------------------#  
-# === Changing vnstat backup location to USB or SD Card. === #
-if [ "$extexist" -eq 1 ]; then
-    dt=$(date '+%d%m%Y%H%M%S')
-    DEFAULT_DB_DIR="/var/lib/vnstat"
-    VNSTAT_DIR="$MOUNTED_DIR/vnstat"
-    mkdir -p "$VNSTAT_DIR"
-    # Backup the original vnstat.conf
-    echo "Backing up /etc/vnstat.conf to /etc/vnstat.conf.$dt"
-    cp /etc/vnstat.conf /etc/vnstat.conf.$dt
-    # Update vnStat configuration
-    echo "Updating vnStat configuration to use $VNSTAT_DIR"
-    sed -i 's/;DatabaseDir /DatabaseDir /g' /etc/vnstat.conf
-    sed -i "s,$DEFAULT_DB_DIR,$VNSTAT_DIR,g" /etc/vnstat.conf
-    echo "vnStat database location updated to $VNSTAT_DIR"
-else
-    echo "No mounted directory found. Keeping default vnStat configuration."
-fi
+# #----------------------------------------------------------------------------------------#  
+# # === Changing vnstat backup location to USB or SD Card. === #
+# if [ "$extexist" -eq 1 ]; then
+#     dt=$(date '+%d%m%Y%H%M%S')
+#     DEFAULT_DB_DIR="/var/lib/vnstat"
+#     VNSTAT_DIR="$MOUNTED_DIR/vnstat"
+#     mkdir -p "$VNSTAT_DIR"
+#     # Backup the original vnstat.conf
+#     echo "Backing up /etc/vnstat.conf to /etc/vnstat.conf.$dt"
+#     cp /etc/vnstat.conf /etc/vnstat.conf.$dt
+#     # Update vnStat configuration
+#     echo "Updating vnStat configuration to use $VNSTAT_DIR"
+#     sed -i 's/;DatabaseDir /DatabaseDir /g' /etc/vnstat.conf
+#     sed -i "s,$DEFAULT_DB_DIR,$VNSTAT_DIR,g" /etc/vnstat.conf
+#     echo "vnStat database location updated to $VNSTAT_DIR"
+# else
+#     echo "No mounted directory found. Keeping default vnStat configuration."
+# fi
 
 
 # #----------------------------------------------------------------------------------------#  
@@ -90,8 +90,6 @@ fi
 #----------------------------------------------------------------------------------------#  
  #Copying scripts and lua files to router
  echo 'Copying shell scripts and files from Github to Router'
- #wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/15-second-script.sh -O /usr/bin/15-second-script.sh && chmod +x /usr/bin/15-second-script.sh
- #wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/5-minute-script.sh -O /usr/bin/5-minute-script.sh && chmod +x /usr/bin/5-minute-script.sh
  wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/1-minute-script.sh -O /usr/bin/1-minute-script.sh && chmod +x /usr/bin/1-minute-script.sh
  wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/1-hour-script.sh -O /usr/bin/1-hour-script.sh && chmod +x /usr/bin/1-hour-script.sh
  wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/12am-script.sh -O /usr/bin/12am-script.sh && chmod +x /usr/bin/12am-script.sh
