@@ -2,11 +2,18 @@
 
 #---------------------------------------------------------------------------------------------------------#
 #---Adblock-Details--------#
-/etc/init.d/adblock report > /tmp/adblock.txt
+/etc/init.d/adblock report | sed 's/+//g' | sed 's/::://g' > /tmp/adblock.txt
 /etc/init.d/adblock list | grep " x " | sed 's/+//g' | cut -d " " -f2- > /tmp/adblock-list.txt
 
 ln -s /tmp/adblock.txt /www/adblock.txt
 ln -s /tmp/adblock-list.txt /www/adblock-list.txt
+
+
+#---------------------------------------------------------------------------------------------------------#
+#---BanIP-Details--------#
+/etc/init.d/banip report | sed 's/+//g' | sed 's/::://g' > /tmp/banip.txt
+
+ln -s /tmp/banip.txt /www/banip.txt
 
 #---------------------------------------------------------------------------------------------------------#
 #########----------Device-Details-------------###############
@@ -38,12 +45,12 @@ fi
 
 ln -s /tmp/clientlist.html /www/clientlist.html
 
+
 #---------------------------------------------------------------------------------------------------------#
 #########----------nlbwmon-------------###############
 nlbw -c csv -g ip,mac -o ip | tr -d '"' | tail -n +2 > /tmp/nlbw.html
 
-ln -s /tmp/nlbwmon.html /www/nlbwmon.html
-
+ln -s /tmp/nlbw.html /www/nlbw.html
 
 #---------------------------------------------------------------------------------------------------------#
 #-vnstat-#
