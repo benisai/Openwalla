@@ -14,13 +14,14 @@ I will update/fix things as I have time but PR's are welcomed. Hoping to make th
 * Download the shell script to setup the router
   * ```wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/router-setup.sh```
   * chmod +x routersetup.sh
-* ```sh ./routersetup.sh```
+  * ```sh ./routersetup.sh```
 
  -OR- MANUALLY INSTALL/Configure:
 * Install Software (netify, nlbwnon, vnstat2, netdata)
 
 * Configure vnstat to monitor br-lan
-* Configure netify config file to listen on thr router ip (10.0.3.1 is my router as an example)
+  
+* Configure netify config file to listen on thr router ip (10.0.3.1 is my router as an example) - see instructions here https://forum.openwrt.org/t/open-source-dpi-and-network-intelligence-engine-beta/52994
 
 * Download this shell script and run it every minute via a crontab on the Openwrt Router. This shell script will create the vnstat, client list, and nlbw data and place it in the /www/ of the router. 
 *https://github.com/benisai/Openwalla/blob/main/Router/1-minute.sh
