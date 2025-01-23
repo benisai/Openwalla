@@ -1,0 +1,12 @@
+node_modules
+.DS_Store
+dist
+dist-ssr
+*.local
+.idea
+/private
+/out
+/tmp
+.env
+.vs
+.vscode
