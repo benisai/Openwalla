@@ -1,12 +1,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChevronRight } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 
 export function RecentEventsCard() {
+  const navigate = useNavigate();
   const { data: events } = useQuery({
-    queryKey: ['network-events'],
+    queryKey: ['network-timeline-events'],
     queryFn: async () => {
-      const response = await fetch('/api/notifications?type=internet_monitor&last24h=true');
+      const response = await fetch('/api/notifications/timeline');
       if (!response.ok) {
         throw new Error('Failed to fetch network events');
       }
@@ -19,16 +21,22 @@ export function RecentEventsCard() {
     return new Date(timestamp).toLocaleTimeString();
   };
 
+  // Get only the 5 most recent events
+  const recentEvents = events?.slice(0, 5) || [];
+
   return (
-    <Card className="bg-dashboard-card text-white">
+    <Card 
+      className="bg-dashboard-card text-white cursor-pointer hover:bg-opacity-90 transition-colors"
+      onClick={() => navigate('/recent-events')}
+    >
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-xl">Recent Events</CardTitle>
         <ChevronRight className="h-5 w-5 text-gray-400" />
       </CardHeader>
       <CardContent>
-        {events && events.length > 0 ? (
+        {recentEvents.length > 0 ? (
           <div className="space-y-4">
-            {events.map((event: any) => (
+            {recentEvents.map((event: any) => (
               <div key={event.uuid} className="border-b border-gray-700 pb-2 last:border-0">
                 <p className="text-sm">
                   <span className={`inline-block w-2 h-2 rounded-full mr-2 ${

@@ -1,6 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface PingSegment {
   time: string;
@@ -14,11 +20,16 @@ interface NetworkPerformanceTimelineProps {
   className?: string;
 }
 
-const getLatencyColor = (latency: number, hasError: boolean, hasWarning: boolean) => {
-  if (hasError) return "bg-red-500";
-  if (hasWarning || latency >= 125) return "bg-yellow-500";
-  if (latency >= 75) return "bg-green-700";
-  return "bg-green-500";
+interface LatencyInfo {
+  color: string;
+  message: string;
+}
+
+const getLatencyInfo = (latency: number, hasError: boolean, hasWarning: boolean): LatencyInfo => {
+  if (hasError) return { color: "bg-red-500", message: "Internet Outage" };
+  if (hasWarning || latency >= 125) return { color: "bg-yellow-500", message: "High Latency" };
+  if (latency >= 75) return { color: "bg-green-700", message: "Good" };
+  return { color: "bg-green-500", message: "Excellent" };
 };
 
 const formatAMPM = (date: Date) => {
@@ -45,10 +56,10 @@ export function NetworkPerformanceTimeline({ showHeader = true, className = "" }
   });
 
   const { data: notifications } = useQuery({
-    queryKey: ['notifications', 'internet-monitor'],
+    queryKey: ['notifications', 'timeline'],
     queryFn: async () => {
-      const response = await fetch('/api/notifications?type=internet_monitor&last24h=true');
-      if (!response.ok) throw new Error('Failed to fetch notifications');
+      const response = await fetch('/api/notifications/timeline');
+      if (!response.ok) throw new Error('Failed to fetch timeline notifications');
       return response.json();
     },
     refetchInterval: 60000,
@@ -59,11 +70,9 @@ export function NetworkPerformanceTimeline({ showHeader = true, className = "" }
       const last12Hours: PingSegment[] = [];
       const now = new Date();
 
-      // Get the latest median latency
       const latestStat = pingStats[0];
       setCurrentLatency(latestStat?.median_latency || 0);
 
-      // Group data by hour and get the max latency for each hour
       for (let i = 11; i >= 0; i--) {
         const hourStart = new Date(now.getTime() - i * 60 * 60 * 1000);
         const hourEnd = new Date(now.getTime() - (i - 1) * 60 * 60 * 1000);
@@ -73,7 +82,6 @@ export function NetworkPerformanceTimeline({ showHeader = true, className = "" }
           return statTime >= hourStart && statTime < hourEnd;
         });
 
-        // Check for notifications in this hour
         const hourNotifications = notifications.filter((notif: any) => {
           const notifTime = new Date(notif.detect_time);
           return notifTime >= hourStart && notifTime < hourEnd;
@@ -107,17 +115,26 @@ export function NetworkPerformanceTimeline({ showHeader = true, className = "" }
       )}
       <div className="timeline relative mb-2">
         <div className="bar bg-gray-700 rounded-full h-2 overflow-hidden flex">
-          {segments.map((segment, index) => (
-            <div
-              key={index}
-              className={`segment h-full ${getLatencyColor(segment.latency, segment.hasError, segment.hasWarning)}`}
-              style={{ flex: '1' }}
-              title={`Time: ${segment.time}
-Latency: ${segment.latency.toFixed(1)}ms
-${segment.hasError ? '⚠️ Network Error' : ''}
-${segment.hasWarning ? '⚠️ Performance Warning' : ''}`}
-            />
-          ))}
+          <TooltipProvider>
+            {segments.map((segment, index) => {
+              const latencyInfo = getLatencyInfo(segment.latency, segment.hasError, segment.hasWarning);
+              return (
+                <Tooltip key={index}>
+                  <TooltipTrigger asChild>
+                    <div
+                      className={`segment h-full ${latencyInfo.color}`}
+                      style={{ flex: '1' }}
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{latencyInfo.message}</p>
+                    <p>Time: {segment.time}</p>
+                    <p>Latency: {segment.latency.toFixed(1)}ms</p>
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })}
+          </TooltipProvider>
         </div>
         <div className="timestamps flex justify-between mt-1 text-xs text-gray-400">
           {segments.map((segment, index) => (

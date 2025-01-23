@@ -15,6 +15,7 @@ import DeviceLiveThroughput from "./pages/DeviceLiveThroughput";
 import NotificationsPage from "./pages/NotificationsPage";
 import DeviceFlows from "./pages/DeviceFlows";
 import Rules from "./pages/Rules";
+import RecentEvents from "./pages/RecentEvents";
 
 const queryClient = new QueryClient();
 
@@ -37,6 +38,7 @@ const App = () => (
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/device-flows/:mac" element={<DeviceFlows />} />
           <Route path="/rules" element={<Rules />} />
+          <Route path="/recent-events" element={<RecentEvents />} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>

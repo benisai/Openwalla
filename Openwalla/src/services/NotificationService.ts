@@ -9,8 +9,9 @@ export interface Notification {
   action: string | null;
 }
 
-export async function fetchNotifications(): Promise<Notification[]> {
-  const response = await fetch('/api/notifications');
+export async function fetchNotifications(includeArchived: boolean = false): Promise<Notification[]> {
+  const url = includeArchived ? '/api/notifications?includeArchived=true' : '/api/notifications';
+  const response = await fetch(url);
   if (!response.ok) {
     throw new Error('Failed to fetch notifications');
   }
@@ -26,10 +27,10 @@ export async function archiveNotification(uuid: string): Promise<void> {
   }
 }
 
-export function useNotifications() {
+export function useNotifications(includeArchived: boolean = false) {
   return useQuery({
-    queryKey: ['notifications'],
-    queryFn: fetchNotifications,
+    queryKey: ['notifications', { includeArchived }],
+    queryFn: () => fetchNotifications(includeArchived),
     refetchInterval: 30000, // Refetch every 30 seconds
   });
 }

@@ -27,6 +27,19 @@ export function SummaryCard() {
     refetchInterval: 60000
   });
 
+  const { data: latestPing } = useQuery({
+    queryKey: ['ping-stats', 'latest'],
+    queryFn: async () => {
+      const response = await fetch('/api/ping-stats/last24hours');
+      if (!response.ok) {
+        throw new Error('Failed to fetch latest ping');
+      }
+      const data = await response.json();
+      return data[0]; // Get the most recent entry
+    },
+    refetchInterval: 60000
+  });
+
   const calculateTotalOutage = (notifications: any[] = []) => {
     const outages = notifications.filter(n => n.sev === 'error');
     if (outages.length === 0) return '0s';
@@ -53,7 +66,7 @@ export function SummaryCard() {
           <div>
             <p className="text-sm text-gray-400">Latency</p>
             <p className="text-base md:text-2xl font-bold">
-              {pingStats?.maxLatency ? `${pingStats.maxLatency} ms` : '-- ms'}
+              {latestPing?.median_latency ? `${Math.round(latestPing.median_latency)} ms` : '-- ms'}
             </p>
           </div>
           <div>
