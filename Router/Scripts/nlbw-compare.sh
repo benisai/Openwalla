@@ -1,16 +1,11 @@
-#!/bin/sh /etc/rc.common
-
-# Script name and description
-START=99
-STOP=10
-USE_PROCD=1
-
-# Define the service name
-SERVICE_NAME="nlbw-compare"
+#!/bin/sh
 
 # File to store the old stats
 OLD_FILE="/tmp/nlbw_old.csv"
+# File to store the current stats
 CURRENT_FILE="/tmp/nlbw_current.csv"
+# File to store the final compare output
+OUTPUT_FILE="/tmp/nlbw_final_compare.txt"
 
 # Function to collect nlbwmon stats and export to a file
 collect_nlbw_stats() {
@@ -19,6 +14,8 @@ collect_nlbw_stats() {
 
 # Function to calculate differences in rx_bytes and tx_bytes
 calculate_difference() {
+    echo "Calculating differences between current and old data..." >> "$OUTPUT_FILE"
+
     while read -r line; do
         mac=$(echo "$line" | awk '{print $1}')
         ip=$(echo "$line" | awk '{print $2}')
@@ -30,15 +27,15 @@ calculate_difference() {
         if [ -n "$old_line" ]; then
             rx_bytes_old=$(echo "$old_line" | awk '{print $4}')
             tx_bytes_old=$(echo "$old_line" | awk '{print $6}')
-            
+
             # Calculate the differences
             rx_diff=$((rx_bytes_current - rx_bytes_old))
             tx_diff=$((tx_bytes_current - tx_bytes_old))
-            
-            # Display the differences
-            logger -t "$SERVICE_NAME" "MAC: $mac | IP: $ip | RX Diff: $rx_diff bytes | TX Diff: $tx_diff bytes"
+
+            # Output the differences to the file
+            echo "TIME: $(date) | MAC: $mac | IP: $ip | RX Diff: $rx_diff bytes | TX Diff: $tx_diff bytes" >> "$OUTPUT_FILE"
         else
-            logger -t "$SERVICE_NAME" "MAC: $mac | IP: $ip | No previous data available."
+            echo "TIME: $(date) | MAC: $mac | IP: $ip | No previous data available." >> "$OUTPUT_FILE"
         fi
     done < "$CURRENT_FILE"
 }
@@ -48,19 +45,21 @@ update_old_file() {
     cp "$CURRENT_FILE" "$OLD_FILE"
 }
 
-# Service Start Function
-start() {
-    # Run the script as a background process
-    while true; do
-        collect_nlbw_stats
-        calculate_difference
-        update_old_file
-        sleep 30
-    done &
-}
+# Main loop to run every 10 seconds
+while true; do
+    # Clear the previous output file
+    > "$OUTPUT_FILE"
 
-# Service Stop Function
-stop() {
-    # Stop the running background process
-    killall -9 nlbw-compare.sh
-}
+    # Collect current stats
+    collect_nlbw_stats
+
+    # Calculate differences and write to the output file
+    calculate_difference
+
+    # Update the old stats file with the current stats
+    update_old_file
+
+    # Sleep for 10 seconds before running again
+    sleep 10
+done
+
