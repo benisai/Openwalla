@@ -14,8 +14,6 @@ collect_nlbw_stats() {
 
 # Function to calculate differences in rx_bytes and tx_bytes
 calculate_difference() {
-    echo "Calculating differences between current and old data..." >> "$OUTPUT_FILE"
-
     while read -r line; do
         mac=$(echo "$line" | awk '{print $1}')
         ip=$(echo "$line" | awk '{print $2}')
