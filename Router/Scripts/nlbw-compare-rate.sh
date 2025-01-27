@@ -43,7 +43,7 @@ update_old_file() {
     cp "$CURRENT_FILE" "$OLD_FILE"
 }
 
-# Main loop to run every 10 seconds
+# Main loop to run every 15 seconds
 while true; do
     # Clear the previous output file
     > "$OUTPUT_FILE"
@@ -57,7 +57,7 @@ while true; do
     # Update the old stats file with the current stats
     update_old_file
 
-    # Sleep for 10 seconds before running again
-    sleep 10
+    # Sleep for 15 seconds before running again
+    sleep 15
 done
 
