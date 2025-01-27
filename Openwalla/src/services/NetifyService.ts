@@ -1,4 +1,4 @@
-import { databases } from '../database/init';
+import { databases } from '../../databases/init';
 import net from 'net';
 import { v4 as uuidv4 } from 'uuid';
 import { toast } from '@/components/ui/use-toast';

@@ -1,4 +1,4 @@
-import { databases } from '../database/init';
+import { databases } from '../../databases/init';
 
 type DatabaseName = keyof typeof databases;
 

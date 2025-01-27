@@ -1,4 +1,4 @@
-import { Flow } from "@/types/flow";
+import { Flow } from "@/misc/types/flow";
 
 export async function getLast24HoursFlowCount(): Promise<number> {
   try {

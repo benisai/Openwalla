@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { databases } = require('../database');
+const { databases } = require('../database/database');
 
 router.get('/count/24h', (req, res) => {
   const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();

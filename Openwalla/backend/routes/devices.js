@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { databases } = require('../database');
+const { databases } = require('../database/database');
 
 // Get all devices with their network stats
 router.get('/', (req, res) => {

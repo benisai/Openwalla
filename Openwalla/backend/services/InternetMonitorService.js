@@ -2,10 +2,10 @@ const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
-const PingStatsParser = require('./network/PingStatsParser');
-const NetworkNotificationManager = require('./network/NetworkNotificationManager');
-const PingStatsManager = require('./network/PingStatsManager');
-const NetworkErrorHandler = require('./network/NetworkErrorHandler');
+const PingStatsParser = require('./internetmonitoring/PingStatsParser');
+const NetworkNotificationManager = require('./internetmonitoring/NetworkNotificationManager');
+const PingStatsManager = require('./internetmonitoring/PingStatsManager');
+const NetworkErrorHandler = require('./internetmonitoring/NetworkErrorHandler');
 
 class InternetMonitorService {
   constructor(config = {}) {

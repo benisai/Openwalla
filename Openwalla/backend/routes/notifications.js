@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { databases } = require('../database');
+const { databases } = require('../database/database');
 
 router.get('/', (req, res) => {
   const { type, last24h, includeArchived } = req.query;

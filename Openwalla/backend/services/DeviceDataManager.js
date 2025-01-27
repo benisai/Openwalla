@@ -1,4 +1,4 @@
-const { databases } = require('../database');
+const { databases } = require('../database/database');
 const { v4: uuidv4 } = require('uuid');
 
 class DeviceDataManager {

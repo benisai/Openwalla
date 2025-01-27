@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { databases } = require('../database');
+const { databases } = require('../database/database');
 
 // Get all ping stats for the last 24 hours
 router.get('/last24hours', (req, res) => {

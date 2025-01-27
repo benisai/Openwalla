@@ -1,11 +1,15 @@
 const axios = require('axios');
-const ClientParser = require('./parsers/ClientParser');
-const NlbwParser = require('./parsers/NlbwParser');
+const ClientParser = require('./devices/ClientParser');
+const NlbwParser = require('./devices/ClientTotalUsage');
 const DeviceDataManager = require('./DeviceDataManager');
 
 class DeviceService {
   constructor(config) {
-    this.routerUrl = `http://${config.openwrt_ip || config.router_ip || '192.168.1.1'}`;
+    if (!config.router_ip) {
+      console.error('Warning: router_ip not found in config, using default');
+    }
+    this.routerUrl = `http://${config.router_ip}`;
+    console.log('DeviceService initialized with router URL:', this.routerUrl);
     this.updateInterval = null;
   }
 
@@ -30,9 +34,6 @@ class DeviceService {
         this.fetchNlbwData()
       ]);
 
-      ////console.log('Client Data:', clientData);
-      ////console.log('NLBW Data:', nlbwData);
-
       const devices = this.mergeDeviceData(clientData, nlbwData);
       await DeviceDataManager.saveDevices(devices);
       
@@ -45,7 +46,6 @@ class DeviceService {
   async fetchClientList() {
     try {
       const response = await axios.get(`${this.routerUrl}/clientlist.html`);
-      ////console.log('Raw client list response:', response.data);
       return ClientParser.parse(response.data);
     } catch (error) {
       console.error('Error fetching client list:', error);
@@ -56,7 +56,6 @@ class DeviceService {
   async fetchNlbwData() {
     try {
       const response = await axios.get(`${this.routerUrl}/nlbw.html`);
-      ////console.log('Raw NLBW response:', response.data);
       return NlbwParser.parse(response.data);
     } catch (error) {
       console.error('Error fetching NLBW data:', error);
@@ -83,7 +82,6 @@ class DeviceService {
       }
     }
     
-    ////console.log('Merged device data:', devices);
     return devices;
   }
 }

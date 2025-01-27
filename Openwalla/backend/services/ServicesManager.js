@@ -5,6 +5,7 @@ const VnstatService = require('./VnstatService');
 
 class ServicesManager {
   constructor(config) {
+    console.log('Initializing ServicesManager with config:', config);
     this.config = config;
     this.services = {
       netify: null,
@@ -15,12 +16,9 @@ class ServicesManager {
   }
 
   async startAll() {
-    // Start all services except Netify
     await this.startInternetMonitor();
     await this.startDeviceService();
     await this.startVnstatService();
-    
-    // Start Netify last
     await this.startNetifyService();
   }
 
@@ -35,16 +33,11 @@ class ServicesManager {
   async startNetifyService() {
     if (this.config.netify_enabled) {
       console.log('Starting Netify service with config:', {
-        ip: this.config.netify_ip,
+        ip: this.config.router_ip,
         port: this.config.netify_port
       });
       
-      this.services.netify = new NetifyService(
-        this.config.netify_ip || '127.0.0.1',
-        parseInt(this.config.netify_port) || 7150
-      );
-      
-      // Actually start the connection
+      this.services.netify = new NetifyService(this.config);
       this.services.netify.connect();
     } else {
       console.log('Netify service is disabled in config');
@@ -65,7 +58,7 @@ class ServicesManager {
 
   async startVnstatService() {
     console.log('Starting vnstat service...');
-    this.services.vnstat = new VnstatService();
+    this.services.vnstat = new VnstatService(this.config);
     await this.services.vnstat.startHourlyUpdates();
   }
 

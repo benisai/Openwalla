@@ -1,31 +1,15 @@
 const axios = require('axios');
 const VnstatParser = require('./vnstat/VnstatParser');
 const VnstatDatabaseManager = require('./vnstat/VnstatDatabaseManager');
-const { databases } = require('../database');
+const { databases } = require('../database/database');
 
 class VnstatService {
-  constructor() {
-    this.getVnstatUrl();
-  }
-
-  async getVnstatUrl() {
-    return new Promise((resolve, reject) => {
-      databases.openwalla.get('SELECT value FROM configs WHERE key = ?', ['vnstat_url'], (err, row) => {
-        if (err) {
-          console.error('Error getting vnstat_url from config:', err);
-          this.url = 'http://192.168.1.1/vnstat.txt'; // Default fallback
-          resolve(this.url);
-        } else {
-          this.url = row ? row.value : 'http://192.168.1.1/vnstat.txt';
-          resolve(this.url);
-        }
-      });
-    });
+  constructor(config) {
+    this.url = `http://${config.router_ip || '192.168.1.1'}/vnstat.txt`;
   }
 
   async fetchVnstatData() {
     try {
-      await this.getVnstatUrl(); // Ensure we have the latest URL
       const response = await axios.get(this.url);
       console.log('Vnstat data fetched successfully from:', this.url);
       return response.data;

@@ -1,8 +1,18 @@
-const { databases } = require('../connections');
-
-async function initializePingStatsSchema() {
+/**
+ * Ping Statistics Schema Definition
+ * 
+ * Stores network ping statistics including:
+ * - Latency measurements
+ * - Packet loss data
+ * - Timestamp information
+ * - Connection status and errors
+ * 
+ * @param {Object} db - SQLite database instance
+ * @returns {Promise} Resolves when the pingstats table is created
+ */
+module.exports = async function (db) {
   return new Promise((resolve, reject) => {
-    databases.pingStats.run(`
+    db.run(`
       CREATE TABLE IF NOT EXISTS pingstats (
         uuid TEXT PRIMARY KEY,
         ip TEXT,
@@ -24,6 +34,4 @@ async function initializePingStatsSchema() {
       else resolve();
     });
   });
-}
-
-module.exports = { initializePingStatsSchema };
+};

@@ -1,46 +1,39 @@
 const axios = require('axios');
-const { databases } = require('../connections');
 
-async function initializeOuiVendorSchema() {
+module.exports = async function (db, envConfig) {
   return new Promise((resolve, reject) => {
-    databases.ouiVendor.run(`
+    db.run(`
       CREATE TABLE IF NOT EXISTS oui_vendors (
         oui TEXT PRIMARY KEY,
         vendor TEXT NOT NULL
       )
     `, [], async (err) => {
-      if (err) {
-        reject(err);
-      } else {
-        try {
-          // Check if table is empty
-          const row = await new Promise((resolve, reject) => {
-            databases.ouiVendor.get('SELECT COUNT(*) as count FROM oui_vendors', [], (err, row) => {
-              if (err) reject(err);
-              else resolve(row);
-            });
-          });
+      if (err) return reject(err);
 
-          if (row.count === 0) {
+      // Populate table if empty
+      db.get('SELECT COUNT(*) as count FROM oui_vendors', [], async (err, row) => {
+        if (err) return reject(err);
+        if (row.count === 0) {
+          try {
             const response = await axios.get('https://raw.githubusercontent.com/benisai/Openwalla/main/mac-address-oui.json');
             const vendors = response.data;
-            
-            const stmt = databases.ouiVendor.prepare('INSERT OR REPLACE INTO oui_vendors (oui, vendor) VALUES (?, ?)');
+
+            const stmt = db.prepare('INSERT OR REPLACE INTO oui_vendors (oui, vendor) VALUES (?, ?)');
             Object.entries(vendors).forEach(([vendorName, ouis]) => {
               const ouiArray = Array.isArray(ouis) ? ouis : [ouis];
-              ouiArray.forEach(oui => {
+              ouiArray.forEach((oui) => {
                 stmt.run(oui.toLowerCase(), vendorName);
               });
             });
             stmt.finalize();
+            resolve();
+          } catch (error) {
+            reject(error);
           }
+        } else {
           resolve();
-        } catch (error) {
-          reject(error);
         }
-      }
+      });
     });
   });
-}
-
-module.exports = { initializeOuiVendorSchema };
+};

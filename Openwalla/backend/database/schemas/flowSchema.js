@@ -1,8 +1,18 @@
-const { databases } = require('../connections');
-
-async function initializeFlowSchema() {
+/**
+ * Flow Schema Definition
+ * 
+ * Manages network flow data including:
+ * - Source/destination information
+ * - Protocol and application details
+ * - Network interface information
+ * - Internal/external traffic designation
+ * 
+ * @param {Object} db - SQLite database instance
+ * @returns {Promise} Resolves when the flow table is created
+ */
+module.exports = async function (db) {
   return new Promise((resolve, reject) => {
-    databases.flows.run(`
+    db.run(`
       CREATE TABLE IF NOT EXISTS flow (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         timeinsert TEXT,
@@ -23,6 +33,4 @@ async function initializeFlowSchema() {
       else resolve();
     });
   });
-}
-
-module.exports = { initializeFlowSchema };
+};
