@@ -129,6 +129,8 @@ fi
 #----------------------------------------------------------------------------------------#  
 # === Setting Services to enable and restarting Services =============
  echo 'Enable and Restart services'
+ /etc/init.d/nlbw-compare-rate-service.sh enable
+ /etc/init.d/nlbw-compare-rate-service.sh start
  /etc/init.d/cron start
  /etc/init.d/cron enable
  /etc/init.d/cron restart
