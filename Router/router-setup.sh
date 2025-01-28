@@ -93,6 +93,10 @@ fi
  wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/1-hour-script.sh -O /usr/bin/1-hour-script.sh && chmod +x /usr/bin/1-hour-script.sh
  wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/12am-script.sh -O /usr/bin/12am-script.sh && chmod +x /usr/bin/12am-script.sh
 
+ wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Scripts/nlbw-compare-rate-service.sh -O /etc/init.d/nlbw-compare-rate-service.sh && chmod +x /etc/init.d/nlbw-compare-rate-service.sh 
+ wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Scripts/nlbw-compare-rate.sh -O /usr/bin/nlbw-compare-rate.sh && chmod +x /usr/bin/nlbw-compare-rate.sh
+
+/usr/bin/nlbw-compare-rate.sh
 
 #----------------------------------------------------------------------------------------#  
  #Adding scripts to Crontab
