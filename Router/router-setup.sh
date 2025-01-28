@@ -85,6 +85,20 @@ else
 fi
 
 
+#----------------------------------------------------------------------------------------#
+# === Update NLBW Config Refresh Interval === #
+NLBW_CONFIG_FILE="/etc/config/nlbwmon"
+if [ ! -f "$NLBW_CONFIG_FILE" ]; then
+  echo "Error: $NLBW_CONFIG_FILE does not exist."
+else
+  {
+    # Update 'option refresh_interval' from 30s to 10s
+    sed -i 's/option refresh_interval 30s/option refresh_interval 10s/' "$NLBW_CONFIG_FILE"
+    echo "Updated 'option refresh_interval' to 10s in $NLBW_CONFIG_FILE."
+  }
+fi
+
+
 #----------------------------------------------------------------------------------------#  
  #Copying scripts and lua files to router
  echo 'Copying shell scripts and files from Github to Router'
@@ -92,7 +106,6 @@ fi
  wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/5-minute-script.sh -O /usr/bin/5-minute-script.sh && chmod +x /usr/bin/5-minute-script.sh 
  wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/1-hour-script.sh -O /usr/bin/1-hour-script.sh && chmod +x /usr/bin/1-hour-script.sh
  wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/12am-script.sh -O /usr/bin/12am-script.sh && chmod +x /usr/bin/12am-script.sh
-
  wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Scripts/nlbw-compare-rate-service.sh -O /etc/init.d/nlbw-compare-rate-service.sh && chmod +x /etc/init.d/nlbw-compare-rate-service.sh 
  wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Scripts/nlbw-compare-rate.sh -O /usr/bin/nlbw-compare-rate.sh && chmod +x /usr/bin/nlbw-compare-rate.sh
 
