@@ -26,9 +26,17 @@ calculate_difference() {
             rx_bytes_old=$(echo "$old_line" | awk '{print $4}')
             tx_bytes_old=$(echo "$old_line" | awk '{print $6}')
 
-            # Calculate the differences
-            rx_diff=$((rx_bytes_current - rx_bytes_old))
-            tx_diff=$((tx_bytes_current - tx_bytes_old))
+            # Validate and calculate the differences
+            if [ -n "$rx_bytes_current" ] && [ -n "$rx_bytes_old" ] && \
+               [ "$rx_bytes_current" -eq "$rx_bytes_current" ] 2>/dev/null && \
+               [ "$rx_bytes_old" -eq "$rx_bytes_old" ] 2>/dev/null; then
+                rx_diff=$((rx_bytes_current - rx_bytes_old))
+                tx_diff=$((tx_bytes_current - tx_bytes_old))
+            else
+                rx_diff=0
+                tx_diff=0
+                continue
+            fi
 
             # Format the output with the new timestamp format
             timestamp=$(date "+year=%Y,month=%m,day=%d,hour=%H,minute=%M,second=%S")
