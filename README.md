@@ -1,5 +1,7 @@
 # Openwalla Dashboard
 
+REALLY ALPHA/BETA SOFTWARE, WILL HAVE BUGS!!!!
+
 A modern dashboard interface for monitoring OpenWRT using React, TypeScript, and Tailwind CSS. 
 
 Inspiration came from the Firewalla app, thus the name 'Openwalla'. 
