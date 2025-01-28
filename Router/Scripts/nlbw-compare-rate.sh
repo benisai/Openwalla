@@ -30,10 +30,13 @@ calculate_difference() {
             rx_diff=$((rx_bytes_current - rx_bytes_old))
             tx_diff=$((tx_bytes_current - tx_bytes_old))
 
-            # Output the differences to the file
-            echo "TIME: $(date) | MAC: $mac | IP: $ip | RX Diff: $rx_diff bytes | TX Diff: $tx_diff bytes" >> "$OUTPUT_FILE"
+            # Format the output with the new timestamp format
+            timestamp=$(date "+year=%Y,month=%m,day=%d,hour=%H,minute=%M,second=%S")
+            echo "$timestamp,MAC=$mac,IP=$ip,RX_Diff=$rx_diff,TX_Diff=$tx_diff" >> "$OUTPUT_FILE"
         else
-            echo "TIME: $(date) | MAC: $mac | IP: $ip | No previous data available." >> "$OUTPUT_FILE"
+            # Output for entries with no previous data
+            timestamp=$(date "+year=%Y,month=%m,day=%d,hour=%H,minute=%M,second=%S")
+            echo "$timestamp,MAC=$mac,IP=$ip,No_previous_data_available" >> "$OUTPUT_FILE"
         fi
     done < "$CURRENT_FILE"
 }
@@ -43,7 +46,7 @@ update_old_file() {
     cp "$CURRENT_FILE" "$OLD_FILE"
 }
 
-# Main loop to run every 15 seconds
+# Main loop to run every 10 seconds
 while true; do
     # Clear the previous output file
     > "$OUTPUT_FILE"
@@ -57,7 +60,6 @@ while true; do
     # Update the old stats file with the current stats
     update_old_file
 
-    # Sleep for 15 seconds before running again
-    sleep 15
+    # Sleep for 10 seconds before running again
+    sleep 10
 done
-
