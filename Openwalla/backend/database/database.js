@@ -35,6 +35,7 @@ const initializeFlows = require('./schemas/flowSchema');
 const initializeVnstat = require('./schemas/vnstatSchema');
 const initializeOuiVendor = require('./schemas/ouiVendorSchema');
 const initializePingStats = require('./schemas/pingStatsSchema');
+const initializeRxTx = require('./schemas/rxTxSchema');
 
 
 
@@ -69,6 +70,7 @@ async function initializeDatabases() {
     await initializeVnstat(databases.vnstat);
     await initializeOuiVendor(databases.ouiVendor, envConfig);
     await initializePingStats(databases.pingStats);
+    await initializeRxTx(databases.devices);
 
     console.log('All database tables initialized successfully');
   } catch (error) {

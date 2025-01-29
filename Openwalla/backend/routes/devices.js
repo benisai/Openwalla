@@ -31,6 +31,22 @@ router.get('/', (req, res) => {
   });
 });
 
+
+const RxTxService = require('../services/RxTxService');
+
+// Get the latest RX/TX data for a device by MAC address
+router.get('/:mac/rx_tx', async (req, res) => {
+  try {
+    const mac = req.params.mac.toLowerCase();
+    const rxTxData = await RxTxService.getLatestRxTxForDevice(mac);
+    res.json(rxTxData);
+  } catch (error) {
+    console.error('Error fetching RX/TX data:', error);
+    res.status(500).json({ error: 'Failed to fetch RX/TX data', details: error.message });
+  }
+});
+
+
 // Check if device is active (has flows in last minute)
 router.get('/active/:mac', (req, res) => {
   const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString();

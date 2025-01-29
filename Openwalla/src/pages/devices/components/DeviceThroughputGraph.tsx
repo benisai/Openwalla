@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Device } from "@/services/DeviceService";
 import { formatNetworkSpeed } from "@/misc/utils/networkFormatting";
 import { ArrowDown, ArrowUp } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
 interface DataPoint {
   time: number;
@@ -15,25 +16,40 @@ interface DeviceThroughputGraphProps {
   device: Device;
 }
 
+async function fetchDeviceRxTx(mac: string) {
+  const response = await fetch(`/api/devices/${mac}/rx_tx`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch RX/TX data');
+  }
+  return response.json();
+}
+
 export function DeviceThroughputGraph({ device }: DeviceThroughputGraphProps) {
   const [trafficHistory, setTrafficHistory] = useState<DataPoint[]>([]);
   
+  const { data: rxTxData } = useQuery({
+    queryKey: ['device-rx-tx', device.mac],
+    queryFn: () => fetchDeviceRxTx(device.mac),
+    refetchInterval: 5000, // Refresh every 5 seconds
+  });
+  
   useEffect(() => {
-    const interval = setInterval(() => {
+    if (rxTxData) {
       setTrafficHistory(prev => {
         const newPoint = {
           time: Date.now(),
-          download: device.dl_speed || 0,
-          upload: device.ul_speed || 0
+          download: rxTxData.rx_diff || 0,
+          upload: rxTxData.tx_diff || 0
         };
         
         const updatedHistory = [...prev, newPoint].slice(-60);
         return updatedHistory;
       });
-    }, 10000); // Update every 10 seconds
+    }
+  }, [rxTxData]);
 
-    return () => clearInterval(interval);
-  }, [device]);
+  const currentDownload = rxTxData?.rx_diff || 0;
+  const currentUpload = rxTxData?.tx_diff || 0;
 
   return (
     <Card className="bg-dashboard-card p-4 mb-4">
@@ -71,12 +87,12 @@ export function DeviceThroughputGraph({ device }: DeviceThroughputGraphProps) {
       <div className="flex justify-between text-sm">
         <div className="flex items-center gap-2">
           <ArrowUp className="h-4 w-4 text-[#F97316]" />
-          <span className="font-bold text-white">{formatNetworkSpeed(device.ul_speed || 0)}</span>
+          <span className="font-bold text-white">{formatNetworkSpeed(currentUpload)}</span>
           <span className="text-gray-400">Upload</span>
         </div>
         <div className="flex items-center gap-2">
           <ArrowDown className="h-4 w-4 text-[#0EA5E9]" />
-          <span className="font-bold text-white">{formatNetworkSpeed(device.dl_speed || 0)}</span>
+          <span className="font-bold text-white">{formatNetworkSpeed(currentDownload)}</span>
           <span className="text-gray-400">Download</span>
         </div>
       </div>

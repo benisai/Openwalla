@@ -2,6 +2,7 @@ const axios = require('axios');
 const ClientParser = require('./devices/ClientParser');
 const NlbwParser = require('./devices/ClientTotalUsage');
 const DeviceDataManager = require('./DeviceDataManager');
+const RxTxService = require('./RxTxService');
 
 class DeviceService {
   constructor(config) {
@@ -17,6 +18,7 @@ class DeviceService {
     console.log('Starting device service with router URL:', this.routerUrl);
     // Update immediately then schedule updates
     await this.updateDevices();
+    this.fetchRXTXData(); // Start fetching RX/TX data
     this.updateInterval = setInterval(() => this.updateDevices(), 30 * 1000); // Every 30 seconds
   }
 
@@ -25,6 +27,26 @@ class DeviceService {
       clearInterval(this.updateInterval);
     }
   }
+
+
+  async fetchRXTXData() {
+    try {
+      // Start polling for device data
+      this.updateInterval = setInterval(async () => {
+        try {
+          // Fetch RX/TX data
+          const response = await axios.get(`${this.routerUrl}/nlbw_rx_tx.txt`);
+          await RxTxService.parseAndSaveRxTxData(response.data);
+        } catch (error) {
+          console.error('Error fetching RX/TX data:', error);
+        }
+      }, 15000); // Poll every 15 seconds
+    } catch (error) {
+      console.error('Error starting device service:', error);
+      throw error;
+    }
+  }
+
 
   async updateDevices() {
     try {

@@ -74,7 +74,7 @@ class NetifyService {
             if (
               flowData.type === 'flow' &&
               flowData.flow.detected_protocol_name &&
-              ['DNS', 'HTTPS', 'HTTP'].includes(flowData.flow.detected_protocol_name)
+              ['DNS', 'HTTPS', 'HTTP', 'HTTP/S'].includes(flowData.flow.detected_protocol_name)
             ) {
               this.saveFlow(flowData);
             }
@@ -153,14 +153,19 @@ class NetifyService {
     try {
       const deviceInfo = await this.getDeviceInfo(flowData.flow.local_mac);
       
-      // Check if protocol is either HTTPS or HTTP/S (new format)
-      const isHttpsProtocol = ['HTTPS', 'HTTP/S'].includes(flowData.flow.detected_protocol_name);
-      
       if (
         flowData.type === 'flow' &&
         flowData.flow.detected_protocol_name &&
         ['DNS', 'HTTPS', 'HTTP/S', 'HTTP'].includes(flowData.flow.detected_protocol_name)
       ) {
+        // Standardize HTTP/S to HTTPS
+        const standardizedProtocol = flowData.flow.detected_protocol_name === 'HTTP/S' 
+          ? 'HTTPS' 
+          : flowData.flow.detected_protocol_name;
+
+        // Prioritize client_sni for FQDN if available
+        const fqdn = flowData.flow.ssl?.client_sni || flowData.flow.host_server_name || '';
+
         const sql = `
           INSERT INTO flow (
             timeinsert,
@@ -187,11 +192,11 @@ class NetifyService {
           deviceInfo.hostname || '',
           flowData.flow.local_ip,
           flowData.flow.local_mac,
-          flowData.flow.host_server_name || '',
+          fqdn,
           flowData.flow.other_ip,
           flowData.flow.other_port,
           'remote',
-          flowData.flow.detected_protocol_name,
+          standardizedProtocol,
           flowData.flow.detected_application_name || '',
           flowData.interface,
           flowData.internal ? 1 : 0,
