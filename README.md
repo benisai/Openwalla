@@ -1,6 +1,6 @@
-# Openwalla Dashboard
+# REALLY ALPHA/BETA SOFTWARE, I'm commiting code as I add features. Hang tight. It's bumpy.
 
-REALLY ALPHA/BETA SOFTWARE, WILL HAVE BUGS!!!!
+# Openwalla Dashboard
 
 A modern dashboard interface for monitoring OpenWRT using React, TypeScript, and Tailwind CSS. 
 
