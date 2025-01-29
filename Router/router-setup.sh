@@ -133,7 +133,7 @@ fi
  /etc/init.d/cron start
  /etc/init.d/cron enable
  /etc/init.d/cron restart
- /etc/init.d/vnstat restart
+ /etc/init.d/vnstat enable
  /etc/init.d/vnstat restart
  service netifyd restart
 
