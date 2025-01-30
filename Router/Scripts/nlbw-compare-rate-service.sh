@@ -15,7 +15,7 @@ OUTPUT_FILE="/tmp/nlbw_final_compare.txt"
 
 # Start the service
 start() {
-    stop
+    stop # Calling stop function first to avoid having multiple scripts running in the background.
     echo "Starting nlbw-compare-rate.sh service..."
     # Run the script in the background
     /bin/sh "$SCRIPT_PATH" &
