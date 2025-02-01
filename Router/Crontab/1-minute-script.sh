@@ -53,6 +53,7 @@ nlbw -c csv -g ip,mac -o ip | tr -d '"' | tail -n +2 > /tmp/nlbw.html
 ln -s /tmp/nlbw.html /www/nlbw.html
 
 #---------------------------------------------------------------------------------------------------------#
+#---------------------------------------------------------------------------------------------------------#
 #-vnstat-#
 # Automatically determine the current year
 YEAR=$(date +"%Y")
@@ -64,16 +65,16 @@ OUTPUT_FILE="/www/vnstat.txt"
 # Generate vnstat output and clean it in CSV format
 {
     # Monthly data
-    vnstat -i "$INTERFACE" --xml | grep -hnr "month id" | sed "s/^[0-9]*: //;s/<[^>]*>/ /g" | while read -r line; do
-        echo "$INTERFACE,Monthly,$line" | sed 's/  */,/g'
+    vnstat -i "$INTERFACE" --xml | grep -hnr "month id" | while read -r line; do
+        echo "<$INTERFACE>,<Monthly>,$line" | sed 's/  */,/g'
     done
     # Daily data
-    vnstat -i "$INTERFACE" --xml | grep -hnr "day id" | sed "s/^[0-9]*: //;s/<[^>]*>/ /g" | while read -r line; do
-        echo "$INTERFACE,Daily,$line" | sed 's/  */,/g'
+    vnstat -i "$INTERFACE" --xml | grep -hnr "day id" | while read -r line; do
+        echo "<$INTERFACE>,<Daily>,$line" | sed 's/  */,/g'
     done
     # Hourly data
-    vnstat -i "$INTERFACE" --xml | grep -hnr "hour id" | sed "s/^[0-9]*: //;s/<[^>]*>/ /g" | while read -r line; do
-        echo "$INTERFACE,Hourly,$line" | sed 's/  */,/g'
+    vnstat -i "$INTERFACE" --xml | grep -hnr "hour id" | while read -r line; do
+        echo "<$INTERFACE>,<Hourly>,$line" | sed 's/  */,/g'
     done
 } > "$OUTPUT_FILE"
 # Notify the user
