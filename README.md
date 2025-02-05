@@ -1,4 +1,4 @@
-# REALLY ALPHA/BETA SOFTWARE, I'm commiting code as I add features. Hang tight. It's bumpy.
+# Software is in the early stages. I try to only upload 'good/working' code, but there might be some bugs. 
 
 # Openwalla Dashboard
 
