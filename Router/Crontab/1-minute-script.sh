@@ -16,7 +16,7 @@ ln -s /tmp/adblock-list.txt /www/adblock-list.txt
 ln -s /tmp/banip.txt /www/banip.txt
 
 #---------------------------------------------------------------------------------------------------------#
-#########----------Device-Details-------------###############
+#----------Device-Details-------------#
 OUTPUT_FILE="/tmp/clientlist.html"
 LEASES_FILE="/tmp/dhcp.leases"
 ARP_FILE="/proc/net/arp"
@@ -45,14 +45,12 @@ fi
 
 ln -s /tmp/clientlist.html /www/clientlist.html
 
-
 #---------------------------------------------------------------------------------------------------------#
-#########----------nlbwmon-------------###############
+#----------nlbwmon-------------#
 nlbw -c csv -g ip,mac -o ip | tr -d '"' | tail -n +2 > /tmp/nlbw.html
 
 ln -s /tmp/nlbw.html /www/nlbw.html
 
-#---------------------------------------------------------------------------------------------------------#
 #---------------------------------------------------------------------------------------------------------#
 #-vnstat-#
 # Automatically determine the current year
@@ -82,7 +80,6 @@ echo "Cleaned output saved to $OUTPUT_FILE."
 
 ln -s /www/vnstat.txt /www/vnstat.txt
 
-
 #---------------------------------------------------------------------------------------------------------#
 # Restart Netify if service is not running
 if ! pgrep netifyd
@@ -95,4 +92,16 @@ echo "Restarting Netify due to high memory"
 else
 echo "Netify Memory is fine"
 fi
+fi
+
+
+#---------------------------------------------------------------------------------------------------------#
+# Start Nlbw compare if service is not running
+SERVICE="/etc/init.d/nlbw-compare-rate-service.sh"
+STATUS=$($SERVICE status)
+if echo "$STATUS" | grep -q "is not running"; then
+    echo "Service is not running. Starting it now..."
+    $SERVICE start
+else
+    echo "Service is already running."
 fi
