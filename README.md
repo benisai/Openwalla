@@ -29,7 +29,7 @@ I will update/fix things as I have time but PR's are welcomed. Hoping to make th
 *https://github.com/benisai/Openwalla/blob/main/Router/1-minute.sh
 
 ## Docker Setup 
-* Download Repo and run Docker-Compose up -d to start the project. Make sure to update env vars router IPs. 
+* Download Repo and run ```docker-compose up -d``` to start the project. Make sure to update env vars router IPs. 
 
 ## Local Setup 
 * To run locally, without docker, modify this file (https://github.com/benisai/Openwalla/blob/main/Openwalla/backend/utils/config.js) with the router IPs and 
