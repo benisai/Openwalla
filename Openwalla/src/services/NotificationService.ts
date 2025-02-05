@@ -27,6 +27,15 @@ export async function archiveNotification(uuid: string): Promise<void> {
   }
 }
 
+export async function archiveAllNotifications(): Promise<void> {
+  const response = await fetch('/api/notifications/archive-all', {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    throw new Error('Failed to archive all notifications');
+  }
+}
+
 export function useNotifications(includeArchived: boolean = false) {
   return useQuery({
     queryKey: ['notifications', { includeArchived }],
@@ -40,6 +49,17 @@ export function useArchiveNotification() {
   
   return useMutation({
     mutationFn: archiveNotification,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+}
+
+export function useArchiveAllNotifications() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: archiveAllNotifications,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },

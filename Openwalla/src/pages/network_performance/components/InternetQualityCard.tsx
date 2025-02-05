@@ -1,7 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChevronRight, Globe } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
@@ -16,9 +15,10 @@ export function InternetQualityCard() {
         throw new Error('Failed to fetch ping stats');
       }
       const data = await response.json();
-      return data.slice(-10);
+      // Take only the last 10 records, ordered by most recent first
+      return data.slice(0, 10).reverse();
     },
-    refetchInterval: 60000
+    refetchInterval: 60000  // Refresh every 60 seconds
   });
 
   const maxLatency = Math.max(...(pingStats?.map((stat: any) => stat.median_latency || 0) || [0]));
@@ -29,7 +29,7 @@ export function InternetQualityCard() {
   const chartData = pingStats?.map((stat: any) => ({
     time: new Date(stat.date + ' ' + stat.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     latency: stat.median_latency || 0
-  })).reverse() || [];
+  })) || [];
 
   return (
     <Card className="bg-dashboard-card text-white">

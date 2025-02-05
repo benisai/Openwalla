@@ -1,6 +1,8 @@
 module.exports = async function (db) {
   return new Promise((resolve, reject) => {
     db.serialize(() => {
+
+      // Create tables
       db.run(`
         CREATE TABLE IF NOT EXISTS hourly (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -10,8 +12,8 @@ module.exports = async function (db) {
           hour INTEGER,
           rx INTEGER,
           tx INTEGER,
-          timestamp INTEGER,
           interface_name TEXT,
+          timestamp INTEGER,
           UNIQUE(year, month, day, hour, interface_name)
         )
       `);
@@ -22,7 +24,6 @@ module.exports = async function (db) {
           month INTEGER,
           rx INTEGER,
           tx INTEGER,
-          timestamp INTEGER,
           interface_name TEXT,
           UNIQUE(year, month, interface_name)
         )

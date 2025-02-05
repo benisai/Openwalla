@@ -40,7 +40,6 @@ router.get('/', (req, res) => {
   });
 });
 
-// New endpoint for timeline notifications that always includes archived items
 router.get('/timeline', (req, res) => {
   const sql = `
     SELECT * FROM notifications 
@@ -71,6 +70,22 @@ router.post('/:uuid/archive', (req, res) => {
       if (err) {
         console.error('Error archiving notification:', err);
         res.status(500).json({ error: 'Failed to archive notification' });
+      } else {
+        res.json({ success: true });
+      }
+    }
+  );
+});
+
+// New endpoint to archive all notifications
+router.post('/archive-all', (req, res) => {
+  databases.notifications.run(
+    'UPDATE notifications SET action = ? WHERE action IS NULL OR action != ?',
+    ['archived', 'archived'],
+    (err) => {
+      if (err) {
+        console.error('Error archiving all notifications:', err);
+        res.status(500).json({ error: 'Failed to archive all notifications' });
       } else {
         res.json({ success: true });
       }

@@ -53,6 +53,11 @@ interface SystemStatsCardProps {
 }
 
 export function SystemStatsCard({ metrics }: SystemStatsCardProps) {
+  const { data: config } = useQuery({
+    queryKey: ['config'],
+    queryFn: getConfig
+  });
+
   const { data: loadData } = useQuery({
     queryKey: ['system-load'],
     queryFn: async () => {
@@ -68,7 +73,10 @@ export function SystemStatsCard({ metrics }: SystemStatsCardProps) {
         throw new Error('Failed to fetch system load');
       }
       const data = await loadResponse.json();
-      return data.data[0][1] * 100; // Convert load1 to percentage (multiply by 100)
+      const cpuCores = parseInt(config.cpu_cores) || 4;
+      // Convert load average to percentage based on number of cores
+      const loadPercentage = (data.data[0][1] / cpuCores) * 100;
+      return Math.min(loadPercentage, 100); // Cap at 100%
     },
     refetchInterval: 5000, // Refresh every 5 seconds
     initialData: 0,
@@ -89,7 +97,7 @@ export function SystemStatsCard({ metrics }: SystemStatsCardProps) {
           className="text-dashboard-chart"
         />
         <CircularProgress 
-          value={Math.min(Math.round(loadData), 100)} 
+          value={Math.round(loadData)} 
           label="Load" 
           className="text-dashboard-accent"
         />

@@ -9,55 +9,79 @@ class VnstatParser {
 
     lines.forEach(line => {
       if (!line.trim()) return;
-      
-      const [interface_name, type, year, month, ...rest] = line.split(',');
-      
-      switch (type) {
-        case 'Monthly':
-          const [timestamp, rx, tx] = rest;
-          data.monthly.push({
-            interface_name,
-            year: parseInt(year),
-            month: parseInt(month),
-            timestamp: parseInt(timestamp),
-            rx: parseInt(rx),
-            tx: parseInt(tx)
-          });
-          break;
 
-        case 'Daily':
-          const [day, dailyTimestamp, dailyRx, dailyTx] = rest;
-          data.daily.push({
-            interface_name,
-            year: parseInt(year),
-            month: parseInt(month),
-            day: parseInt(day),
-            rx: parseInt(dailyRx),
-            tx: parseInt(dailyTx)
-          });
-          break;
+      // Extract the first three parts, then treat the rest as XML
+      const firstComma = line.indexOf(',');
+      const secondComma = line.indexOf(',', firstComma + 1);
+      const thirdComma = line.indexOf(',', secondComma + 1);
+      if (firstComma === -1 || secondComma === -1 || thirdComma === -1) return;
 
-        case 'Hourly':
-          const [hourlyDay, hour, minute, hourlyRx, hourlyTx] = rest;
-          data.hourly.push({
-            interface_name,
-            year: parseInt(year),
-            month: parseInt(month),
-            day: parseInt(hourlyDay),
-            hour: parseInt(hour),
-            rx: parseInt(hourlyRx),
-            tx: parseInt(hourlyTx),
-            timestamp: Math.floor(new Date(`${year}-${month}-${hourlyDay} ${hour}:${minute}`).getTime() / 1000)
-          });
-          break;
+      const interfaceName = line.substring(0, firstComma).replace(/[<>]/g, '');
+      const recordType = line.substring(firstComma + 1, secondComma).replace(/[<>]/g, '');
+      const xmlData = line.substring(thirdComma + 1);
+
+      try {
+        if (recordType === 'Monthly') {
+          const yearMatch = xmlData.match(/<year>(\d+)<\/year>/);
+          const monthMatch = xmlData.match(/<date>.*?<month>(\d+)<\/month>/);
+          const rxMatch = xmlData.match(/<rx>(\d+)<\/rx>/);
+          const txMatch = xmlData.match(/<tx>(\d+)<\/tx>/);
+
+          if (yearMatch && monthMatch && rxMatch && txMatch) {
+            data.monthly.push({
+              interface_name: interfaceName,
+              year: parseInt(yearMatch[1]),
+              month: parseInt(monthMatch[1]),
+              rx: parseInt(rxMatch[1]),
+              tx: parseInt(txMatch[1])
+            });
+          }
+        } else if (recordType === 'Daily') {
+          const yearMatch = xmlData.match(/<year>(\d+)<\/year>/);
+          const monthMatch = xmlData.match(/<date>.*?<month>(\d+)<\/month>/);
+          const dayMatch = xmlData.match(/<day>(\d+)<\/day>/);
+          const rxMatch = xmlData.match(/<rx>(\d+)<\/rx>/);
+          const txMatch = xmlData.match(/<tx>(\d+)<\/tx>/);
+
+          if (yearMatch && monthMatch && dayMatch && rxMatch && txMatch) {
+            data.daily.push({
+              interface_name: interfaceName,
+              year: parseInt(yearMatch[1]),
+              month: parseInt(monthMatch[1]),
+              day: parseInt(dayMatch[1]),
+              rx: parseInt(rxMatch[1]),
+              tx: parseInt(txMatch[1])
+            });
+          }
+        } else if (recordType === 'Hourly') {
+          const yearMatch = xmlData.match(/<year>(\d+)<\/year>/);
+          const monthMatch = xmlData.match(/<date>.*?<month>(\d+)<\/month>/);
+          const dayMatch = xmlData.match(/<day>(\d+)<\/day>/);
+          const hourMatch = xmlData.match(/<time>.*?<hour>(\d+)<\/hour>/);
+          const rxMatch = xmlData.match(/<rx>(\d+)<\/rx>/);
+          const txMatch = xmlData.match(/<tx>(\d+)<\/tx>/);
+
+          if (yearMatch && monthMatch && dayMatch && hourMatch && rxMatch && txMatch) {
+            data.hourly.push({
+              interface_name: interfaceName,
+              year: parseInt(yearMatch[1]),
+              month: parseInt(monthMatch[1]),
+              day: parseInt(dayMatch[1]),
+              hour: parseInt(hourMatch[1]),
+              rx: parseInt(rxMatch[1]),
+              tx: parseInt(txMatch[1])
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error parsing vnstat line:', error, '\nLine:', line);
       }
     });
 
     console.log('Parsed vnstat data:', {
       monthlyCount: data.monthly.length,
       dailyCount: data.daily.length,
-      hourlyCount: data.hourly.length,
-      sampleHourly: data.hourly[0]
+      hourlyCount: data.hourly.length
     });
 
     return data;

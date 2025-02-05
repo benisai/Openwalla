@@ -1,8 +1,8 @@
-import { Bell, ChevronLeft, Home, X } from "lucide-react";
+import { Archive, Bell, ChevronLeft, Home, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useNavigate } from "react-router-dom";
-import { useNotifications, useArchiveNotification } from "@/services/NotificationService";
+import { useNotifications, useArchiveNotification, useArchiveAllNotifications } from "@/services/NotificationService";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ export default function NotificationsPage() {
   const { toast } = useToast();
   const { data: notifications = [], error, isLoading } = useNotifications();
   const archiveMutation = useArchiveNotification();
+  const archiveAllMutation = useArchiveAllNotifications();
 
   if (error) {
     toast({
@@ -52,6 +53,22 @@ export default function NotificationsPage() {
       });
     }
   };
+
+  const handleArchiveAll = async () => {
+    try {
+      await archiveAllMutation.mutateAsync();
+      toast({
+        title: "Success",
+        description: "All notifications archived",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to archive all notifications",
+        variant: "destructive",
+      });
+    }
+  };
   
   return (
     <div className="min-h-screen bg-dashboard-background text-white p-4">
@@ -64,12 +81,22 @@ export default function NotificationsPage() {
             <ChevronLeft className="w-6 h-6" />
           </button>
           <h1 className="text-xl font-bold">Notifications</h1>
-          <button
-            onClick={() => navigate("/")}
-            className="text-dashboard-accent hover:opacity-80"
-          >
-            <Home className="w-6 h-6" />
-          </button>
+          <div className="flex gap-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-dashboard-accent hover:opacity-80"
+              onClick={handleArchiveAll}
+            >
+              <Archive className="w-6 h-6" />
+            </Button>
+            <button
+              onClick={() => navigate("/")}
+              className="text-dashboard-accent hover:opacity-80"
+            >
+              <Home className="w-6 h-6" />
+            </button>
+          </div>
         </header>
 
         <ScrollArea className="h-[calc(100vh-120px)]">

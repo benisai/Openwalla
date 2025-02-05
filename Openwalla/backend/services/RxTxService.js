@@ -7,40 +7,70 @@ class RxTxService {
     for (const line of lines) {
       if (!line.trim()) continue;
       
-      const values = {};
-      line.split(',').forEach(pair => {
-        const [key, value] = pair.split('=');
-        values[key] = value;
-      });
-
       try {
-        await this.saveRxTxEntry({
-          mac: values.MAC,
-          ip: values.IP,
-          year: parseInt(values.year),
-          month: parseInt(values.month),
-          day: parseInt(values.day),
-          hour: parseInt(values.hour),
-          minute: parseInt(values.minute),
-          second: parseInt(values.second),
-          rx_diff: parseInt(values.RX_Diff),
-          tx_diff: parseInt(values.TX_Diff),
-          timestamp: new Date(
-            values.year,
-            parseInt(values.month) - 1,
-            values.day,
-            values.hour,
-            values.minute,
-            values.second
-          ).getTime()
+        const values = {};
+        line.split(',').forEach(pair => {
+          const [key, value] = pair.split('=');
+          if (key && value) {
+            values[key.trim()] = value.trim();
+          }
         });
+
+        // Only proceed if we have valid MAC and IP addresses
+        if (!values.MAC || !values.IP) {
+          console.log('Skipping RX/TX entry - missing MAC or IP:', values);
+          continue;
+        }
+
+        // Parse date/time values, defaulting to 0 if NaN
+        const year = parseInt(values.year) || 0;
+        const month = parseInt(values.month) || 0;
+        const day = parseInt(values.day) || 0;
+        const hour = parseInt(values.hour) || 0;
+        const minute = parseInt(values.minute) || 0;
+        const second = parseInt(values.second) || 0;
+        const rx_diff = parseInt(values.RX_Diff) || 0;
+        const tx_diff = parseInt(values.TX_Diff) || 0;
+
+        // Create timestamp
+        const timestamp = new Date(
+          year,
+          month - 1,
+          day,
+          hour,
+          minute,
+          second
+        ).getTime();
+
+        // Only save if we have valid timestamp and traffic data
+        if (timestamp && (rx_diff > 0 || tx_diff > 0)) {
+          await this.saveRxTxEntry({
+            mac: values.MAC,
+            ip: values.IP,
+            year,
+            month,
+            day,
+            hour,
+            minute,
+            second,
+            rx_diff,
+            tx_diff,
+            timestamp
+          });
+        }
       } catch (error) {
-        console.error('Error saving RX/TX entry:', error);
+        console.error('Error parsing RX/TX line:', error, '\nLine:', line);
       }
     }
   }
 
   static async saveRxTxEntry(entry) {
+    // Validate required fields
+    if (!entry.mac || !entry.ip) {
+      console.error('Cannot save RX/TX entry - missing required fields:', entry);
+      return;
+    }
+
     return new Promise((resolve, reject) => {
       databases.devices.run(`
         INSERT INTO rx_tx (

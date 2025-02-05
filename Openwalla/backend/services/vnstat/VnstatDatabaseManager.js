@@ -3,10 +3,17 @@ const { databases } = require('../../database/database');
 class VnstatDatabaseManager {
   static async saveHourlyData(hourData) {
     return new Promise((resolve, reject) => {
-      //console.log('Saving hourly data:', hourData);
+      // Calculate timestamp from year, month, day, hour
+      const timestamp = new Date(
+        hourData.year,
+        hourData.month - 1, // JavaScript months are 0-based
+        hourData.day,
+        hourData.hour
+      ).getTime() / 1000; // Convert to Unix timestamp (seconds)
+
       databases.vnstat.run(`
         INSERT OR REPLACE INTO hourly 
-        (year, month, day, hour, rx, tx, timestamp, interface_name)
+        (year, month, day, hour, rx, tx, interface_name, timestamp)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         hourData.year,
@@ -15,8 +22,8 @@ class VnstatDatabaseManager {
         hourData.hour,
         hourData.rx,
         hourData.tx,
-        hourData.timestamp,
-        hourData.interface_name
+        hourData.interface_name,
+        timestamp
       ], (err) => {
         if (err) {
           console.error('Error saving hourly data:', err);
@@ -56,14 +63,13 @@ class VnstatDatabaseManager {
     return new Promise((resolve, reject) => {
       databases.vnstat.run(`
         INSERT OR REPLACE INTO monthly 
-        (year, month, rx, tx, timestamp, interface_name)
-        VALUES (?, ?, ?, ?, ?, ?)
+        (year, month, rx, tx, interface_name)
+        VALUES (?, ?, ?, ?, ?)
       `, [
         monthData.year,
         monthData.month,
         monthData.rx,
         monthData.tx,
-        monthData.timestamp,
         monthData.interface_name
       ], (err) => {
         if (err) {

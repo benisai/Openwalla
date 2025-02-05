@@ -1,82 +1,193 @@
-import { ArrowLeft, Home, RefreshCcw } from "lucide-react";
+import { ArrowLeft, Home } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Card } from "@/components/ui/card";
-import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis } from "recharts";
+import { useQuery } from "@tanstack/react-query";
+import axios from "axios";
+import { formatNetworkSpeed } from "@/misc/utils/networkFormatting";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 
-const mockDevices = [
-  { id: 1, name: "Chromecast", download: 150, upload: 30 },
-  { id: 2, name: "Bens-Air", download: 200, upload: 45 },
-  { id: 3, name: "Bens-iPad", download: 500, upload: 80 },
-  { id: 4, name: "Bens-iPhone", download: 300, upload: 60 },
-  { id: 5, name: "DATTO", download: 250, upload: 40 },
-  { id: 6, name: "El-CAM", download: 180, upload: 35 },
-  { id: 7, name: "LivingRoom-CAM", download: 220, upload: 50 },
-  { id: 8, name: "MeLe-WiFi", download: 280, upload: 55 },
-  { id: 9, name: "Nest", download: 190, upload: 40 },
-  { id: 10, name: "Pixel-7", download: 420, upload: 75 },
-];
+interface RxTxData {
+  mac: string;
+  hostname: string;
+  rx_diff: number;
+  tx_diff: number;
+  timestamp: number;
+}
+
+type TimeRange = "realtime" | "5" | "15" | "60";
+
+const fetchRxTxData = async (minutes: TimeRange): Promise<RxTxData[]> => {
+  const response = await axios.get(`/api/devices/rx_tx/range/${minutes}`);
+  return response.data;
+};
 
 const DeviceLiveThroughput = () => {
+  const [timeRange, setTimeRange] = useState<TimeRange>("realtime");
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['rxTxData', timeRange],
+    queryFn: () => fetchRxTxData(timeRange),
+    refetchInterval: timeRange === "realtime" ? 15000 : false,
+  });
+
+  // Process data for the chart
+  const chartData = data?.reduce((acc: any[], curr: RxTxData) => {
+    const existingPoint = acc.find(p => p.timestamp === curr.timestamp);
+    if (existingPoint) {
+      existingPoint[`${curr.hostname}_rx`] = curr.rx_diff;
+      existingPoint[`${curr.hostname}_tx`] = curr.tx_diff;
+    } else {
+      const newPoint = {
+        timestamp: curr.timestamp,
+        [`${curr.hostname}_rx`]: curr.rx_diff,
+        [`${curr.hostname}_tx`]: curr.tx_diff,
+      };
+      acc.push(newPoint);
+    }
+    return acc;
+  }, []).sort((a: any, b: any) => a.timestamp - b.timestamp) || [];
+
+  // Get unique devices for legend
+  const devices = Array.from(new Set(data?.map((d: RxTxData) => d.hostname) || []));
+
+  // Generate unique colors for each device
+  const colors = [
+    "#2563eb", // blue-600
+    "#dc2626", // red-600
+    "#16a34a", // green-600
+    "#9333ea", // purple-600
+    "#ea580c", // orange-600
+    "#0891b2", // cyan-600
+    "#4f46e5", // indigo-600
+    "#c026d3", // fuchsia-600
+  ];
+
   return (
-    <div className="min-h-screen bg-dashboard-background text-white p-4 md:px-0">
-      <div className="md:max-w-4xl mx-auto pb-20">
+    <div className="min-h-screen bg-dashboard-background p-4">
+      <div className="max-w-[1400px] mx-auto">
         {/* Header */}
         <header className="flex justify-between items-center mb-6">
-          <Link to="/">
-            <ArrowLeft className="w-6 h-6 text-dashboard-accent" />
+          <Link to="/" className="text-dashboard-accent hover:opacity-80">
+            <ArrowLeft className="w-6 h-6" />
           </Link>
           <div className="flex items-center gap-2">
-            <span className="text-xl font-bold">Live Device Throughput</span>
-            <RefreshCcw className="w-5 h-5 text-dashboard-accent cursor-pointer" />
+            <span className="text-xl font-bold text-white">Live Device Throughput</span>
           </div>
-          <Link to="/">
-            <Home className="w-6 h-6 text-dashboard-accent" />
+          <Link to="/" className="text-dashboard-accent hover:opacity-80">
+            <Home className="w-6 h-6" />
           </Link>
         </header>
 
-        {/* Device Charts */}
-        <div className="space-y-4">
-          {mockDevices.map((device) => (
-            <Card key={device.id} className="bg-dashboard-card p-4">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-gray-400 text-sm">{device.name}</h3>
-                <div className="flex gap-4 text-sm">
-                  <span className="text-[#0EA5E9]">{device.download} kb/s ↓</span>
-                  <span className="text-[#F97316]">{device.upload} kb/s ↑</span>
-                </div>
+        {/* Time Range Selector */}
+        <div className="flex justify-end gap-2 mb-4">
+          <Button
+            variant={timeRange === "realtime" ? "default" : "outline"}
+            onClick={() => setTimeRange("realtime")}
+            className="bg-dashboard-card hover:bg-dashboard-accent/20 border-dashboard-accent text-white"
+          >
+            Real-Time
+          </Button>
+          <Button
+            variant={timeRange === "5" ? "default" : "outline"}
+            onClick={() => setTimeRange("5")}
+            className="bg-dashboard-card hover:bg-dashboard-accent/20 border-dashboard-accent text-white"
+          >
+            5-min
+          </Button>
+          <Button
+            variant={timeRange === "15" ? "default" : "outline"}
+            onClick={() => setTimeRange("15")}
+            className="bg-dashboard-card hover:bg-dashboard-accent/20 border-dashboard-accent text-white"
+          >
+            15-min
+          </Button>
+          <Button
+            variant={timeRange === "60" ? "default" : "outline"}
+            onClick={() => setTimeRange("60")}
+            className="bg-dashboard-card hover:bg-dashboard-accent/20 border-dashboard-accent text-white"
+          >
+            60-min
+          </Button>
+        </div>
+
+        {/* Graph */}
+        <div className="bg-dashboard-card rounded-lg p-6 shadow-lg">
+          <div className="h-[600px]">
+            {isLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <span className="text-muted-foreground">Loading data...</span>
               </div>
-              <div className="h-[60px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart
-                    data={[
-                      { time: 1, download: device.download * 0.8, upload: device.upload * 0.7 },
-                      { time: 2, download: device.download * 0.9, upload: device.upload * 0.8 },
-                      { time: 3, download: device.download * 1.0, upload: device.upload * 1.0 },
-                      { time: 4, download: device.download * 0.95, upload: device.upload * 0.9 },
-                      { time: 5, download: device.download * 0.85, upload: device.upload * 0.85 },
-                    ]}
-                  >
-                    <XAxis hide />
-                    <YAxis hide />
-                    <Area
-                      type="monotone"
-                      dataKey="download"
-                      stroke="#0EA5E9"
-                      fill="url(#colorDownload)"
-                      strokeWidth={2}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="upload"
-                      stroke="#F97316"
-                      fill="url(#colorUpload)"
-                      strokeWidth={2}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </Card>
-          ))}
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                  <XAxis 
+                    dataKey="timestamp"
+                    tickFormatter={(timestamp) => new Date(timestamp).toLocaleTimeString()}
+                    stroke="rgba(255,255,255,0.5)"
+                  />
+                  <YAxis 
+                    tickFormatter={(value) => formatNetworkSpeed(value)}
+                    stroke="rgba(255,255,255,0.5)"
+                  />
+                  <Tooltip 
+                    formatter={(value: number) => formatNetworkSpeed(value)}
+                    labelFormatter={(label) => new Date(label).toLocaleTimeString()}
+                    contentStyle={{ 
+                      backgroundColor: 'rgba(26, 31, 44, 0.9)', 
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      borderRadius: '8px',
+                      color: 'white'
+                    }}
+                  />
+                  <Legend 
+                    layout="horizontal"
+                    verticalAlign="bottom"
+                    align="center"
+                    wrapperStyle={{ 
+                      paddingTop: "20px",
+                      color: "white"
+                    }}
+                  />
+                  {devices.map((device, index) => (
+                    <>
+                      <Line
+                        key={`${device}_rx`}
+                        type="monotone"
+                        dataKey={`${device}_rx`}
+                        name={`${device} (Download)`}
+                        stroke={colors[index % colors.length]}
+                        strokeWidth={2}
+                        dot={false}
+                        connectNulls={true}
+                      />
+                      <Line
+                        key={`${device}_tx`}
+                        type="monotone"
+                        dataKey={`${device}_tx`}
+                        name={`${device} (Upload)`}
+                        stroke={colors[index % colors.length]}
+                        strokeWidth={2}
+                        strokeDasharray="5 5"
+                        dot={false}
+                        connectNulls={true}
+                      />
+                    </>
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
         </div>
       </div>
     </div>

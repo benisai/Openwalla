@@ -46,6 +46,61 @@ router.get('/:mac/rx_tx', async (req, res) => {
   }
 });
 
+// Get recent RX/TX data for all devices
+router.get('/rx_tx/recent', async (req, res) => {
+  const sql = `
+    SELECT 
+      rx_tx.mac,
+      rx_tx.rx_diff,
+      rx_tx.tx_diff,
+      rx_tx.timestamp,
+      clients.hostname
+    FROM rx_tx
+    JOIN clients ON rx_tx.mac = clients.mac
+    WHERE rx_tx.timestamp >= ?
+    ORDER BY rx_tx.timestamp DESC
+    LIMIT 100
+  `;
+  
+  const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+  
+  databases.devices.all(sql, [fiveMinutesAgo], (err, rows) => {
+    if (err) {
+      console.error('Error getting recent RX/TX data:', err);
+      res.status(500).json({ error: 'Failed to get RX/TX data', details: err.message });
+      return;
+    }
+    res.json(rows || []);
+  });
+});
+
+// Get RX/TX data for all devices within a time range
+router.get('/rx_tx/range/:minutes', async (req, res) => {
+  const minutes = parseInt(req.params.minutes) || 5;
+  const timeAgo = Date.now() - (minutes * 60 * 1000);
+  
+  const sql = `
+    SELECT 
+      rx_tx.mac,
+      rx_tx.rx_diff,
+      rx_tx.tx_diff,
+      rx_tx.timestamp,
+      clients.hostname
+    FROM rx_tx
+    JOIN clients ON rx_tx.mac = clients.mac
+    WHERE rx_tx.timestamp >= ?
+    ORDER BY rx_tx.timestamp ASC
+  `;
+  
+  databases.devices.all(sql, [timeAgo], (err, rows) => {
+    if (err) {
+      console.error('Error getting RX/TX data:', err);
+      res.status(500).json({ error: 'Failed to get RX/TX data', details: err.message });
+      return;
+    }
+    res.json(rows || []);
+  });
+});
 
 // Check if device is active (has flows in last minute)
 router.get('/active/:mac', (req, res) => {
