@@ -28,11 +28,16 @@ I will update/fix things as I have time but PR's are welcomed. Hoping to make th
 * Download this shell script and run it every minute via a crontab on the Openwrt Router. This shell script will create the vnstat, client list, and nlbw data and place it in the /www/ of the router. 
 *https://github.com/benisai/Openwalla/blob/main/Router/1-minute.sh
 
+
+
+
+
 ## Docker Setup 
-* Download Repo and run ```docker-compose up -d``` to start the project. Make sure to update env vars router IPs. 
+* Modify backend/configs/config.js with your router ip, or set it as the env var in docker-compose.yml
+* Download Repo, cd into Openwalla, run ```sudo docker-compose up -d``` to start the project.
 
 ## Local Setup 
-* To run locally, without docker, modify this file (https://github.com/benisai/Openwalla/blob/main/Openwalla/backend/utils/config.js) with the router IPs and 
+* To run locally, without docker, modify this file (https://github.com/benisai/Openwalla/blob/main/Openwalla/backend/configs/config.js) with the router IPs and 
 * cd into backend folder and run 'run install', then run 'node server.js'
 * cd into src folder, and run 'npm install', then run 'npm run dev'
 * browse ip:8080
