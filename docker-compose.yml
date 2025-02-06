@@ -6,7 +6,8 @@ services:
       - "3000:3000"
       - "8080:8080"
     environment:
-      - ROUTER_IP=10.0.3.1
+      - ROUTER_IP=10.0.5.1
+      - TZ=America/Los_Angeles
       # - OPENWRT_IP=10.0.3.1
       # - NETDATA_URL=http://10.0.3.1:19999
       # - NETIFY_IP=10.0.3.1
