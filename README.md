@@ -109,11 +109,12 @@ Aggregated monthly/daily usage from `vnstat2`.
 
 ### Database Structure
 Openwalla uses SQLite databases for structured data storage:
-- **Openwalla.db** - Core configuration and state.
+- **Configs.db** - Core configuration and state.
 - **OpenWRT.db** - Router-specific device tracking.
 - **Flows.db** - Network flow logs.
 - **Notifications.db** - System alerts and history.
 - **Vnstat.db** - Bandwidth usage statistics.
+- **devices.db** - Device(s) information.
 
 ---
 
