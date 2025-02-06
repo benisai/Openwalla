@@ -1,4 +1,4 @@
-# Software is in the early stages. I try to only upload 'good/working' code, but there might be some bugs. 
+# Software is in the early stages. There might be some bugs. 
 
 # Openwalla Dashboard
 
