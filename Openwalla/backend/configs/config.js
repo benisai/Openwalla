@@ -8,7 +8,7 @@ const getEnvConfig = () => {
     openwrt_user: process.env.OPENWRT_USER || '',
     openwrt_pass: process.env.OPENWRT_PASS || '',
     ping_address: process.env.PING_ADDRESS || '1.1.1.1',
-    ping_interval: process.env.PING_INTERVAL || '60',
+    ping_interval: process.env.PING_INTERVAL || '60', // Dont change, it will mess up the ping graph. Ping graph is hard coded to 60s.
     cpu_cores: process.env.CPU_CORES || '4'  // Default to 4 cores
   };
 };
