@@ -183,8 +183,16 @@ class NetifyService {
             ndpi_risk_score,
             ndpi_risk_score_client,
             ndpi_risk_score_server,
-            client_sni
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            client_sni,
+            category_application,
+            category_domain,
+            category_protocol,
+            detected_application,
+            detected_protocol,
+            detection_guessed,
+            dns_host_name,
+            host_server_name
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
         const params = [
@@ -203,7 +211,15 @@ class NetifyService {
           flowData.flow.risks?.ndpi_risk_score || 0,
           flowData.flow.risks?.ndpi_risk_score_client || 0,
           flowData.flow.risks?.ndpi_risk_score_server || 0,
-          flowData.flow.ssl?.client_sni || ''
+          flowData.flow.ssl?.client_sni || '',
+          flowData.flow.category?.application || 0,
+          flowData.flow.category?.domain || 0,
+          flowData.flow.category?.protocol || 0,
+          flowData.flow.detected_application || 0,
+          flowData.flow.detected_protocol || 0,
+          flowData.flow.detection_guessed ? 1 : 0,
+          flowData.flow.dns_host_name || '',
+          flowData.flow.host_server_name || ''
         ];
 
         databases.flows.run(sql, params, (error) => {

@@ -1,3 +1,4 @@
+
 export interface Flow {
   timeinsert: string;
   hostname: string;
@@ -11,6 +12,18 @@ export interface Flow {
   detected_app_name: string;
   interface: string;
   internal: number;
+  ndpi_risk_score: number;
+  ndpi_risk_score_client: number;
+  ndpi_risk_score_server: number;
+  client_sni: string;
+  category_application: number;
+  category_domain: number;
+  category_protocol: number;
+  detected_application: number;
+  detected_protocol: number;
+  detection_guessed: number;
+  dns_host_name: string;
+  host_server_name: string;
 }
 
 export interface FlowDetailsData {
@@ -36,5 +49,21 @@ export interface FlowDetailsData {
     duration: string;
     downloaded: string;
     uploaded: string;
+  };
+  categories?: {
+    application: number;
+    domain: number;
+    protocol: number;
+  };
+  detection?: {
+    application: number;
+    applicationName: string;
+    protocol: number;
+    protocolName: string;
+    guessed: boolean;
+    hostnames: {
+      dns: string;
+      server: string;
+    };
   };
 }

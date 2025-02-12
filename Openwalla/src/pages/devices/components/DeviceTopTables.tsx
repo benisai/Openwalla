@@ -1,5 +1,6 @@
+
 import { useQuery } from "@tanstack/react-query";
-import { getTopFQDNs, getTopDestIPs } from "@/services/FlowService";
+import { getTopFQDNs, getTopApplications } from "@/services/FlowService";
 import {
   Table,
   TableBody,
@@ -34,9 +35,9 @@ export function DeviceTopTables({ deviceMac }: DeviceTopTablesProps) {
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  const { data: topDestIPs = [], isLoading: isLoadingIPs } = useQuery({
-    queryKey: ['topDestIPs', deviceMac],
-    queryFn: () => getTopDestIPs(deviceMac),
+  const { data: topApplications = [], isLoading: isLoadingApps } = useQuery({
+    queryKey: ['topApplications', deviceMac],
+    queryFn: () => getTopApplications(deviceMac),
     enabled: !!deviceMac,
     refetchInterval: 30000, // Refresh every 30 seconds
   });
@@ -88,21 +89,21 @@ export function DeviceTopTables({ deviceMac }: DeviceTopTablesProps) {
       </div>
 
       <div className="bg-dashboard-card rounded-lg p-4">
-        <h3 className="text-lg font-semibold mb-4">Top 10 HTTPS IPs (24h)</h3>
+        <h3 className="text-lg font-semibold mb-4">Top 10 Applications (24h)</h3>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>IP Address</TableHead>
+              <TableHead>Application</TableHead>
               <TableHead className="text-right">Count</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoadingIPs ? (
+            {isLoadingApps ? (
               renderSkeletonRows()
             ) : (
-              topDestIPs.map((item, index) => (
+              topApplications.map((item, index) => (
                 <TableRow key={index}>
-                  <TableCell className="font-mono">{item.dest_ip}</TableCell>
+                  <TableCell className="font-mono">{item.detected_app_name}</TableCell>
                   <TableCell className="text-right">{item.count}</TableCell>
                 </TableRow>
               ))

@@ -1,4 +1,5 @@
-import { Archive, Bell, ChevronLeft, Home, X } from "lucide-react";
+
+import { Bell, ChevronLeft, Home, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useNavigate } from "react-router-dom";
@@ -83,12 +84,13 @@ export default function NotificationsPage() {
           <h1 className="text-xl font-bold">Notifications</h1>
           <div className="flex gap-4">
             <Button
-              variant="ghost"
-              size="icon"
+              variant="outline"
+              size="sm"
               className="text-dashboard-accent hover:opacity-80"
               onClick={handleArchiveAll}
+              disabled={notifications.length === 0}
             >
-              <Archive className="w-6 h-6" />
+              Archive All
             </Button>
             <button
               onClick={() => navigate("/")}

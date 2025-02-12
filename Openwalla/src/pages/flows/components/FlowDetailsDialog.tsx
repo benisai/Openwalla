@@ -104,10 +104,62 @@ export function FlowDetailsDialog({ open, onOpenChange, flowData }: FlowDetailsP
                     <span>{flowData.destination.protocol}</span>
                   </div>
                 )}
-                <div className="hidden flex justify-between">
-                  <span>Region</span>
-                  <span>{flowData.destination?.region}</span>
+              </div>
+            </div>
+
+            <div className="px-2">
+              <h3 className="text-gray-400 mb-4">CATEGORIES</h3>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span>Application</span>
+                  <span>{flowData.categories?.application}</span>
                 </div>
+                <div className="flex justify-between">
+                  <span>Domain</span>
+                  <span>{flowData.categories?.domain}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Protocol</span>
+                  <span>{flowData.categories?.protocol}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-2">
+              <h3 className="text-gray-400 mb-4">DETECTION</h3>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span>Application ID</span>
+                  <span>{flowData.detection?.application}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Application Name</span>
+                  <span>{flowData.detection?.applicationName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Protocol ID</span>
+                  <span>{flowData.detection?.protocol}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Protocol Name</span>
+                  <span>{flowData.detection?.protocolName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Detection Guessed</span>
+                  <span>{flowData.detection?.guessed ? 'Yes' : 'No'}</span>
+                </div>
+                {flowData.detection?.hostnames?.dns && (
+                  <div className="flex justify-between">
+                    <span>DNS Hostname</span>
+                    <span className="text-right break-all">{flowData.detection.hostnames.dns}</span>
+                  </div>
+                )}
+                {flowData.detection?.hostnames?.server && (
+                  <div className="flex justify-between">
+                    <span>Server Hostname</span>
+                    <span className="text-right break-all">{flowData.detection.hostnames.server}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -129,18 +181,6 @@ export function FlowDetailsDialog({ open, onOpenChange, flowData }: FlowDetailsP
                 <div className="flex justify-between">
                   <span>Flow Count</span>
                   <span>{flowData.details?.flowCount}</span>
-                </div>
-                <div className="hidden flex justify-between">
-                  <span>Duration</span>
-                  <span>{flowData.details?.duration}</span>
-                </div>
-                <div className="hidden flex justify-between">
-                  <span>Downloaded</span>
-                  <span>{flowData.details?.downloaded}</span>
-                </div>
-                <div className="hidden flex justify-between">
-                  <span>Uploaded</span>
-                  <span>{flowData.details?.uploaded}</span>
                 </div>
               </div>
             </div>

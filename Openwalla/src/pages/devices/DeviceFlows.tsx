@@ -93,6 +93,22 @@ const DeviceFlows = () => {
         duration: "N/A",
         downloaded: "N/A",
         uploaded: "N/A"
+      },
+      categories: {
+        application: flow.category_application,
+        domain: flow.category_domain,
+        protocol: flow.category_protocol
+      },
+      detection: {
+        application: flow.detected_application,
+        applicationName: flow.detected_app_name,
+        protocol: flow.detected_protocol,
+        protocolName: flow.detected_protocol_name,
+        guessed: flow.detection_guessed === 1,
+        hostnames: {
+          dns: flow.dns_host_name,
+          server: flow.host_server_name
+        }
       }
     };
     setSelectedFlowDetails(flowDetailsData);

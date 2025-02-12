@@ -245,4 +245,34 @@ router.get('/device/:mac/top-dest-ips', (req, res) => {
   });
 });
 
+router.get('/device/:mac/top-applications', (req, res) => {
+  const sql = `
+    SELECT detected_app_name, COUNT(*) as count 
+    FROM flow 
+    WHERE local_mac = ? 
+    AND detected_app_name IS NOT NULL
+    AND detected_app_name != ''
+    AND datetime(timeinsert) >= datetime('now', '-24 hours')
+    GROUP BY detected_app_name 
+    ORDER BY count DESC 
+    LIMIT 10
+  `;
+  
+  console.log('Executing top applications query for MAC:', req.params.mac.toLowerCase());
+  
+  databases.flows.all(sql, [req.params.mac.toLowerCase()], (err, rows) => {
+    if (err) {
+      console.error('Error getting top applications:', err);
+      res.status(500).json({ error: 'Failed to get top applications', details: err.message });
+      return;
+    }
+    
+    console.log('Raw application results:', rows);
+    
+    const validRows = rows.filter(row => row.detected_app_name && row.detected_app_name.trim() !== '');
+    console.log('Filtered application results:', validRows);
+    
+    res.json(validRows);
+  });
+});
 module.exports = router;

@@ -1,3 +1,4 @@
+
 import { Flow } from "@/misc/types/flow";
 
 export async function getLast24HoursFlowCount(): Promise<number> {
@@ -87,6 +88,7 @@ export async function getDeviceFlows(mac: string, hours: number = 1): Promise<Fl
 export interface TopFlowItem {
   fqdn?: string;
   dest_ip?: string;
+  detected_app_name?: string;
   count: number;
 }
 
@@ -112,6 +114,19 @@ export async function getTopDestIPs(mac: string): Promise<TopFlowItem[]> {
     return response.json();
   } catch (error) {
     console.error('Error fetching top destination IPs:', error);
+    return [];
+  }
+}
+
+export async function getTopApplications(mac: string): Promise<TopFlowItem[]> {
+  try {
+    const response = await fetch(`/api/flows/device/${mac}/top-applications`);
+    if (!response.ok) {
+      throw new Error('Network response was not ok');
+    }
+    return response.json();
+  } catch (error) {
+    console.error('Error fetching top applications:', error);
     return [];
   }
 }
