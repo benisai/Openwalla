@@ -68,6 +68,9 @@ while true; do
     # Update the old stats file with the current stats
     update_old_file
 
+    # link file to www folder. 
+    ln -s /tmp/nlbw_final_compare.txt /www/nlbw_rx_tx.txt 
+    
     # Sleep for 10 seconds before running again
     sleep 10
 done
