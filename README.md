@@ -137,6 +137,7 @@ Openwalla uses SQLite databases for structured data storage:
 3. **Run the backend:**
    ```bash
    cd backend
+   npm install
    node server.js
    ```
 
