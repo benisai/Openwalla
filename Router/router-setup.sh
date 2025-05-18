@@ -139,6 +139,11 @@ fi
  /etc/init.d/vnstat restart
  service netifyd restart
 
+#----------------------------------------------------------------------------------------# 
+# symlink some files
+ln -s /www/vnstat.txt /www/vnstat.txt
+ln -s /tmp/nlbw.html /www/nlbw.html
+ln -s /tmp/clientlist.html /www/clientlist.html
 
 #----------------------------------------------------------------------------------------# 
 echo 'You should restart the router now for these changes to take effect...'
