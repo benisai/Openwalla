@@ -43,13 +43,13 @@ else
     echo "ARP file not found: $ARP_FILE" >> "$OUTPUT_FILE"
 fi
 
-ln -s /tmp/clientlist.html /www/clientlist.html
+# ln -s /tmp/clientlist.html /www/clientlist.html
 
 #---------------------------------------------------------------------------------------------------------#
 #----------nlbwmon-------------#
 nlbw -c csv -g ip,mac -o ip | tr -d '"' | tail -n +2 > /tmp/nlbw.html
 
-ln -s /tmp/nlbw.html /www/nlbw.html
+# ln -s /tmp/nlbw.html /www/nlbw.html
 
 #---------------------------------------------------------------------------------------------------------#
 #-vnstat-#
@@ -78,7 +78,7 @@ OUTPUT_FILE="/www/vnstat.txt"
 # Notify the user
 echo "Cleaned output saved to $OUTPUT_FILE."
 
-ln -s /www/vnstat.txt /www/vnstat.txt
+# ln -s /www/vnstat.txt /www/vnstat.txt
 
 
 
