@@ -1,19 +1,19 @@
 #!/bin/sh
 
-#---------------------------------------------------------------------------------------------------------#
-#---Adblock-Details--------#
-/etc/init.d/adblock report | sed 's/+//g' | sed 's/::://g' > /tmp/adblock.txt
-/etc/init.d/adblock list | grep " x " | sed 's/+//g' | cut -d " " -f2- > /tmp/adblock-list.txt
+# #---------------------------------------------------------------------------------------------------------#
+# #---Adblock-Details--------#
+# /etc/init.d/adblock report | sed 's/+//g' | sed 's/::://g' > /tmp/adblock.txt
+# /etc/init.d/adblock list | grep " x " | sed 's/+//g' | cut -d " " -f2- > /tmp/adblock-list.txt
 
-ln -s /tmp/adblock.txt /www/adblock.txt
-ln -s /tmp/adblock-list.txt /www/adblock-list.txt
+# ln -s /tmp/adblock.txt /www/adblock.txt
+# ln -s /tmp/adblock-list.txt /www/adblock-list.txt
 
 
-#---------------------------------------------------------------------------------------------------------#
-#---BanIP-Details--------#
-/etc/init.d/banip report | sed 's/+//g' | sed 's/::://g' > /tmp/banip.txt
+# #---------------------------------------------------------------------------------------------------------#
+# #---BanIP-Details--------#
+# /etc/init.d/banip report | sed 's/+//g' | sed 's/::://g' > /tmp/banip.txt
 
-ln -s /tmp/banip.txt /www/banip.txt
+# ln -s /tmp/banip.txt /www/banip.txt
 
 #---------------------------------------------------------------------------------------------------------#
 #----------Device-Details-------------#
@@ -80,19 +80,6 @@ echo "Cleaned output saved to $OUTPUT_FILE."
 
 ln -s /www/vnstat.txt /www/vnstat.txt
 
-#---------------------------------------------------------------------------------------------------------#
-# Restart Netify if service is not running
-if ! pgrep netifyd
-then /etc/init.d/netifyd start
-else
-#Restart Netify is it uses high memory
-if [ `top -b -n 1 | grep netify | grep -v "grep" | awk '{print $6}'| tr -d '%'` -gt 25 ];then
-echo "Restarting Netify due to high memory"
-/etc/init.d/netifyd restart
-else
-echo "Netify Memory is fine"
-fi
-fi
 
 
 #---------------------------------------------------------------------------------------------------------#
