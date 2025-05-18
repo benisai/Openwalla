@@ -11,7 +11,7 @@
 # #---------------------------------------------------------------------------------------------------------#
 
 #---------------------------------------------------------------------------------------------------------#
-# Restart Netify if service is not running
+# Restart Netify if service is using too much memory
 if ! pgrep netifyd
 then /etc/init.d/netifyd start
 else
