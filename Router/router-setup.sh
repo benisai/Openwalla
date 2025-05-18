@@ -103,6 +103,18 @@ fi
 
 #----------------------------------------------------------------------------------------#  
  #Copying scripts and lua files to router
+
+
+#!/bin/sh
+#----------------------------------------------------------------------------------------#  
+ # Check if file exists and remove it (one line each)
+ [ -f /usr/bin/1-minute-script.sh ] && rm -f /usr/bin/1-minute-script.sh && echo "Removed 1-minute-script.sh"
+ [ -f /usr/bin/5-minute-script.sh ] && rm -f /usr/bin/5-minute-script.sh && echo "Removed 5-minute-script.sh"
+ [ -f /usr/bin/1-hour-script.sh ] && rm -f /usr/bin/1-hour-script.sh && echo "Removed 1-hour-script.sh"
+ [ -f /usr/bin/12am-script.sh ] && rm -f /usr/bin/12am-script.sh && echo "Removed 12am-script.sh"
+ [ -f /etc/init.d/nlbw-compare-rate-service.sh ] && rm -f /etc/init.d/nlbw-compare-rate-service.sh && echo "Removed nlbw-compare-rate-service.sh"
+ [ -f /usr/bin/nlbw-compare-rate.sh ] && rm -f /usr/bin/nlbw-compare-rate.sh && echo "Removed nlbw-compare-rate.sh"
+ 
  echo 'Copying shell scripts and files from Github to Router'
  wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/1-minute-script.sh -O /usr/bin/1-minute-script.sh && chmod +x /usr/bin/1-minute-script.sh
  wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/Crontab/5-minute-script.sh -O /usr/bin/5-minute-script.sh && chmod +x /usr/bin/5-minute-script.sh 
