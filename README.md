@@ -1,5 +1,7 @@
 # Openwalla Dashboard
 
+# The project is on hold, I have not had time to fix things 😭
+
 Openwalla is a modern dashboard interface for monitoring OpenWRT, built using React, TypeScript, and Tailwind CSS. Inspired by the Firewalla app, Openwalla provides a user-friendly way to visualize network activity and system performance. Inspiration came from the Firewalla app, thus the name 'Openwalla'.
 
 This project was initially created for personal use, but I am sharing it in hopes that others find it useful. **Please note:** The software is currently in **alpha**—some features may be incomplete or non-functional. Contributions via pull requests are welcome as I work toward refining and expanding the project.
