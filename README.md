@@ -64,21 +64,19 @@ If you prefer manual setup, follow these steps:
    git clone https://github.com/benisai/Openwalla.git
    cd Openwalla
    ```
-3. Update the router IP in `backend/configs/config.js`.
-4. Start the backend:
+3. Update the router IP in `openwalla/config.js`.
+4. Start the project (I created a bash script to do the npm install and npm start) :
    ```bash
-   cd backend
-   npm install
-   node server.js
-   ```
-5. Start the frontend:
-   ```bash
-   cd src
-   npm install
-   npm run dev
-   ```
-6. Access the dashboard at `http://<server-ip>:8080`.
+   chmod +x ./manage-server.sh
+   ./manage-server.sh install
+   ./manage-server.sh start
+   
 
+6. Access the dashboard at `http://<server-ip>:8080`.
+   
+7. To Stop the project, run `./manage-server.sh force_kill_all`
+
+8. To Restart the project, run `./manage-server.sh restart`
 ---
 
 ## Screenshots
