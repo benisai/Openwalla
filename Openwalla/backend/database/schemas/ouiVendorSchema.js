@@ -15,7 +15,7 @@ module.exports = async function (db, envConfig) {
         if (err) return reject(err);
         if (row.count === 0) {
           try {
-            const response = await axios.get('https://raw.githubusercontent.com/benisai/Openwalla/main/mac-address-oui.json');
+            const response = await axios.get('https://raw.githubusercontent.com/benisai/Openwalla/main/Files/mac-address-oui.json');
             const vendors = response.data;
 
             const stmt = db.prepare('INSERT OR REPLACE INTO oui_vendors (oui, vendor) VALUES (?, ?)');
