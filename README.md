@@ -64,7 +64,7 @@ If you prefer manual setup, follow these steps:
    git clone https://github.com/benisai/Openwalla.git
    cd Openwalla
    ```
-3. Update the router IP in `openwalla/config.js`.
+3. Update the router IP in `Openwalla/openwalla/configs.cjs`
 4. Start the project (I created a bash script to do the npm install and npm start) :
    ```bash
    chmod +x ./manage-server.sh
