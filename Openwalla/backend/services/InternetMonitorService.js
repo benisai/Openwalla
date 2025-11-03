@@ -1,3 +1,4 @@
+
 const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -9,10 +10,15 @@ const NetworkErrorHandler = require('./internetmonitoring/NetworkErrorHandler');
 
 class InternetMonitorService {
   constructor(config = {}) {
-    this.targetIp = config.ping_address || '1.1.1.1';
+    this.updateConfig(config);
     this.monitorInterval = null;
-    this.LATENCY_THRESHOLD = 100; // ms
+  }
+
+  updateConfig(config) {
+    this.targetIp = config.ping_address || '1.1.1.1';
+    this.LATENCY_THRESHOLD = parseInt(config.latency_threshold) || 100;
     this.PING_INTERVAL = 60000; // 60 seconds in milliseconds
+    console.log(`Internet monitor config updated - Target IP: ${this.targetIp}, Latency threshold: ${this.LATENCY_THRESHOLD}ms`);
   }
 
   async start() {
@@ -22,7 +28,7 @@ class InternetMonitorService {
       }
 
       this.monitorInterval = setInterval(() => this.checkConnection(), this.PING_INTERVAL);
-      console.log(`Internet monitoring started for IP: ${this.targetIp}`);
+      console.log(`Internet monitoring started for IP: ${this.targetIp} with latency threshold: ${this.LATENCY_THRESHOLD}ms`);
     } catch (error) {
       console.error('Error starting internet monitor:', error);
     }

@@ -1,3 +1,4 @@
+
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 export interface Device {
@@ -54,6 +55,21 @@ export const useDeviceActivity = (mac: string) => {
   });
 };
 
+export const useDeviceType = (mac: string) => {
+  return useQuery({
+    queryKey: ['deviceType', mac],
+    queryFn: async () => {
+      const response = await fetch(`/api/devices/${mac}/type`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch device type');
+      }
+      const data = await response.json();
+      return data.type;
+    },
+    refetchInterval: false, // Device types don't change often
+  });
+};
+
 export const useUpdateDeviceHostname = () => {
   const queryClient = useQueryClient();
   
@@ -77,6 +93,28 @@ export const useUpdateDeviceHostname = () => {
       // Invalidate and refetch device queries
       queryClient.invalidateQueries({ queryKey: ['devices'] });
       queryClient.invalidateQueries({ queryKey: ['device', variables.mac] });
+    },
+  });
+};
+
+export const useDeleteDevice = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (mac: string) => {
+      const response = await fetch(`/api/devices/${mac}`, {
+        method: 'DELETE',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete device');
+      }
+      
+      return response.json();
+    },
+    onSuccess: () => {
+      // Invalidate and refetch device queries
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
     },
   });
 };

@@ -21,7 +21,7 @@ class VnstatService {
 
   async updateData() {
     try {
-      console.log('Starting vnstat data update');
+      //console.log('Starting vnstat data update');
       const rawData = await this.fetchVnstatData();
       if (!rawData) return;
 
@@ -61,14 +61,22 @@ class VnstatService {
   }
 
   startHourlyUpdates() {
-    console.log('Starting vnstat hourly updates service');
+    //console.log('Starting vnstat hourly updates service');
     // Initial update
     this.updateData();
     
     // Schedule hourly updates
-    setInterval(() => {
+    this.interval = setInterval(() => {
       this.updateData();
     }, 60 * 60 * 1000); // Run every hour
+  }
+
+  stop() {
+    if (this.interval) {
+      clearInterval(this.interval);
+      this.interval = null;
+      console.log('Vnstat service stopped');
+    }
   }
 }
 

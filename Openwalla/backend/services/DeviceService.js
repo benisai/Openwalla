@@ -50,7 +50,7 @@ class DeviceService {
 
   async updateDevices() {
     try {
-      console.log('Fetching device data from:', this.routerUrl);
+      //console.log('Fetching device data from:', this.routerUrl);
       const [clientData, nlbwData] = await Promise.all([
         this.fetchClientList(),
         this.fetchNlbwData()
@@ -59,7 +59,7 @@ class DeviceService {
       const devices = this.mergeDeviceData(clientData, nlbwData);
       await DeviceDataManager.saveDevices(devices);
       
-      console.log(`Updated ${devices.length} devices`);
+      //console.log(`Updated ${devices.length} devices`);
     } catch (error) {
       console.error('Error updating devices:', error);
     }

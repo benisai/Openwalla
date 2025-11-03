@@ -1,5 +1,6 @@
 
 import { Flow } from "@/misc/types/flow";
+import { formatBytes } from "@/misc/utils/networkFormatting";
 
 export async function getLast24HoursFlowCount(): Promise<number> {
   try {
@@ -128,5 +129,82 @@ export async function getTopApplications(mac: string): Promise<TopFlowItem[]> {
   } catch (error) {
     console.error('Error fetching top applications:', error);
     return [];
+  }
+}
+
+export interface FlowUsageData {
+  localBytes: number;
+  otherBytes: number;
+  totalBytes: number;
+  formattedLocalBytes: string;
+  formattedOtherBytes: string;
+  formattedTotalBytes: string;
+}
+
+export async function getFlowUsageByDigest(digest: string): Promise<FlowUsageData | null> {
+  try {
+    if (!digest) {
+      console.error('No digest provided for flow usage lookup');
+      return null;
+    }
+    
+    console.log('Fetching flow usage for digest:', digest);
+    
+    // Use relative URL
+    const response = await fetch(`/api/flows/usage/${digest}`);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Error fetching flow usage (${response.status}):`, errorText);
+      return null;
+    }
+    
+    const data = await response.json();
+    console.log('Flow usage data received:', data);
+    
+    // Check if we have any data and create the formatted response
+    if (!data || (typeof data.localBytes === 'undefined' && typeof data.otherBytes === 'undefined' && typeof data.totalBytes === 'undefined')) {
+      console.log('No flow usage data found for digest:', digest);
+      return null;
+    }
+    
+    // Ensure we have numbers for all properties (default to 0 if undefined)
+    const localBytes = typeof data.localBytes === 'number' ? data.localBytes : 0;
+    const otherBytes = typeof data.otherBytes === 'number' ? data.otherBytes : 0;
+    const totalBytes = typeof data.totalBytes === 'number' ? data.totalBytes : 0;
+    
+    return {
+      localBytes,
+      otherBytes,
+      totalBytes,
+      formattedLocalBytes: formatBytes(localBytes),
+      formattedOtherBytes: formatBytes(otherBytes),
+      formattedTotalBytes: formatBytes(totalBytes)
+    };
+  } catch (error) {
+    console.error('Error fetching flow usage by digest:', error);
+    return null;
+  }
+}
+
+// Add function to get device application usage
+export async function getDeviceApplicationUsage(mac: string): Promise<any> {
+  try {
+    console.log('Fetching application usage for device:', mac);
+    const response = await fetch(`/api/application-usage/device/${mac}?unique_digest=true`);
+    
+    if (!response.ok) {
+      console.log('Primary API failed, falling back to database endpoint');
+      const fallbackResponse = await fetch(`/api/flows/application-usage/${mac}?unique_digest=true`);
+      if (!fallbackResponse.ok) {
+        throw new Error('Both primary and fallback API calls failed');
+      }
+      return fallbackResponse.json();
+    }
+    
+    return response.json();
+  } catch (error) {
+    console.error('Error fetching device application usage:', error);
+    throw new Error('Failed to fetch application usage');
   }
 }

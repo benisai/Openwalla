@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getDeviceFlows } from "@/services/FlowService";
@@ -70,6 +71,8 @@ const DeviceFlows = () => {
   });
 
   const handleFlowClick = (flow: Flow) => {
+    console.log("Flow clicked with digest:", flow.digest);
+    
     const flowDetailsData: FlowDetailsData = {
       device: {
         name: flow.hostname || "Unknown",
@@ -92,7 +95,8 @@ const DeviceFlows = () => {
         flowCount: 1,
         duration: "N/A",
         downloaded: "N/A",
-        uploaded: "N/A"
+        uploaded: "N/A",
+        digest: flow.digest
       },
       categories: {
         application: flow.category_application,

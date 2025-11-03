@@ -1,3 +1,4 @@
+
 import {
   Dialog,
   DialogContent,
@@ -6,7 +7,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -16,10 +16,10 @@ interface OpenwallaDialogProps {
 }
 
 export function OpenwallaDialog({ open, onOpenChange }: OpenwallaDialogProps) {
-  const [netdataUrl, setNetdataUrl] = useState('');
-  const [netifyIp, setNetifyIp] = useState('');
-  const [netifyPort, setNetifyPort] = useState('7150');
   const [pingAddress, setPingAddress] = useState('1.1.1.1');
+  const [latencyThreshold, setLatencyThreshold] = useState('100');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const { toast } = useToast();
 
   useEffect(() => {
@@ -32,10 +32,10 @@ export function OpenwallaDialog({ open, onOpenChange }: OpenwallaDialogProps) {
         const config = await response.json();
         console.log('Loaded server config:', config);
         
-        setNetdataUrl(config.netdata_url || '');
-        setNetifyIp(config.netify_ip || '');
-        setNetifyPort(config.netify_port || '7150');
         setPingAddress(config.ping_address || '1.1.1.1');
+        setLatencyThreshold((config.latency_threshold || 100).toString());
+        setUsername(config.auth_username || '');
+        setPassword('');
       } catch (error) {
         console.error('Error loading config:', error);
         toast({
@@ -53,12 +53,27 @@ export function OpenwallaDialog({ open, onOpenChange }: OpenwallaDialogProps) {
 
   const handleSave = async () => {
     try {
-      const config = {
-        netdata_url: netdataUrl,
-        netify_ip: netifyIp,
-        netify_port: netifyPort,
-        ping_address: pingAddress
+      const latencyValue = parseInt(latencyThreshold);
+      if (isNaN(latencyValue) || latencyValue <= 0) {
+        toast({
+          variant: "destructive",
+          title: "Invalid input",
+          description: "Please enter a valid positive number for latency threshold.",
+        });
+        return;
+      }
+
+      const config: any = {
+        ping_address: pingAddress,
+        latency_threshold: latencyValue
       };
+
+      if (username.trim()) {
+        config.auth_username = username.trim();
+      }
+      if (password.trim()) {
+        config.auth_password = password;
+      }
       
       const response = await fetch('/api/config', {
         method: 'POST',
@@ -73,10 +88,7 @@ export function OpenwallaDialog({ open, onOpenChange }: OpenwallaDialogProps) {
       }
 
       // Restart services after config update
-      await Promise.all([
-        fetch('/api/ping/restart', { method: 'POST' }),
-        fetch('/api/netify/restart', { method: 'POST' })
-      ]);
+      await fetch('/api/ping/restart', { method: 'POST' });
 
       const savedConfig = await response.json();
       console.log('Config saved successfully:', savedConfig);
@@ -99,7 +111,7 @@ export function OpenwallaDialog({ open, onOpenChange }: OpenwallaDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-dashboard-card border-none max-w-md max-h-[80vh]">
+      <DialogContent className="bg-dashboard-card border-none max-w-md">
         <DialogHeader className="space-y-4">
           <div className="flex justify-between items-center">
             <Button 
@@ -120,67 +132,68 @@ export function OpenwallaDialog({ open, onOpenChange }: OpenwallaDialogProps) {
           </div>
         </DialogHeader>
 
-        <ScrollArea className="h-[calc(80vh-100px)] pr-4">
-          <div className="space-y-8">
-            <div>
-              <h3 className="text-lg font-medium mb-2">Netdata Url</h3>
-              <Input
-                value={netdataUrl}
-                onChange={(e) => setNetdataUrl(e.target.value)}
-                className="bg-[#222632] border border-gray-700 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                placeholder="http://localhost:19999"
-              />
-            </div>
 
-            <div className="pt-4 border-t border-gray-800">
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium">Netify Settings</h3>
-
-                <div>
-                  <label className="text-gray-400 text-sm block mb-2">
-                    NETIFY IP
-                  </label>
-                  <Input
-                    value={netifyIp}
-                    onChange={(e) => setNetifyIp(e.target.value)}
-                    className="bg-[#222632] border border-gray-700 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    placeholder="192.168.1.1"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-gray-400 text-sm block mb-2">
-                    NETIFY PORT
-                  </label>
-                  <Input
-                    value={netifyPort}
-                    onChange={(e) => setNetifyPort(e.target.value)}
-                    className="bg-[#222632] border border-gray-700 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    placeholder="7150"
-                  />
-                </div>
+          <div className="mt-8 space-y-4">
+            <h3 className="text-white text-sm font-medium mb-4">Authentication</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="text-gray-400 text-sm block mb-2">
+                  USERNAME
+                </label>
+                <Input
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="bg-[#222632] border border-gray-700 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  placeholder="Enter username"
+                />
               </div>
-            </div>
 
-            <div className="pt-4 border-t border-gray-800">
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium">Internet Quality Test Settings</h3>
-                
-                <div>
-                  <label className="text-gray-400 text-sm block mb-2">
-                    PING ADDRESS
-                  </label>
-                  <Input
-                    value={pingAddress}
-                    onChange={(e) => setPingAddress(e.target.value)}
-                    className="bg-[#222632] border border-gray-700 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    placeholder="1.1.1.1"
-                  />
-                </div>
+              <div>
+                <label className="text-gray-400 text-sm block mb-2">
+                  PASSWORD
+                </label>
+                <Input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="bg-[#222632] border border-gray-700 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  placeholder="Enter new password (leave blank to keep current)"
+                />
               </div>
             </div>
           </div>
-        </ScrollArea>
+        
+        <div className="pt-4 border-t border-gray-700">
+          <div>
+            <label className="text-gray-400 text-sm block mb-2">
+              PING ADDRESS
+            </label>
+            <Input
+              value={pingAddress}
+              onChange={(e) => setPingAddress(e.target.value)}
+              className="bg-[#222632] border border-gray-700 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              placeholder="1.1.1.1"
+            />
+          </div>
+          
+          <div>
+            <label className="text-gray-400 text-sm block mb-2">
+              LATENCY THRESHOLD (MS)
+            </label>
+            <Input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={latencyThreshold}
+              onChange={(e) => setLatencyThreshold(e.target.value)}
+              className="bg-[#222632] border border-gray-700 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              placeholder="100"
+            />
+          </div>
+
+
+        </div>
       </DialogContent>
     </Dialog>
   );

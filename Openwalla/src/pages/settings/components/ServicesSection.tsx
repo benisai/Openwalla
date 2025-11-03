@@ -18,14 +18,18 @@ interface ServiceStatus {
 
 export function ServicesSection() {
   const [services, setServices] = useState<ServiceStatus[]>([
+    { name: 'Internet Monitor', status: 'stopped' },
     { name: 'Netify', status: 'stopped' },
-    { name: 'Internet Monitor', status: 'stopped' }
+    { name: 'Vnstat', status: 'stopped' },
+    { name: 'Netdata', status: 'stopped' }
   ]);
   const { toast } = useToast();
 
   const handleRestartService = async (serviceName: string) => {
     try {
-      const endpoint = serviceName === 'Netify' ? '/api/netify/restart' : '/api/ping/restart';
+      // Convert service name to API format
+      const apiName = serviceName.toLowerCase().replace(' ', '-');
+      const endpoint = `/api/service/restart/${apiName}`;
       const response = await fetch(endpoint, { method: 'POST' });
       
       if (!response.ok) {
@@ -52,6 +56,30 @@ export function ServicesSection() {
     }
   };
 
+  const handleRestartAll = async () => {
+    toast({
+      title: "Restarting Services",
+      description: "Restarting all services...",
+    });
+
+    for (const service of services) {
+      try {
+        const apiName = service.name.toLowerCase().replace(' ', '-');
+        const endpoint = `/api/service/restart/${apiName}`;
+        await fetch(endpoint, { method: 'POST' });
+      } catch (error) {
+        console.error(`Error restarting ${service.name}:`, error);
+      }
+    }
+
+    toast({
+      title: "Services Restarted",
+      description: "All services have been restarted successfully.",
+    });
+
+    setServices(prev => prev.map(service => ({ ...service, status: 'running' })));
+  };
+
   return (
     <div 
       className="flex items-center justify-between p-4 cursor-pointer hover:bg-[#2A303C] transition-colors"
@@ -63,7 +91,18 @@ export function ServicesSection() {
         </DialogTrigger>
         <DialogContent className="sm:max-w-[425px] bg-dashboard-card border-none">
           <DialogHeader>
-            <DialogTitle className="text-white">Services</DialogTitle>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="text-white">Services</DialogTitle>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleRestartAll}
+                className="text-dashboard-accent hover:text-dashboard-accent/80"
+                title="Restart All Services"
+              >
+                <Recycle className="w-5 h-5" />
+              </Button>
+            </div>
           </DialogHeader>
           <div className="space-y-2">
             {services.map((service) => (

@@ -1,0 +1,363 @@
+#!/usr/bin/lua
+-- chmod +x /www/cgi-bin/openwalla.api
+-- /www/cgi-bin/openwalla.api
+-- Unified OpenWrt API script using a 'command' parameter.
+
+-- --- SHARED CONFIG & SETUP ---
+local config = require("api_config")
+local uci = require("uci")
+local uci_cursor = uci.cursor()
+
+local KEY_PARAM_NAME = "key"
+local LEASES_FILE = "/tmp/dhcp.leases"
+local CONNTRAK_CMD = "conntrack -L -o extended"
+
+-- --- HELPER FUNCTIONS ---
+
+-- Function to read a URL query parameter
+local function get_param(name)
+    local query = os.getenv("QUERY_STRING")
+    if not query then return nil end
+
+    for param in query:gmatch("([^&]+)") do
+        local k, v = param:match("([^=]+)=(.*)")
+        if k == name then
+            -- Simple URL decode
+            return v:gsub("%%(%x%x)", function(h)
+                return string.char(tonumber(h, 16))
+            end)
+        end
+    end
+    return nil
+end
+
+-- Function to read file contents
+local function read_file(path)
+    local f = io.open(path, "r")
+    if f then
+        local content = f:read("*a")
+        f:close()
+        return content
+    end
+    return ""
+end
+
+-- Function to JSON encode a simple Lua table (for read-only responses)
+local function json_encode_table(tbl)
+    local parts = {}
+    local is_array = true
+    -- Check if it's an array
+    for k, v in pairs(tbl) do
+        if type(k) ~= "number" then is_array = false end
+    end
+
+    if is_array then
+        for i, v in ipairs(tbl) do
+            local value
+            if type(v) == "string" then value = string.format('"%s"', v:gsub('"', '\\"'))
+            elseif type(v) == "number" then value = tostring(v)
+            elseif type(v) == "table" then value = json_encode_table(v)
+            else value = "null" end
+            table.insert(parts, value)
+        end
+        return "[" .. table.concat(parts, ",\n  ") .. "]"
+    else
+        for k, v in pairs(tbl) do
+            local key = string.format('"%s"', k)
+            local value
+            if type(v) == "string" then value = string.format('"%s"', v:gsub('"', '\\"'))
+            elseif type(v) == "number" then value = tostring(v)
+            elseif type(v) == "table" then value = json_encode_table(v)
+            else value = "null" end
+            table.insert(parts, string.format("%s: %s", key, value))
+        end
+        return "{\n  " .. table.concat(parts, ",\n  ") .. "\n}"
+    end
+end
+
+
+-- --- API ACTIONS ---
+
+local actions = {}
+
+-- CMD: add_dns (Add local DNS host entry)
+actions.add_dns = function()
+    local hostname = get_param("hostname")
+    local ip = get_param("ip")
+
+    if not hostname or not ip then
+        return {status = "error", message = "Missing hostname or ip parameter."}
+    end
+
+    local section_name = "local_" .. hostname:gsub("[^a-zA-Z0-9_]", "_") 
+    local existing = uci_cursor:get("dhcp", section_name)
+    if not existing then
+        uci_cursor:add("dhcp", "host", section_name)
+    end
+    
+    uci_cursor:set("dhcp", section_name, "name", hostname)
+    uci_cursor:set("dhcp", section_name, "ip", ip)
+
+    if uci_cursor:commit("dhcp") then
+        os.execute("/etc/init.d/dnsmasq restart > /dev/null 2>&1")
+        return {status = "ok", message = string.format("DNS record %s -> %s added and dnsmasq restarted.", hostname, ip)}
+    else
+        return {status = "error", message = "Failed to commit UCI changes."}
+    end
+end
+
+-- CMD: delete_dns (Delete local DNS host entry)
+actions.delete_dns = function()
+    local hostname = get_param("hostname")
+
+    if not hostname then
+        return {status = "error", message = "Missing hostname parameter."}
+    end
+
+    local section_name = "local_" .. hostname:gsub("[^a-zA-Z0-9_]", "_")
+    local success = uci_cursor:delete("dhcp", section_name)
+
+    if success then
+        if uci_cursor:commit("dhcp") then
+            os.execute("/etc/init.d/dnsmasq restart > /dev/null 2>&1")
+            return {status = "ok", message = string.format("DNS record for %s deleted and dnsmasq restarted.", hostname)}
+        else
+            return {status = "error", message = "Successfully deleted section, but failed to commit UCI changes."}
+        end
+    else
+        return {status = "warning", message = string.format("DNS record for %s not found in config.", hostname)}
+    end
+end
+
+-- CMD: set_static_ip (Create static DHCP lease)
+actions.set_static_ip = function()
+    local mac = get_param("mac")
+    local ip = get_param("ip")
+    local hostname = get_param("hostname")
+
+    if not mac or not ip then
+        return {status = "error", message = "Missing mac or ip parameter."}
+    end
+
+    local section_name = "lease_" .. mac:gsub("[^a-zA-Z0-9_]", "_") 
+    local existing = uci_cursor:get("dhcp", section_name)
+    if not existing then
+        uci_cursor:add("dhcp", "host", section_name)
+    end
+
+    uci_cursor:set("dhcp", section_name, "mac", mac:upper())
+    uci_cursor:set("dhcp", section_name, "ip", ip)
+
+    if hostname and #hostname > 0 then
+        uci_cursor:set("dhcp", section_name, "name", hostname)
+    else
+        uci_cursor:delete("dhcp", section_name, "name")
+    end
+
+    if uci_cursor:commit("dhcp") then
+        os.execute("/etc/init.d/dnsmasq restart > /dev/null 2>&1")
+        local msg = string.format("Static lease %s -> %s set and dnsmasq restarted.", mac, ip)
+        return {status = "ok", message = msg}
+    else
+        return {status = "error", message = "Failed to commit UCI changes."}
+    end
+end
+
+-- CMD: unset_static_ip (Remove static DHCP lease)
+actions.unset_static_ip = function()
+    local mac = get_param("mac")
+
+    if not mac then
+        return {status = "error", message = "Missing mac parameter."}
+    end
+
+    local section_name = "lease_" .. mac:gsub("[^a-zA-Z0-9_]", "_")
+    local success = uci_cursor:delete("dhcp", section_name)
+
+    if success then
+        if uci_cursor:commit("dhcp") then
+            os.execute("/etc/init.d/dnsmasq restart > /dev/null 2>&1")
+            return {status = "ok", message = string.format("Static lease for MAC %s deleted and dnsmasq restarted.", mac)}
+        else
+            return {status = "error", message = "Successfully deleted section, but failed to commit UCI changes."}
+        end
+    else
+        return {status = "warning", message = string.format("Static lease for MAC %s not found in config.", mac)}
+    end
+end
+
+-- CMD: set_router_dns (Set upstream DNS servers on WAN)
+actions.set_router_dns = function()
+    local dns_servers_raw = get_param("dns_servers")
+
+    if not dns_servers_raw or #dns_servers_raw == 0 then
+        return {status = "error", message = "Missing dns_servers parameter (e.g., dns_servers=8.8.8.8,1.1.1.1)."}
+    end
+
+    local ifname = "wan"
+    local section_name = uci_cursor:get_first("network", "interface", {name = ifname})
+    if not section_name then
+        return {status = "error", message = "Interface " .. ifname .. " not found."}
+    end
+    
+    uci_cursor:set("network", section_name, "peerdns", "0")
+    uci_cursor:delete("network", section_name, "dns") 
+
+    for server in dns_servers_raw:gmatch("([^,]+)") do
+        local trimmed_server = server:match("^%s*(.-)%s*$")
+        if #trimmed_server > 0 then
+            uci_cursor:add_list("network", section_name, "dns", trimmed_server)
+        end
+    end
+
+    if uci_cursor:commit("network") then
+        os.execute("/etc/init.d/network restart > /dev/null 2>&1")
+        return {status = "ok", message = string.format("Router WAN DNS set to %s and network restarted.", dns_servers_raw)}
+    else
+        return {status = "error", message = "Failed to commit UCI changes."}
+    end
+end
+
+-- CMD: set_router_timezone (Set system timezone)
+actions.set_router_timezone = function()
+    local new_timezone = get_param("timezone")
+
+    if not new_timezone or #new_timezone == 0 then
+        return {status = "error", message = "Missing timezone parameter."}
+    end
+
+    local system_section_name = uci_cursor:get_first("system", "system")
+    if not system_section_name then
+        return {status = "error", message = "Could not find the main 'system' section."}
+    end
+
+    uci_cursor:set("system", system_section_name, "timezone", new_timezone)
+    uci_cursor:set("system", system_section_name, "zonename", new_timezone)
+
+    if uci_cursor:commit("system") then
+        os.execute("uci commit system && /etc/init.d/sysntpd restart > /dev/null 2>&1")
+        os.execute("luci-reload > /dev/null 2>&1")
+        return {status = "ok", message = string.format("Router timezone set to %s.", new_timezone)}
+    else
+        return {status = "error", message = "Failed to commit UCI changes."}
+    end
+end
+
+-- CMD: reboot (Reboot the router)
+actions.reboot = function()
+    -- Note: Connection will drop immediately
+    os.execute("/sbin/reboot &")
+    return {status = "triggering_reboot", message = "Router is shutting down now. Connection will be lost."}
+end
+
+-- CMD: get_clients (Get active DHCP leases)
+actions.get_clients = function()
+    local clients = {}
+    local pipe = io.open(LEASES_FILE, "r")
+    if pipe then
+        local count = 0
+        for line in pipe:lines() do
+            local lease_time, mac, ip, hostname, client_id = line:match("^(%S+)%s+(%S+)%s+(%S+)%s+(%S+)%s+(%S+)$")
+            if lease_time and mac and ip then
+                if hostname == "*" then hostname = "" end
+                count = count + 1
+                clients[count] = {mac = mac:upper(), ip = ip, hostname = hostname, lease_end_time_unix = tonumber(lease_time)}
+            end
+        end
+        pipe:close()
+        return clients
+    else
+        return {status = "error", message = "Failed to open DHCP leases file: " .. LEASES_FILE}
+    end
+end
+
+-- CMD: get_status (Get uptime, load, memory)
+actions.get_status = function()
+    local status_data = {}
+    
+    local uptime_content = read_file("/proc/uptime")
+    local uptime_seconds = tonumber(uptime_content:match("(%S+)"))
+    status_data.uptime_seconds = uptime_seconds and math.floor(uptime_seconds)
+
+    local load_content = read_file("/proc/loadavg")
+    local load1, load5, load15 = load_content:match("(%S+)%s+(%S+)%s+(%S+)")
+    if load1 then
+        status_data.load_avg_1min = tonumber(load1)
+        status_data.load_avg_5min = tonumber(load5)
+        status_data.load_avg_15min = tonumber(load15)
+    end
+
+    local mem_content = read_file("/proc/meminfo")
+    local mem_total = mem_content:match("MemTotal:%s*(%d+)")
+    local mem_free = mem_content:match("MemFree:%s*(%d+)")
+    local mem_cached = mem_content:match("Cached:%s*(%d+)")
+    local mem_buffers = mem_content:match("Buffers:%s*(%d+)")
+
+    if mem_total and mem_free then
+        local total = tonumber(mem_total)
+        local free = tonumber(mem_free)
+        local cached = tonumber(mem_cached) or 0
+        local buffers = tonumber(mem_buffers) or 0
+        local used_actual = total - (free + cached + buffers)
+        
+        status_data.memory = {
+            total_kb = total, free_kb = free, cached_kb = cached, buffers_kb = buffers,
+            used_actual_kb = used_actual,
+            used_percent = total > 0 and math.floor((used_actual / total) * 1000) / 10 or 0
+        }
+    end
+    status_data.cpu_note = "CPU usage is based on load averages for a quick status call."
+
+    return status_data
+end
+
+-- CMD: get_conntrack (Get active firewall connections)
+actions.get_conntrack = function()
+    local connections = {}
+    local pipe = io.popen(CONNTRAK_CMD, "r")
+
+    if pipe then
+        local count = 0
+        for line in pipe:lines() do
+            local proto, timeout, src_ip, dst_ip, src_port, dst_port = line:match(" %S+ (%w+) (%d+) .* src=(%S+) dst=(%S+) sport=(%d+) dport=(%d+)")
+
+            if proto and timeout then
+                count = count + 1
+                connections[count] = {
+                    protocol = proto, timeout_seconds = tonumber(timeout),
+                    source = string.format("%s:%s", src_ip or "N/A", src_port or "N/A"),
+                    destination = string.format("%s:%s", dst_ip or "N/A", dst_port or "N/A"),
+                    raw_line = line:match("^%s*(.*)%s*$")
+                }
+            end
+        end
+        pipe:close()
+        return connections
+    else
+        return {status = "error", message = "Failed to execute 'conntrack -L'. Check if the 'conntrack' package is installed."}
+    end
+end
+
+
+-- --- DISPATCHER (MAIN EXECUTION BLOCK) ---
+
+local command = get_param("command")
+local passed_key = get_param(KEY_PARAM_NAME)
+local result = {}
+
+io.write("Content-type: application/json\r\n\r\n")
+
+-- 1. AUTHENTICATION CHECK
+if passed_key ~= config.API_KEY then
+    result = {status = "error", message = "Authentication failed. Invalid or missing API key."}
+elseif not command then
+    result = {status = "error", message = "Missing 'command' parameter. Available commands: add_dns, delete_dns, set_static_ip, unset_static_ip, set_router_dns, set_router_timezone, reboot, get_clients, get_status, get_conntrack."}
+elseif not actions[command] then
+    result = {status = "error", message = string.format("Unknown command: %s. Available commands: add_dns, delete_dns, set_static_ip, unset_static_ip, set_router_dns, set_router_timezone, reboot, get_clients, get_status, get_conntrack.", command)}
+else
+    -- 2. EXECUTE COMMAND
+    result = actions[command]()
+end
+
+-- 3. OUTPUT RESULT
+io.write(json_encode_table(result))

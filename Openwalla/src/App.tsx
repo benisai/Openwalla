@@ -1,8 +1,11 @@
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import Login from "@/pages/auth/Login";
 import Index from "./pages/dashboard/Index";
 import NetworkPerformance from "./pages/network_performance/Network_Performance";
 import Flows from "./pages/flows/Flows";
@@ -16,6 +19,7 @@ import NotificationsPage from "./pages/notifications/NotificationsPage";
 import DeviceFlows from "./pages/devices/DeviceFlows";
 import Rules from "./pages/rules/Rules";
 import RecentEvents from "./pages/network_performance/RecentEvents";
+import ApplicationUsage from "./pages/application-usage/ApplicationUsage";
 
 const queryClient = new QueryClient();
 
@@ -26,19 +30,21 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/network-performance" element={<NetworkPerformance />} />
-          <Route path="/flows" element={<Flows />} />
-          <Route path="/blocked-flows" element={<BlockedFlows />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/monthly-usage" element={<MonthlyUsage />} />
-          <Route path="/devices" element={<Devices />} />
-          <Route path="/devices/:id" element={<DeviceDetails />} />
-          <Route path="/device-live-throughput" element={<DeviceLiveThroughput />} />
-          <Route path="/notifications" element={<NotificationsPage />} />
-          <Route path="/device-flows/:mac" element={<DeviceFlows />} />
-          <Route path="/rules" element={<Rules />} />
-          <Route path="/recent-events" element={<RecentEvents />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+          <Route path="/network-performance" element={<ProtectedRoute><NetworkPerformance /></ProtectedRoute>} />
+          <Route path="/flows" element={<ProtectedRoute><Flows /></ProtectedRoute>} />
+          <Route path="/blocked-flows" element={<ProtectedRoute><BlockedFlows /></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+          <Route path="/monthly-usage" element={<ProtectedRoute><MonthlyUsage /></ProtectedRoute>} />
+          <Route path="/devices" element={<ProtectedRoute><Devices /></ProtectedRoute>} />
+          <Route path="/devices/:id" element={<ProtectedRoute><DeviceDetails /></ProtectedRoute>} />
+          <Route path="/device-live-throughput" element={<ProtectedRoute><DeviceLiveThroughput /></ProtectedRoute>} />
+          <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
+          <Route path="/device-flows/:mac" element={<ProtectedRoute><DeviceFlows /></ProtectedRoute>} />
+          <Route path="/rules" element={<ProtectedRoute><Rules /></ProtectedRoute>} />
+          <Route path="/recent-events" element={<ProtectedRoute><RecentEvents /></ProtectedRoute>} />
+          <Route path="/application-usage" element={<ProtectedRoute><ApplicationUsage /></ProtectedRoute>} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>

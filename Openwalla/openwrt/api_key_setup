@@ -1,0 +1,6 @@
+# 1. Install packages if you haven't
+opkg update
+opkg install luci-sgi-cgi uci-lua conntrack
+
+# 2. Create the shared key module (REPLACE THE KEY!)
+echo 'local M = {} M.API_KEY = "G4f8QzP9xY2vLhJ7kM3wT5nR1sA0bC6eD" return M' > /usr/lib/lua/api_config.lua

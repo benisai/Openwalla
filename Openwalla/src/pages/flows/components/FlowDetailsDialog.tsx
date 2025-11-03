@@ -1,3 +1,5 @@
+
+import React, { useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -7,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { FlowDetailsData } from "@/misc/types/flow";
 import { useQuery } from "@tanstack/react-query";
+import { getFlowUsageByDigest } from "@/services/FlowService";
 
 interface FlowDetailsProps {
   open: boolean;
@@ -47,6 +50,22 @@ export function FlowDetailsDialog({ open, onOpenChange, flowData }: FlowDetailsP
     queryKey: ['device-vendor', flowData.device?.macAddress],
     queryFn: () => fetchVendor(flowData.device?.macAddress),
     enabled: !!flowData.device?.macAddress,
+  });
+  
+  const digestValue = flowData.details?.digest || '';
+  
+  useEffect(() => {
+    if (open && digestValue) {
+      console.log('Flow digest value in dialog component:', digestValue);
+    }
+  }, [digestValue, open]);
+
+  const { data: flowUsage, isLoading: isLoadingUsage, isError: isErrorUsage } = useQuery({
+    queryKey: ['flow-usage', digestValue],
+    queryFn: () => getFlowUsageByDigest(digestValue),
+    enabled: digestValue.length > 0,
+    retry: 2, // Retry up to 2 times in case of network issues
+    staleTime: 60000, // Cache for 1 minute
   });
 
   return (
@@ -182,6 +201,50 @@ export function FlowDetailsDialog({ open, onOpenChange, flowData }: FlowDetailsP
                   <span>Flow Count</span>
                   <span>{flowData.details?.flowCount}</span>
                 </div>
+                
+                {isLoadingUsage && (
+                  <div className="flex justify-center py-2">
+                    <span className="text-gray-400">Loading usage data...</span>
+                  </div>
+                )}
+                
+                {isErrorUsage && (
+                  <div className="flex justify-center py-2">
+                    <span className="text-red-400">Error loading usage data</span>
+                  </div>
+                )}
+                
+                {!isLoadingUsage && !isErrorUsage && (
+                  <>
+                    {flowUsage ? (
+                      <>
+                        <div className="flex justify-between">
+                          <span>Local Bytes</span>
+                          <span>{flowUsage.formattedLocalBytes}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Other Bytes</span>
+                          <span>{flowUsage.formattedOtherBytes}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Total Bytes</span>
+                          <span>{flowUsage.formattedTotalBytes}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex justify-center py-2">
+                        <span className="text-gray-400">No usage data available</span>
+                      </div>
+                    )}
+                  </>
+                )}
+                
+                {digestValue && (
+                  <div className="flex justify-between">
+                    <span>Digest</span>
+                    <span className="text-xs text-gray-400 break-all">{digestValue}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>

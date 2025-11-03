@@ -1,18 +1,22 @@
+
 module.exports = async function (db, envConfig) {
-    const defaultConfig = {
-      router_ip: envConfig.router_ip,
-      netdata_url: `http://${envConfig.router_ip}:19999`,
-      netify_ip: envConfig.router_ip,
-      netify_port: envConfig.netify_port,
-      netify_enabled: envConfig.netify_enabled,
-      data_plan_limit: envConfig.data_plan_limit,
-      hostname: envConfig.hostname,
-      openwrt_user: envConfig.openwrt_user,
-      openwrt_pass: envConfig.openwrt_pass,
-      ping_address: envConfig.ping_address,
-      ping_interval: envConfig.ping_interval,
-      vnstat_url: `http://${envConfig.router_ip}/vnstat.txt`,
-    };
+  const defaultConfig = {
+    router_ip: envConfig.router_ip,
+    netify_port: envConfig.netify_port,
+    netify_enabled: envConfig.netify_enabled,
+    data_plan_limit: envConfig.data_plan_limit,
+    hostname: envConfig.hostname,
+    openwrt_user: envConfig.openwrt_user,
+    openwrt_pass: envConfig.openwrt_pass,
+    openwrt_token: '',
+    openwrt_token_timestamp: '0',
+    luci_port: '',
+    ping_address: envConfig.ping_address,
+    ping_interval: envConfig.ping_interval,
+    retention_days: envConfig.retention_days,
+    auth_username: envConfig.auth_username,
+    auth_password: envConfig.auth_password,
+  };
   
     return new Promise((resolve, reject) => {
       db.run(`
@@ -41,4 +45,3 @@ module.exports = async function (db, envConfig) {
       });
     });
   };
-  

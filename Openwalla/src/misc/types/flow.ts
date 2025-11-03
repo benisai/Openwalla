@@ -1,4 +1,3 @@
-
 export interface Flow {
   timeinsert: string;
   hostname: string;
@@ -24,6 +23,7 @@ export interface Flow {
   detection_guessed: number;
   dns_host_name: string;
   host_server_name: string;
+  digest?: string;
 }
 
 export interface FlowDetailsData {
@@ -47,8 +47,9 @@ export interface FlowDetailsData {
     outboundInterface: string;
     flowCount: number;
     duration: string;
-    downloaded: string;
     uploaded: string;
+    downloaded: string;
+    digest?: string;
   };
   categories?: {
     application: number;

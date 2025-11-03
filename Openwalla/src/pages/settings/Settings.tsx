@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { HostnameDialog } from "@/pages/settings/components/HostnameDialog";
 import { OpenwallaDialog } from "@/pages/settings/components/OpenwallaDialog";
 import { OpenWRTDialog } from "@/pages/settings/components/OpenWRTDialog";
+import { RetentionDialog } from "@/pages/settings/components/RetentionDialog";
 import { ServicesSection } from "@/pages/settings/components/ServicesSection";
 import { getConfig, updateConfig } from "@/services/ConfigService";
 import { fetchExternalIP } from "@/misc/utils/fetch_wan_ip";
@@ -15,6 +16,7 @@ const Settings = () => {
   const [isHostnameDialogOpen, setIsHostnameDialogOpen] = useState(false);
   const [isOpenwallaDialogOpen, setIsOpenwallaDialogOpen] = useState(false);
   const [isOpenWRTDialogOpen, setIsOpenWRTDialogOpen] = useState(false);
+  const [isRetentionDialogOpen, setIsRetentionDialogOpen] = useState(false);
   const [externalIP, setExternalIP] = useState<string>('Loading...');
   const { toast } = useToast();
 
@@ -100,6 +102,17 @@ const Settings = () => {
               <ChevronRight className="w-5 h-5 text-gray-400" />
             </div>
 
+            <div 
+              className="flex items-center justify-between p-4 border-b border-gray-800 cursor-pointer"
+              onClick={() => setIsRetentionDialogOpen(true)}
+            >
+              <span className="text-lg">Data Retention</span>
+              <div className="flex items-center text-gray-400">
+                <span className="mr-2">{config?.retention_days || '7'} days</span>
+                <ChevronRight className="w-5 h-5" />
+              </div>
+            </div>
+
             <div className="p-4 border-b border-gray-800">
               <ServicesSection />
             </div>
@@ -127,6 +140,11 @@ const Settings = () => {
       <OpenWRTDialog
         open={isOpenWRTDialogOpen}
         onOpenChange={setIsOpenWRTDialogOpen}
+      />
+
+      <RetentionDialog
+        open={isRetentionDialogOpen}
+        onOpenChange={setIsRetentionDialogOpen}
       />
     </div>
   );

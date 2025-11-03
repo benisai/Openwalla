@@ -1,4 +1,5 @@
-import { ChevronRight, Monitor, Smartphone, Computer, Laptop, Printer, Router, Tablet, Tv, Usb } from "lucide-react";
+
+import { ChevronRight, Monitor, Smartphone, Computer, Laptop, Printer, Router, Tablet, Tv, Usb, Server, Network, Gamepad, HardDrive, Cctv, EthernetPort, Wifi } from "lucide-react";
 import { Device } from "@/misc/types/device";
 import { useDeviceActivity } from "@/services/DeviceService";
 import { DeviceTypeDialog } from "./DeviceTypeDialog";
@@ -29,6 +30,14 @@ const deviceIcons: Record<string, any> = {
   tv: Tv,
   printer: Printer,
   usb: Usb,
+  server: Server,
+  switch: Network,
+  gaming: Gamepad,
+  nas: HardDrive,
+  cctv: Cctv,
+  ethernet: EthernetPort,
+  wifi: Wifi,
+  'access-point': Wifi
 };
 
 const InfoItem = ({ label, value, icon, hasChevron, onClick }: InfoItemProps) => (

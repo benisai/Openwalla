@@ -1,10 +1,11 @@
+
 import { useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Trash2 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { DeviceNameDialog } from "@/pages/devices/components/DeviceNameDialog";
 import { IpAllocationDialog } from "@/pages/devices/components/IpAllocationDialog";
-import { useDevice } from "@/services/DeviceService";
+import { useDevice, useDeleteDevice } from "@/services/DeviceService";
 import { useToast } from "@/components/ui/use-toast";
 import { DeviceThroughputGraph } from "@/pages/devices/components/DeviceThroughputGraph";
 import { useQuery } from "@tanstack/react-query";
@@ -13,6 +14,17 @@ import { useUpdateDeviceHostname } from "@/services/DeviceService";
 import { DeviceInfoCard } from "@/pages/devices/components/DeviceInfoCard";
 import { DeviceUsageStats } from "@/pages/devices/components/DeviceUsageStats";
 import { DeviceTopTables } from "@/pages/devices/components/DeviceTopTables";
+import { DeviceApplicationUsage } from "@/pages/devices/components/DeviceApplicationUsage";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const DeviceDetails = () => {
   const navigate = useNavigate();
@@ -20,9 +32,11 @@ const DeviceDetails = () => {
   const { data: device, isLoading, error } = useDevice(id ?? '');
   const { toast } = useToast();
   const updateHostname = useUpdateDeviceHostname();
+  const deleteDevice = useDeleteDevice();
   
   const [nameDialogOpen, setNameDialogOpen] = useState(false);
   const [ipDialogOpen, setIpDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const { data: flowCount = 0 } = useQuery({
     queryKey: ['deviceFlowCount', id],
@@ -48,6 +62,27 @@ const DeviceDetails = () => {
         variant: "destructive",
         title: "Error",
         description: "Failed to update device name",
+      });
+    }
+  };
+
+  const handleDeleteDevice = async () => {
+    if (!device) return;
+    
+    try {
+      await deleteDevice.mutateAsync(device.mac);
+      
+      toast({
+        title: "Device Deleted",
+        description: "Device will reappear on next network scan",
+      });
+      
+      navigate('/devices');
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to delete device",
       });
     }
   };
@@ -101,8 +136,20 @@ const DeviceDetails = () => {
             onNameClick={() => setNameDialogOpen(true)}
             onIpClick={() => setIpDialogOpen(true)}
           />
+          
+          {/* Add the Application Usage Section */}
+          <DeviceApplicationUsage deviceMac={device.mac} />
 
           <DeviceTopTables deviceMac={device.mac} />
+
+          <Button
+            variant="destructive"
+            className="w-full mt-6"
+            onClick={() => setDeleteDialogOpen(true)}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete This Device
+          </Button>
         </div>
       </div>
 
@@ -120,6 +167,23 @@ const DeviceDetails = () => {
         currentAllocation="dynamic"
         onSave={(allocation, newIp) => console.log('Save IP:', allocation, newIp)}
       />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete This Device</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the device from the database. Note: The device will reappear on the next network scan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteDevice}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

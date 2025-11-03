@@ -1,3 +1,4 @@
+
 import { Menu } from "lucide-react";
 import { NetworkPerformanceCard } from "@/pages/dashboard/components/NetworkPerformanceCard";
 import { FlowStatistics } from "@/pages/dashboard/components/FlowStatistics";
@@ -14,8 +15,17 @@ import { getConfig } from "@/services/ConfigService";
 import { useQuery } from "@tanstack/react-query";
 import { fetchSystemMetrics } from "@/services/NetdataService";
 import { useToast } from "@/hooks/use-toast";
+import AuthService from "@/services/AuthService";
+import { useNavigate } from "react-router-dom";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const Index = () => {
+  const navigate = useNavigate();
   const { data: config } = useQuery({
     queryKey: ['config'],
     queryFn: getConfig,
@@ -49,12 +59,35 @@ const Index = () => {
     }
   });
 
+  const handleLogout = () => {
+    AuthService.logout();
+    navigate("/login");
+    toast({
+      title: "Logged out",
+      description: "You have been successfully logged out.",
+    });
+  };
+
   return (
     <div className="min-h-screen bg-dashboard-background text-white p-4 md:px-0">
       <div className="md:max-w-4xl mx-auto pb-20">
         {/* Header */}
         <header className="flex justify-between items-center mb-6">
-          <Menu className="w-6 h-6 text-dashboard-accent" />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="text-dashboard-accent hover:opacity-80">
+                <Menu className="w-6 h-6" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="bg-dashboard-card border-gray-800">
+              <DropdownMenuItem 
+                onClick={handleLogout}
+                className="text-white hover:bg-gray-700 cursor-pointer"
+              >
+                Logout
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <div className="flex items-center gap-2">
             <span className="text-xl font-bold">{hostname}</span>
           </div>

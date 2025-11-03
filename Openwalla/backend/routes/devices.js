@@ -1,6 +1,8 @@
+
 const express = require('express');
 const router = express.Router();
 const { databases } = require('../database/database');
+const RxTxService = require('../services/RxTxService');
 
 // Get all devices with their network stats
 router.get('/', (req, res) => {
@@ -31,8 +33,38 @@ router.get('/', (req, res) => {
   });
 });
 
-
-const RxTxService = require('../services/RxTxService');
+// Get device by MAC address
+router.get('/:mac', (req, res) => {
+  const sql = `
+    SELECT 
+      c.mac,
+      c.hostname,
+      c.ip,
+      c.timeinserted,
+      c.source,
+      c.new,
+      n.dl_speed,
+      n.ul_speed,
+      n.total_download,
+      n.total_upload
+    FROM clients c
+    LEFT JOIN nlbw n ON c.mac = n.mac
+    WHERE c.mac = ?
+  `;
+  
+  databases.devices.get(sql, [req.params.mac.toLowerCase()], (err, row) => {
+    if (err) {
+      console.error('Error getting device:', err);
+      res.status(500).json({ error: 'Failed to get device', details: err.message });
+      return;
+    }
+    if (!row) {
+      res.status(404).json({ error: 'Device not found' });
+      return;
+    }
+    res.json(row);
+  });
+});
 
 // Get the latest RX/TX data for a device by MAC address
 router.get('/:mac/rx_tx', async (req, res) => {
@@ -68,36 +100,58 @@ router.get('/active/:mac', (req, res) => {
   });
 });
 
-// Get device by MAC address
-router.get('/:mac', (req, res) => {
-  const sql = `
-    SELECT 
-      c.mac,
-      c.hostname,
-      c.ip,
-      c.timeinserted,
-      c.source,
-      c.new,
-      n.dl_speed,
-      n.ul_speed,
-      n.total_download,
-      n.total_upload
-    FROM clients c
-    LEFT JOIN nlbw n ON c.mac = n.mac
-    WHERE c.mac = ?
-  `;
+
+
+
+
+
+// Get RX/TX data with timeframe support
+router.get('/rx-tx/data', (req, res) => {
+  const timeframe = req.query.timeframe || 'real-time';
   
-  databases.devices.get(sql, [req.params.mac.toLowerCase()], (err, row) => {
+  let timeCondition;
+  const now = Math.floor(Date.now() / 1000);
+  
+  switch (timeframe) {
+    case 'real-time':
+      timeCondition = now - 60; // Last minute
+      break;
+    case '5-min':
+      timeCondition = now - 300; // Last 5 minutes
+      break;
+    case '15-min':
+      timeCondition = now - 900; // Last 15 minutes
+      break;
+    case '60-min':
+      timeCondition = now - 3600; // Last hour
+      break;
+    default:
+      timeCondition = now - 60;
+  }
+
+  const sql = `
+    WITH latest_rx_tx AS (
+      SELECT 
+        mac,
+        rx_diff,
+        tx_diff,
+        timestamp,
+        ROW_NUMBER() OVER (PARTITION BY mac ORDER BY timestamp DESC) as rn
+      FROM rx_tx
+      WHERE timestamp >= ?
+    )
+    SELECT mac, rx_diff, tx_diff, timestamp
+    FROM latest_rx_tx
+    WHERE rn = 1
+  `;
+
+  databases.devices.all(sql, [timeCondition * 1000], (err, rows) => {
     if (err) {
-      console.error('Error getting device:', err);
-      res.status(500).json({ error: 'Failed to get device', details: err.message });
+      console.error('Error fetching RX/TX data:', err);
+      res.status(500).json({ error: 'Failed to fetch RX/TX data', details: err.message });
       return;
     }
-    if (!row) {
-      res.status(404).json({ error: 'Device not found' });
-      return;
-    }
-    res.json(row);
+    res.json(rows || []);
   });
 });
 
@@ -169,6 +223,27 @@ router.put('/:mac/type', (req, res) => {
       return;
     }
     res.json({ message: 'Device type updated successfully' });
+  });
+});
+
+// Delete device
+router.delete('/:mac', (req, res) => {
+  const mac = req.params.mac.toLowerCase();
+  
+  // Delete from clients table (cascade will handle device_types and nlbw)
+  const sql = `DELETE FROM clients WHERE mac = ?`;
+  
+  databases.devices.run(sql, [mac], function(err) {
+    if (err) {
+      console.error('Error deleting device:', err);
+      res.status(500).json({ error: 'Failed to delete device', details: err.message });
+      return;
+    }
+    if (this.changes === 0) {
+      res.status(404).json({ error: 'Device not found' });
+      return;
+    }
+    res.json({ message: 'Device deleted successfully' });
   });
 });
 

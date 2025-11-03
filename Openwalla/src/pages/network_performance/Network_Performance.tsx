@@ -1,3 +1,4 @@
+
 import { useNavigate } from "react-router-dom";
 import { SummaryCard } from "@/pages/network_performance/components/SummaryCard";
 import { RecentEventsCard } from "@/pages/network_performance/components/RecentEventsCard";
@@ -30,7 +31,8 @@ export default function NetworkPerformance() {
         <div className="space-y-4">
           <SummaryCard />
           <RecentEventsCard />
-          <InternetQualityCard />
+          <InternetQualityCard /> 
+          <InternetSpeedCard />
         </div>
       </div>
     </div>

@@ -1,3 +1,4 @@
+
 /**
  * Database Configuration and Initialization
  * 
@@ -17,18 +18,19 @@
  * - devices: Connected device information
  * - vnstat: Network statistics
  * - ouiVendor: Device manufacturer data
+ * - speedtest: Store data from speedtest
  */
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
-const { getEnvConfig } = require('../configs/config');
+const { getEnvConfig } = require('../../openwalla/configs.cjs');
 // Get the environment configuration
 const envConfig = getEnvConfig();
 // Database paths
 const DB_PATH = path.join(__dirname, '../../databases');
 
 // Import schema initialization functions
-const initializeConfigs = require('./config');
+const initializeConfigs = require('./schemas/config');
 const initializeNotifications = require('./schemas/notificationSchema');
 const initializeDevices = require('./schemas/deviceSchema');
 const initializeFlows = require('./schemas/flowSchema');
@@ -36,8 +38,7 @@ const initializeVnstat = require('./schemas/vnstatSchema');
 const initializeOuiVendor = require('./schemas/ouiVendorSchema');
 const initializePingStats = require('./schemas/pingStatsSchema');
 const initializeRxTx = require('./schemas/rxTxSchema');
-
-
+const initializeSpeedTest = require('./schemas/speedtest');
 
 // Ensure database directory exists
 if (!fs.existsSync(DB_PATH)) {
@@ -58,6 +59,7 @@ const databases = {
   devices: new sqlite3.Database(path.join(DB_PATH, 'devices.sqlite')),
   vnstat: new sqlite3.Database(path.join(DB_PATH, 'vnstat.sqlite')),
   ouiVendor: new sqlite3.Database(path.join(DB_PATH, 'oui-vendor.sqlite')),
+  speedtest: new sqlite3.Database(path.join(DB_PATH, 'speedtest.sqlite')),  
 };
 
 async function initializeDatabases() {
@@ -71,7 +73,8 @@ async function initializeDatabases() {
     await initializeOuiVendor(databases.ouiVendor, envConfig);
     await initializePingStats(databases.pingStats);
     await initializeRxTx(databases.devices);
-
+    await initializeSpeedTest(databases.speedtest);
+    
     console.log('All database tables initialized successfully');
   } catch (error) {
     console.error('Error initializing database tables:', error);
@@ -83,4 +86,3 @@ module.exports = {
   databases,
   initializeDatabases,
 };
-

@@ -1,3 +1,5 @@
+
+
 import axios from 'axios';
 
 export interface SystemMetrics {
@@ -19,7 +21,7 @@ async function getServerConfig() {
 
 export const fetchSystemMetrics = async (): Promise<SystemMetrics> => {
   const config = await getServerConfig();
-  const netdataUrl = config.netdata_url || 'http://192.168.1.1:19999';
+  const netdataUrl = `http://${config.router_ip || '192.168.1.1'}:19999`;
   
   const response = await fetch(`${netdataUrl}/api/v1/allmetrics`);
     
@@ -47,11 +49,11 @@ export const fetchSystemMetrics = async (): Promise<SystemMetrics> => {
   const loadMatch = text.match(/NETDATA_SYSTEM_LOAD_LOAD15="(\d+(\.\d+)?)"/) || ['0', '0'];
   const load = parseFloat(loadMatch[1]) * 100; // Convert to percentage (0-100 range)
 
-  // Parse Network throughput
-  const receivedMatch = text.match(/NETDATA_SYSTEM_IP_RECEIVED="(\d+(\.\d+)?)"/) || ['0', '0'];
-  const sentMatch = text.match(/NETDATA_SYSTEM_IP_SENT="(\d+(\.\d+)?)"/) || ['0', '0'];
-  const received = parseFloat(receivedMatch[1]);
-  const sent = parseFloat(sentMatch[1]);
+  // Parse Network throughput from br-lan interface (LAN bridge)
+  const receivedMatch = text.match(/NETDATA_NET_BR_LAN_RECEIVED="(\d+(\.\d+)?)"/) || ['0', '0'];
+  const sentMatch = text.match(/NETDATA_NET_BR_LAN_SENT="(\d+(\.\d+)?)"/) || ['0', '0'];
+  const received = parseFloat(receivedMatch[1]); // Keep as kilobits per second
+  const sent = parseFloat(sentMatch[1]); // Keep as kilobits per second
 
   // Parse Conntrack connections
   const connectionsMatch = text.match(/NETDATA_NETFILTER_CONNTRACK_SOCKETS_CONNECTIONS="(\d+(\.\d+)?)"/) || ['0', '0'];
@@ -66,3 +68,4 @@ export const fetchSystemMetrics = async (): Promise<SystemMetrics> => {
     connections
   };
 };
+

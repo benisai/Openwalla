@@ -1,9 +1,25 @@
-import { Network, Bluetooth, BluetoothConnected, Wifi, WifiHigh, WifiLow, EthernetPort, Monitor } from "lucide-react";
+import { 
+  Network, 
+  Bluetooth, 
+  BluetoothConnected, 
+  Wifi, 
+  WifiHigh, 
+  WifiLow, 
+  EthernetPort, 
+  Monitor, 
+  Smartphone, 
+  Laptop, 
+  Router,
+  Server,
+  Gamepad,
+  HardDrive,
+  Cctv,
+  Tv
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
-import { Device, useDeviceActivity } from "@/services/DeviceService";
+import { Device, useDeviceActivity, useDeviceType } from "@/services/DeviceService";
 import { formatBytes } from "@/misc/utils/networkFormatting";
-import { useQuery } from "@tanstack/react-query";
 
 interface DevicesListProps {
   devices: Device[];
@@ -11,6 +27,20 @@ interface DevicesListProps {
 
 const getDeviceIcon = (type: string) => {
   switch (type?.toLowerCase()) {
+    case 'laptop':
+      return <Laptop className="w-6 h-6 text-blue-500" />;
+    case 'smartphone':
+      return <Smartphone className="w-6 h-6 text-blue-500" />;
+    case 'router':
+      return <Router className="w-6 h-6 text-blue-500" />;
+    case 'switch':
+      return <Network className="w-6 h-6 text-blue-500" />;
+    case 'server':
+      return <Server className="w-6 h-6 text-blue-500" />;
+    case 'nas':
+      return <HardDrive className="w-6 h-6 text-blue-500" />;
+    case 'gaming':
+      return <Gamepad className="w-6 h-6 text-blue-500" />;
     case 'network':
       return <Network className="w-6 h-6 text-blue-500" />;
     case 'bluetooth':
@@ -19,12 +49,18 @@ const getDeviceIcon = (type: string) => {
       return <BluetoothConnected className="w-6 h-6 text-blue-500" />;
     case 'wifi':
       return <Wifi className="w-6 h-6 text-blue-500" />;
+    case 'access-point':
+      return <Wifi className="w-6 h-6 text-blue-500" />;
     case 'wifi_high':
       return <WifiHigh className="w-6 h-6 text-blue-500" />;
     case 'wifi_low':
       return <WifiLow className="w-6 h-6 text-blue-500" />;
     case 'ethernet':
       return <EthernetPort className="w-6 h-6 text-blue-500" />;
+    case 'cctv':
+      return <Cctv className="w-6 h-6 text-blue-500" />;
+    case 'tv':
+      return <Tv className="w-6 h-6 text-blue-500" />;
     default:
       return <Monitor className="w-6 h-6 text-blue-500" />;
   }
@@ -33,17 +69,8 @@ const getDeviceIcon = (type: string) => {
 const DeviceItem = ({ device }: { device: Device }) => {
   const navigate = useNavigate();
   const { data: isActive, isLoading } = useDeviceActivity(device.mac);
+  const { data: deviceType } = useDeviceType(device.mac);
   
-  const { data: deviceType } = useQuery({
-    queryKey: ['deviceType', device.mac],
-    queryFn: async () => {
-      const response = await fetch(`/api/devices/${device.mac}/type`);
-      if (!response.ok) throw new Error('Failed to fetch device type');
-      const data = await response.json();
-      return data.type;
-    }
-  });
-
   return (
     <div
       key={device.mac}
@@ -54,7 +81,9 @@ const DeviceItem = ({ device }: { device: Device }) => {
         {getDeviceIcon(deviceType)}
         <div>
           <h3 className="font-medium">{device.hostname}</h3>
-          <p className="text-sm text-gray-400">{device.ip}</p>
+          <p className="text-sm text-gray-400">
+            {device.ip} | {device.mac}
+          </p>
           <p className="text-sm text-gray-400">
             ↓ {formatBytes(device.total_download)} ↑ {formatBytes(device.total_upload)}
           </p>

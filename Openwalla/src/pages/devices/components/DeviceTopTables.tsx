@@ -27,6 +27,12 @@ const truncateDomain = (domain: string, maxLength: number = 30) => {
   return '...' + domain.slice(-(maxLength - 3));
 };
 
+// Helper function to clean app names by removing "netify." prefix
+const cleanAppName = (name: string): string => {
+  if (!name) return 'Unknown';
+  return name.replace(/^netify\./, '');
+};
+
 export function DeviceTopTables({ deviceMac }: DeviceTopTablesProps) {
   const { data: topFQDNs = [], isLoading: isLoadingFQDNs } = useQuery({
     queryKey: ['topFQDNs', deviceMac],
@@ -103,7 +109,7 @@ export function DeviceTopTables({ deviceMac }: DeviceTopTablesProps) {
             ) : (
               topApplications.map((item, index) => (
                 <TableRow key={index}>
-                  <TableCell className="font-mono">{item.detected_app_name}</TableCell>
+                  <TableCell className="font-mono">{cleanAppName(item.detected_app_name)}</TableCell>
                   <TableCell className="text-right">{item.count}</TableCell>
                 </TableRow>
               ))

@@ -10,6 +10,7 @@ import { FlowsTimeSelector } from "@/pages/flows/components/FlowsTimeSelector";
 import { FlowsSearch } from "@/pages/flows/components/FlowsSearch";
 import { FlowsProtocolFilter } from "@/pages/flows/components/FlowsProtocolFilter";
 import { FlowsList } from "@/pages/flows/components/FlowsList";
+import { Button } from "@/components/ui/button";
 
 const Flows = () => {
   const [selectedTime, setSelectedTime] = useState("1 Hour");
@@ -17,6 +18,7 @@ const Flows = () => {
   const [selectedProtocol, setSelectedProtocol] = useState<string | null>(null);
   const [selectedFlowDetails, setSelectedFlowDetails] = useState<FlowDetailsData>({});
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [showOutbound, setShowOutbound] = useState(false);
   
   const timeOptions = [
     "1 Hour",
@@ -56,6 +58,9 @@ const Flows = () => {
 
   const filteredFlows = useMemo(() => {
     return flows.filter(flow => {
+      // First filter by internal/outbound
+      const matchesDirection = showOutbound ? true : flow.internal;
+
       const matchesSearch = searchQuery.toLowerCase() === '' || 
         Object.values(flow).some(value => 
           String(value).toLowerCase().includes(searchQuery.toLowerCase())
@@ -64,11 +69,13 @@ const Flows = () => {
       const matchesProtocol = !selectedProtocol || 
         flow.detected_protocol_name === selectedProtocol;
 
-      return matchesSearch && matchesProtocol;
+      return matchesDirection && matchesSearch && matchesProtocol;
     });
-  }, [flows, searchQuery, selectedProtocol]);
+  }, [flows, searchQuery, selectedProtocol, showOutbound]);
 
   const handleFlowClick = (flow: Flow) => {
+    console.log("Flow clicked with digest:", flow.digest);
+    
     const flowDetailsData: FlowDetailsData = {
       device: {
         name: flow.hostname || "Unknown",
@@ -91,7 +98,8 @@ const Flows = () => {
         flowCount: 1,
         duration: "N/A",
         downloaded: "N/A",
-        uploaded: "N/A"
+        uploaded: "N/A",
+        digest: flow.digest
       },
       categories: {
         application: flow.category_application,
@@ -129,9 +137,18 @@ const Flows = () => {
           timeOptions={timeOptions}
         />
 
-        <div>
-          <h2 className="text-gray-400 mb-2">All Flows</h2>
-          <div className="text-base md:text-4xl font-bold mb-8">{filteredFlows.length}</div>
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h2 className="text-gray-400 mb-2">All Flows</h2>
+            <div className="text-base md:text-4xl font-bold">{filteredFlows.length}</div>
+          </div>
+          <Button
+            variant="link"
+            className="text-blue-500 hover:text-gray-400"
+            onClick={() => setShowOutbound(prev => !prev)}
+          >
+            {showOutbound ? 'Hide Outbound' : 'Show Outbound'}
+          </Button>
         </div>
 
         <div className="space-y-6">
