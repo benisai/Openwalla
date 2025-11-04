@@ -9,7 +9,7 @@ NC='\033[0m' # No Color
 
 # Helper functions for box drawing and messages
 draw_box_line() {
-    echo -e "${CYAN}+----------------------------------------------------${NC}+"
+    echo -e "${CYAN}+----------------------------------------------------+${NC}"
 }
 draw_box_title() {
     local title="$1"
@@ -18,12 +18,17 @@ draw_box_title() {
     local right_pad=$((padding - left_pad))
     printf "${CYAN}|${NC} ${YELLOW}%*s%s%*s${NC} ${CYAN}|${NC}\n" $left_pad "" "$title" $right_pad ""
 }
+
+# UPDATED: Success message uses green 'Complete:'
 success_msg() {
-    echo -e "${GREEN}\u2713${NC} $1" # \u2713 is a checkmark
+    echo -e "${GREEN}Complete:${NC} $1"
 }
+
+# UPDATED: Failure message uses red 'Failed:'
 error_msg() {
-    echo -e "${RED}\u2717${NC} $1" # \u2717 is a ballot x (use \u2716 or \u2717 or \u2718)
+    echo -e "${RED}Failed:${NC} $1"
 }
+
 info_msg() {
     echo -e "${CYAN}i${NC} $1"
 }
@@ -67,9 +72,11 @@ software="nano vnstat2 vnstati2 luci-app-vnstat2 netifyd netdata nlbwmon luci-ap
 
 for s in $software
 do
+  # Check if the software is installed
   printf "   - Checking %-25s..." "$s"
   opkg list-installed | grep -q "^$s -"
   if [ $? -ne 0 ]; then
+    # If not installed, install it
     printf "\r   - Installing ${YELLOW}%-25s${NC}..." "$s"
     opkg install $s > /dev/null 2>&1
     if [ $? -eq 0 ]; then
@@ -78,6 +85,7 @@ do
       error_msg "$s installation failed."
     fi
   else
+    # If installed, print a message
     success_msg "$s is already installed."
   fi
 done
@@ -138,7 +146,7 @@ draw_box_line
 draw_box_title "7. Downloading and Installing Router Scripts"
 draw_box_line
 info_msg "Removing old script files..."
-# Check if file exists and remove it (one line each)
+# Check if file exists and remove it
 [ -f /usr/bin/1-minute-script.sh ] && rm -f /usr/bin/1-minute-script.sh && success_msg "Removed /usr/bin/1-minute-script.sh"
 [ -f /usr/bin/5-minute-script.sh ] && rm -f /usr/bin/5-minute-script.sh && success_msg "Removed /usr/bin/5-minute-script.sh"
 [ -f /usr/bin/1-hour-script.sh ] && rm -f /usr/bin/1-hour-script.sh && success_msg "Removed /usr/bin/1-hour-script.sh"
@@ -147,7 +155,6 @@ info_msg "Removing old script files..."
 [ -f /usr/bin/nlbw-compare-rate.sh ] && rm -f /usr/bin/nlbw-compare-rate.sh && success_msg "Removed /usr/bin/nlbw-compare-rate.sh"
 
 echo -e "${YELLOW}i${NC} Downloading new scripts and setting permissions..."
-# Use a simple function to handle download and chmod
 download_script() {
     local url="$1"
     local dest="$2"
@@ -175,7 +182,12 @@ draw_box_line
 C=$(crontab -l 2>/dev/null | grep "ready")
 if [[ -z "$C" ]]; then
     info_msg "Adding scheduled scripts to crontab..."
-    (crontab -l 2>/dev/null; echo "59 * * 12 * /ready"; echo "1 0 * * * /usr/bin/12am-script.sh"; echo "0 * * * * /usr/bin/1-hour-script.sh"; echo "*/1 * * * * /usr/bin/1-minute-script.sh") | crontab -
+    (crontab -l 2>/dev/null; \
+     echo "59 * * 12 * /ready"; \
+     echo "1 0 * * * /usr/bin/12am-script.sh"; \
+     echo "0 * * * * /usr/bin/1-hour-script.sh"; \
+     echo "*/1 * * * * /usr/bin/1-minute-script.sh" \
+    ) | crontab -
     success_msg "New scheduled tasks added to crontab."
 elif [[ -n "$C" ]]; then
     info_msg "Keyword (ready) was found in crontab. No changes made."
@@ -185,26 +197,31 @@ fi
 draw_box_line
 draw_box_title "9. Enabling and Restarting Services"
 draw_box_line
-SERVICES=(
-    "/etc/init.d/nlbw-compare-rate-service.sh"
-    "/etc/init.d/cron"
-    "/etc/init.d/vnstat"
-)
 
-for svc in "${SERVICES[@]}"; do
-    printf "   - Enabling and Restarting ${CYAN}%-30s${NC}..." "$(basename "$svc")"
+# Using a standard SH string instead of a Bash array
+SERVICES="/etc/init.d/nlbw-compare-rate-service.sh /etc/init.d/cron /etc/init.d/vnstat"
+
+for svc in $SERVICES; do
+    # Extract the base name for clean output
+    SVC_NAME=$(basename "$svc")
+    
+    printf "   - Enabling and Restarting ${CYAN}%-30s${NC}..." "$SVC_NAME"
+    
+    # Enable and restart (suppress output for cleaner look)
     "$svc" enable > /dev/null 2>&1
     "$svc" restart > /dev/null 2>&1
+    
     if [ $? -eq 0 ]; then
-        success_msg "Service $(basename "$svc") processed."
+        success_msg "Service $SVC_NAME processed."
     else
-        error_msg "Service $(basename "$svc") failed to start/restart."
+        error_msg "Service $SVC_NAME failed to start/restart."
     fi
 done
 
 info_msg "Restarting netifyd separately..."
 service netifyd restart > /dev/null 2>&1
 success_msg "netifyd service restarted."
+
 
 # --- Section 10: Create Symlinks ---
 draw_box_line
