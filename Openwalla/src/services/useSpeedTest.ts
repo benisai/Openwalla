@@ -1,4 +1,6 @@
 // src/services/useSpeedTest.ts
+// do not modify
+
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import SpeedTest from '@cloudflare/speedtest';

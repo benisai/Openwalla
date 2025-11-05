@@ -2,6 +2,7 @@
 module.exports = async function (db, envConfig) {
   const defaultConfig = {
     router_ip: envConfig.router_ip,
+    router_protocol: envConfig.router_protocol,
     netify_port: envConfig.netify_port,
     netify_enabled: envConfig.netify_enabled,
     data_plan_limit: envConfig.data_plan_limit,

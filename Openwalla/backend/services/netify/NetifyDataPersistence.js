@@ -1,6 +1,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 const { databases } = require('../../database/database');
+const TimeUtils = require('../../utils/timeUtils');
 
 class NetifyDataPersistence {
   async saveFlow(flowData, deviceInfo = {}) {
@@ -146,7 +147,7 @@ class NetifyDataPersistence {
       severity,
       type,
       message,
-      Date.now(),
+      TimeUtils.getUnixTimestampMs(),
       'none'
     ];
 

@@ -2,6 +2,7 @@
 const getEnvConfig = () => {
   return {
     router_ip: process.env.ROUTER_IP || '192.168.1.1',
+    router_protocol: process.env.ROUTER_PROTOCOL || 'HTTP',
     netify_port: process.env.NETIFY_PORT || '7150',
     netify_enabled: process.env.NETIFY_ENABLED !== 'false',
     data_plan_limit: process.env.DATA_PLAN_LIMIT || '500',

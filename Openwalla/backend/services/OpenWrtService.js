@@ -1,8 +1,6 @@
-
 /**
  * OpenWrtService.js
- * 
- * Service to interact with OpenWrt LuCI API
+ * * Service to interact with OpenWrt LuCI API
  * Based on HackApi approach: https://github.com/soif/HackApi
  */
 const axios = require('axios');
@@ -12,7 +10,7 @@ class OpenWrtService {
   constructor(config) {
     this.config = config;
     this.router_ip = config.router_ip;
-    this.luci_port = config.luci_port;
+    this.luci_port = config.luci_port; 
     this.baseUrl = this.buildBaseUrl();
     this.username = config.openwrt_user;
     this.password = config.openwrt_pass;
@@ -29,18 +27,26 @@ class OpenWrtService {
   }
 
   /**
-   * Build the base URL with optional port
+   * Build the base URL with optional port and dynamic protocol
    */
   buildBaseUrl() {
+    // Use the protocol from the config (e.g., HTTP or HTTPS)
+    const protocol = this.config.router_protocol; 
+    
+    // Start the URL with the dynamic protocol and IP
+    let url = `${protocol}://${this.router_ip}`;
+
+    // Append the port if it exists and is not empty
     if (this.luci_port && this.luci_port.trim() !== '') {
-      const url = `http://${this.router_ip}:${this.luci_port}`;
-      console.log('Built base URL with port:', url);
+      url = `${url}:${this.luci_port}`;
+      console.log('Built base URL with port and dynamic protocol:', url);
       return url;
     }
-    const url = `http://${this.router_ip}`;
-    console.log('Built base URL without port:', url);
+    
+    console.log('Built base URL without port, with dynamic protocol:', url);
     return url;
   }
+
 
   /**
    * Initialize axios instance with cookie jar for session management

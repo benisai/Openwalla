@@ -1,16 +1,8 @@
-
 // This file is called NetifyFlowProcessor.js. It contains the flow type processors
 
+const TimeUtils = require('../../utils/timeUtils');
+
 class NetifyFlowProcessor {
-  /**
-   * Returns the current time in ISO format with timezone offset.
-   * This provides a consistent timestamp format that can be properly queried.
-   */
-  getLocalISOTime() {
-    // Use a direct ISO string which includes the timezone information
-    // This ensures correct time representation in the database
-    return new Date().toISOString();
-  }
 
   /**
    * Extracts the "registered" portion of a client_sni string.
@@ -67,7 +59,7 @@ class NetifyFlowProcessor {
       type: 'purge',
       data: {
         // Use ISO time format for consistency
-        timeinsert: this.getLocalISOTime(),
+        timeinsert: TimeUtils.getLocalISOTime(),
         type: flowData.type,
         digest: flowData.flow.digest,
         detection_packets: flowData.flow.detection_packets,
@@ -113,7 +105,7 @@ class NetifyFlowProcessor {
       type: 'flow',
       data: {
         // Use ISO time format for consistency
-        timeinsert: this.getLocalISOTime(),
+        timeinsert: TimeUtils.getLocalISOTime(),
         local_ip: flowData.flow.local_ip,
         local_mac: flowData.flow.local_mac,
         fqdn: fqdn,

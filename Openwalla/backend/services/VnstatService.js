@@ -5,7 +5,7 @@ const { databases } = require('../database/database');
 
 class VnstatService {
   constructor(config) {
-    this.url = `http://${config.router_ip || '192.168.1.1'}/vnstat.txt`;
+    this.url = `${config.router_protocol}://${config.router_ip || '192.168.1.1'}/vnstat.txt`;
   }
 
   async fetchVnstatData() {

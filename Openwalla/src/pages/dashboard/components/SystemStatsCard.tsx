@@ -66,7 +66,7 @@ export function SystemStatsCard({ metrics }: SystemStatsCardProps) {
         throw new Error('Failed to fetch config');
       }
       const config = await response.json();
-      const netdataUrl = `http://${config.router_ip || '192.168.1.1'}:19999`;
+      const netdataUrl = `${config.router_protocol}://${config.router_ip || '192.168.1.1'}:19999`;
       
       const loadResponse = await fetch(`${netdataUrl}/api/v1/data?chart=system.load&after=-5&before=0&format=json`);
       if (!loadResponse.ok) {

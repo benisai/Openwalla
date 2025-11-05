@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const { databases } = require('../../database/database');
+const TimeUtils = require('../../utils/timeUtils');
 
 class NetworkNotificationManager {
   static saveNotification(message, severity) {
@@ -13,7 +14,7 @@ class NetworkNotificationManager {
       severity,
       'internet_monitor',
       message,
-      Date.now(),
+      TimeUtils.getUnixTimestampMs(),
       'none'
     ];
 

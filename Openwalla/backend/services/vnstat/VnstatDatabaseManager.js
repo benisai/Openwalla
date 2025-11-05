@@ -1,15 +1,16 @@
 const { databases } = require('../../database/database');
+const TimeUtils = require('../../utils/timeUtils');
 
 class VnstatDatabaseManager {
   static async saveHourlyData(hourData) {
     return new Promise((resolve, reject) => {
-      // Calculate timestamp from year, month, day, hour
-      const timestamp = new Date(
+      // Calculate timestamp from year, month, day, hour using Unix timestamp
+      const timestamp = Math.floor(new Date(
         hourData.year,
         hourData.month - 1, // JavaScript months are 0-based
         hourData.day,
         hourData.hour
-      ).getTime() / 1000; // Convert to Unix timestamp (seconds)
+      ).getTime() / 1000); // Convert to Unix timestamp (seconds)
 
       databases.vnstat.run(`
         INSERT OR REPLACE INTO hourly 

@@ -41,6 +41,7 @@ export function OpenWRTDialog({ open, onOpenChange }: OpenWRTDialogProps) {
   const [routerPassword, setRouterPassword] = useState(config?.openwrt_pass || '');
   const [luciPort, setLuciPort] = useState(config?.luci_port || '');
   const [showPortField, setShowPortField] = useState(Boolean(config?.luci_port));
+  const [useHttps, setUseHttps] = useState(config?.router_protocol === 'https');
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionResult, setConnectionResult] = useState<ConnectionTestResult | null>(null);
 
@@ -52,6 +53,7 @@ export function OpenWRTDialog({ open, onOpenChange }: OpenWRTDialogProps) {
       setRouterPassword(config.openwrt_pass);
       setLuciPort(config.luci_port);
       setShowPortField(Boolean(config.luci_port));
+      setUseHttps(config.router_protocol === 'https');
     }
   });
 
@@ -61,7 +63,8 @@ export function OpenWRTDialog({ open, onOpenChange }: OpenWRTDialogProps) {
         router_ip: routerIP,
         openwrt_user: routerUser,
         openwrt_pass: routerPassword,
-        luci_port: showPortField ? luciPort : ''
+        luci_port: showPortField ? luciPort : '',
+        router_protocol: useHttps ? 'https' : 'http'
       });
       
       // Restart services that depend on router_ip
@@ -92,7 +95,8 @@ export function OpenWRTDialog({ open, onOpenChange }: OpenWRTDialogProps) {
         router_ip: routerIP,
         openwrt_user: routerUser,
         openwrt_pass: routerPassword,
-        luci_port: showPortField ? luciPort : ''
+        luci_port: showPortField ? luciPort : '',
+        router_protocol: useHttps ? 'https' : 'http'
       });
       
       // Restart OpenWrt service to apply new settings
@@ -196,16 +200,29 @@ export function OpenWRTDialog({ open, onOpenChange }: OpenWRTDialogProps) {
               <label htmlFor="router-ip" className="text-gray-400 text-sm">
                 ROUTER IP
               </label>
-              <div className="flex items-center gap-1">
-                <Checkbox
-                  id="port-checkbox"
-                  checked={showPortField}
-                  onCheckedChange={handlePortCheckboxChange}
-                  className="h-3 w-3"
-                />
-                <label htmlFor="port-checkbox" className="text-gray-400 text-xs cursor-pointer">
-                  Luci Port
-                </label>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1">
+                  <Checkbox
+                    id="https-checkbox"
+                    checked={useHttps}
+                    onCheckedChange={(checked) => setUseHttps(checked === true)}
+                    className="h-3 w-3"
+                  />
+                  <label htmlFor="https-checkbox" className="text-gray-400 text-xs cursor-pointer">
+                    HTTPS
+                  </label>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Checkbox
+                    id="port-checkbox"
+                    checked={showPortField}
+                    onCheckedChange={handlePortCheckboxChange}
+                    className="h-3 w-3"
+                  />
+                  <label htmlFor="port-checkbox" className="text-gray-400 text-xs cursor-pointer">
+                    Luci Port
+                  </label>
+                </div>
               </div>
             </div>
             <Input

@@ -4,6 +4,7 @@ import axios from 'axios';
 export interface Config {
   hostname: string;
   router_ip: string;
+  router_protocol: string;
   openwrt_user: string;
   openwrt_pass: string;
   openwrt_token?: string;

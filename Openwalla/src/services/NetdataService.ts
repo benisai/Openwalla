@@ -21,7 +21,7 @@ async function getServerConfig() {
 
 export const fetchSystemMetrics = async (): Promise<SystemMetrics> => {
   const config = await getServerConfig();
-  const netdataUrl = `http://${config.router_ip || '192.168.1.1'}:19999`;
+  const netdataUrl = `${config.router_protocol}://${config.router_ip || '192.168.1.1'}:19999`;
   
   const response = await fetch(`${netdataUrl}/api/v1/allmetrics`);
     

@@ -9,7 +9,7 @@ class DeviceService {
     if (!config.router_ip) {
       console.error('Warning: router_ip not found in config, using default');
     }
-    this.routerUrl = `http://${config.router_ip}`;
+    this.routerUrl = `${config.router_protocol}://${config.router_ip}`;
     console.log('DeviceService initialized with router URL:', this.routerUrl);
     this.updateInterval = null;
   }

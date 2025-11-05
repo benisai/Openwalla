@@ -1,5 +1,6 @@
 const { databases } = require('../database/database');
 const { v4: uuidv4 } = require('uuid');
+const TimeUtils = require('../utils/timeUtils');
 
 class DeviceDataManager {
   static async saveDevices(devices) {
@@ -51,7 +52,7 @@ class DeviceDataManager {
               device.mac,
               device.hostname,
               device.ip,
-              Date.now(),
+              TimeUtils.getUnixTimestampMs(),
               device.source
             ], function(err) {
               if (err) {
@@ -65,7 +66,7 @@ class DeviceDataManager {
           });
 
           // Create notification for new device
-          const timestamp = Date.now();
+          const timestamp = TimeUtils.getUnixTimestampMs();
           const notificationMsg = `New device ${device.hostname} with IP ${device.ip} joined the network on ${new Date(timestamp).toLocaleString()}`;
           
           await new Promise((resolve, reject) => {
@@ -91,7 +92,7 @@ class DeviceDataManager {
           await new Promise((resolve, reject) => {
             databases.devices.run(updateClientSql, [
               device.ip,
-              Date.now(),
+              TimeUtils.getUnixTimestampMs(),
               device.source,
               device.mac
             ], function(err) {
