@@ -15,13 +15,14 @@ Openwalla was developed to store and analyze Netify data, allowing me to monitor
 - **OpenWRT System Resource Monitoring:** Displays system statistics using the Netdata API.
 - **Bandwidth Monitoring:** Hourly, daily, and monthly statistics collected via `vnstat2` and stored in SQLite.
 - **Device Usage Tracking:** Uses `nlbwmon` to collect device bandwidth data, storing results in SQLite.
+- **Speed Test** Uses `CloudFlare SpeedTest`. This is really a hit/miss, not sure why. 
 
 ---
 
 ## Router Setup
 
-### Automatic Installation
-Download and execute the setup script:
+### Script Installation
+Download and execute the setup script on your Openwrt Router:
 ```bash
 wget https://raw.githubusercontent.com/benisai/Openwalla/main/Router/router-setup.sh
 chmod +x router-setup.sh
@@ -41,7 +42,7 @@ If you prefer manual setup, follow these steps:
 
 ---
 
-## Deployment Options
+## Openwalla Deployment Options
 
 ### Docker Setup
 1. Clone the repository:
@@ -76,7 +77,7 @@ If you prefer manual setup, follow these steps:
    
 7. To Stop the project, run `./manage-server.sh force_kill_all`
 
-8. To Restart the project, run `./manage-server.sh restart`
+8. To Restart the project, run `./manage-server.sh force_kill_all` and run `./manage-server.sh start`
 ---
 
 ## Screenshots
