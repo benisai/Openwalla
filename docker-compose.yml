@@ -15,4 +15,4 @@ services:
       # - NETIFY_PORT=7150
       # - VNSTAT_URL=http://10.0.3.1/vnstat.txt
     volumes:
-      - ./database:/app/Openwalla/src/database
+      - ./database:/app/Openwalla/database
