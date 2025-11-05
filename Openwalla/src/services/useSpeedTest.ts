@@ -132,13 +132,13 @@ export const useSpeedTest = () => {
       }));
     };
 
-    test.onError = (error) => {
+    test.onError = (error: any) => {
         console.error("Speed test error:", error);
         setResults(prev => ({ 
           ...prev, 
           status: 'error', 
           // FIX 3: Safely extract error message for status display
-          progress: `Error: ${error?.message || error || 'Unknown error'}` 
+          progress: `Error: ${typeof error === 'object' && error?.message ? error.message : String(error || 'Unknown error')}` 
         }));
         
         cleanupTest();
