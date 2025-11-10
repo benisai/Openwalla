@@ -10,4 +10,4 @@ services:
       - ROUTER_IP=10.0.5.1
       - TZ=America/Los_Angeles
     volumes:
-      - ./database:/app/Openwalla/database
+      - ./database:/app/Openwalla/databases
