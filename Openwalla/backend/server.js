@@ -36,7 +36,8 @@ async function startServer() {
         const openwrtRoutes = require('./routes/openwrt');
         const pingRestartRoutes = require('./routes/pingRestart');
         const serviceRestartRoutes = require('./routes/serviceRestart');
-        const speedtestRoutes = require('./routes/speedtest'); 
+        const speedtestRoutes = require('./routes/speedtest');
+        const netdataRoutes = require('./routes/netdata');
 
         app.use('/api/auth', authRoutes);
         app.use('/api/devices', deviceRoutes);
@@ -50,7 +51,8 @@ async function startServer() {
         app.use('/api/openwrt', openwrtRoutes);
         app.use('/api/ping/restart', pingRestartRoutes);
         app.use('/api/service/restart', serviceRestartRoutes);
-        app.use('/api/speedtest', speedtestRoutes); 
+        app.use('/api/speedtest', speedtestRoutes);
+        app.use('/api/netdata', netdataRoutes);
 
         // Start Express server BEFORE initializing services
         const PORT = process.env.PORT || 3000;

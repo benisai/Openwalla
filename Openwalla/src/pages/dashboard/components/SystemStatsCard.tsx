@@ -1,7 +1,6 @@
 import { Card } from "@/components/ui/card";
 import type { SystemMetrics } from "@/services/NetdataService";
 import { useQuery } from "@tanstack/react-query";
-import { getConfig } from "@/services/ConfigService";
 
 interface CircularProgressProps {
   value: number;
@@ -53,30 +52,18 @@ interface SystemStatsCardProps {
 }
 
 export function SystemStatsCard({ metrics }: SystemStatsCardProps) {
-  const { data: config } = useQuery({
-    queryKey: ['config'],
-    queryFn: getConfig
-  });
-
   const { data: loadData } = useQuery({
     queryKey: ['system-load'],
     queryFn: async () => {
-      const response = await fetch('/api/config');
+      const response = await fetch('/api/netdata/load');
       if (!response.ok) {
-        throw new Error('Failed to fetch config');
-      }
-      const config = await response.json();
-      const netdataUrl = `${config.router_protocol}://${config.router_ip || '192.168.1.1'}:19999`;
-      
-      const loadResponse = await fetch(`${netdataUrl}/api/v1/data?chart=system.load&after=-5&before=0&format=json`);
-      if (!loadResponse.ok) {
         throw new Error('Failed to fetch system load');
       }
-      const data = await loadResponse.json();
-      const cpuCores = parseInt(config.cpu_cores) || 4;
-      // Convert load average to percentage based on number of cores
-      const loadPercentage = (data.data[0][1] / cpuCores) * 100;
-      return Math.min(loadPercentage, 100); // Cap at 100%
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch system load');
+      }
+      return result.data;
     },
     refetchInterval: 5000, // Refresh every 5 seconds
     initialData: 0,
