@@ -117,6 +117,11 @@ const Settings = () => {
               <ServicesSection />
             </div>
 
+            <Link to="/settings/logs" className="flex items-center justify-between p-4 border-b border-gray-800">
+              <span className="text-lg">System Logs</span>
+              <ChevronRight className="w-5 h-5 text-gray-400" />
+            </Link>
+
             <Link to="/settings/more-info" className="flex items-center justify-between p-4">
               <span className="text-lg">More Info</span>
               <ChevronRight className="w-5 h-5 text-gray-400" />

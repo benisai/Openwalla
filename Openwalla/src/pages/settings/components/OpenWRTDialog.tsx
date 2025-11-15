@@ -11,8 +11,9 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getConfig, updateConfig } from "@/services/ConfigService";
 import { toast } from "sonner";
-import { CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import { CheckCircle, AlertCircle, Loader2, Settings } from "lucide-react";
 import axios from "axios";
+import { useNavigate } from "react-router-dom";
 
 interface OpenWRTDialogProps {
   open: boolean;
@@ -30,6 +31,7 @@ interface ConnectionTestResult {
 }
 
 export function OpenWRTDialog({ open, onOpenChange }: OpenWRTDialogProps) {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: config } = useQuery({
     queryKey: ['config'],
@@ -70,7 +72,7 @@ export function OpenWRTDialog({ open, onOpenChange }: OpenWRTDialogProps) {
       // Restart services that depend on router_ip
       const servicesToRestart = ['devices', 'vnstat', 'netify', 'openwrt'];
       const restartPromises = servicesToRestart.map(service => 
-        axios.post(`/api/service-restart/${service}`).catch(err => 
+        axios.post(`/api/service/restart/${service}`).catch(err => 
           console.error(`Failed to restart ${service}:`, err)
         )
       );
@@ -100,7 +102,7 @@ export function OpenWRTDialog({ open, onOpenChange }: OpenWRTDialogProps) {
       });
       
       // Restart OpenWrt service to apply new settings
-      await axios.post('/api/service-restart/openwrt');
+      await axios.post('/api/service/restart/openwrt');
       
       // Test connection with new settings
       const response = await axios.get<ConnectionTestResult>('/api/openwrt/test-connection');
@@ -301,6 +303,18 @@ export function OpenWRTDialog({ open, onOpenChange }: OpenWRTDialogProps) {
             </div>
           )}
         </div>
+        
+        <Button
+          onClick={() => {
+            onOpenChange(false);
+            navigate('/settings/openwrt-functions');
+          }}
+          variant="outline"
+          className="w-full mt-4"
+        >
+          <Settings className="h-4 w-4 mr-2" />
+          OpenWRT Functions
+        </Button>
       </DialogContent>
     </Dialog>
   );

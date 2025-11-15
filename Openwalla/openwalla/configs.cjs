@@ -14,7 +14,8 @@ const getEnvConfig = () => {
     cpu_cores: process.env.CPU_CORES || '4',
     retention_days: process.env.RETENTION_DAYS || '7',
     auth_username: process.env.AUTH_USERNAME || 'openwalla',
-    auth_password: process.env.AUTH_PASSWORD || 'openwalla'
+    auth_password: process.env.AUTH_PASSWORD || 'openwalla',
+    ip_lookup_domain: process.env.IP_LOOKUP_DOMAIN || 'https://ip.benisai.com'
   };
 };
 

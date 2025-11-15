@@ -18,7 +18,7 @@ class RxTxService {
 
         // Only proceed if we have valid MAC and IP addresses
         if (!values.MAC || !values.IP) {
-          console.log('Skipping RX/TX entry - missing MAC or IP:', values);
+          //console.log('Skipping RX/TX entry - missing MAC or IP:', values);
           continue;
         }
 

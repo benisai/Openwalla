@@ -20,6 +20,8 @@ import DeviceFlows from "./pages/devices/DeviceFlows";
 import Rules from "./pages/rules/Rules";
 import RecentEvents from "./pages/network_performance/RecentEvents";
 import ApplicationUsage from "./pages/application-usage/ApplicationUsage";
+import Logs from "./pages/settings/Logs";
+import OpenWRTFunctions from "./pages/settings/OpenWRTFunctions";
 
 const queryClient = new QueryClient();
 
@@ -37,6 +39,8 @@ const App = () => (
           <Route path="/flows" element={<ProtectedRoute><Flows /></ProtectedRoute>} />
           <Route path="/blocked-flows" element={<ProtectedRoute><BlockedFlows /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+          <Route path="/settings/logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
+          <Route path="/settings/openwrt-functions" element={<ProtectedRoute><OpenWRTFunctions /></ProtectedRoute>} />
           <Route path="/monthly-usage" element={<ProtectedRoute><MonthlyUsage /></ProtectedRoute>} />
           <Route path="/devices" element={<ProtectedRoute><Devices /></ProtectedRoute>} />
           <Route path="/devices/:id" element={<ProtectedRoute><DeviceDetails /></ProtectedRoute>} />

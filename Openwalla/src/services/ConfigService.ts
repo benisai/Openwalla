@@ -18,6 +18,7 @@ export interface Config {
   retention_days: string;
   auth_username?: string;
   auth_password?: string;
+  ip_lookup_domain: string;
 }
 
 export const getConfig = async (): Promise<Config> => {

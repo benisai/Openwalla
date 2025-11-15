@@ -38,6 +38,7 @@ async function startServer() {
         const serviceRestartRoutes = require('./routes/serviceRestart');
         const speedtestRoutes = require('./routes/speedtest');
         const netdataRoutes = require('./routes/netdata');
+        const logsRoutes = require('./routes/logs');
 
         app.use('/api/auth', authRoutes);
         app.use('/api/devices', deviceRoutes);
@@ -53,6 +54,7 @@ async function startServer() {
         app.use('/api/service/restart', serviceRestartRoutes);
         app.use('/api/speedtest', speedtestRoutes);
         app.use('/api/netdata', netdataRoutes);
+        app.use('/api/logs', logsRoutes);
 
         // Start Express server BEFORE initializing services
         const PORT = process.env.PORT || 3000;

@@ -41,6 +41,13 @@ print_warning() {
     echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
+# Function to add timestamp to each log line
+add_timestamp() {
+    while IFS= read -r line; do
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] $line"
+    done
+}
+
 # Function to check if a process is running
 is_running() {
     local pid_file=$1
@@ -64,7 +71,7 @@ start_backend() {
         return 1
     fi
     
-    cd "$BACKEND_PATH" && node server.js > "$LOGS_DIR/backend.log" 2>&1 &
+    cd "$BACKEND_PATH" && node server.js 2>&1 | add_timestamp > "$LOGS_DIR/backend.log" &
     local pid=$!
     echo $pid > "$BACKEND_PID_FILE"
     
@@ -86,7 +93,7 @@ start_frontend() {
         return 1
     fi
     
-    cd "$FRONTEND_PATH" && npm run dev > "$LOGS_DIR/frontend.log" 2>&1 &
+    cd "$FRONTEND_PATH" && npm run dev 2>&1 | add_timestamp > "$LOGS_DIR/frontend.log" &
     local pid=$!
     echo $pid > "$FRONTEND_PID_FILE"
     

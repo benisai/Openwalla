@@ -1,5 +1,4 @@
-
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -10,6 +9,20 @@ import { Button } from "@/components/ui/button";
 import { FlowDetailsData } from "@/misc/types/flow";
 import { useQuery } from "@tanstack/react-query";
 import { getFlowUsageByDigest } from "@/services/FlowService";
+import { getConfig } from "@/services/ConfigService";
+import { MapPin, ChevronDown, ChevronUp } from "lucide-react";
+
+interface IpLookupData {
+  country: string;
+  latitude: string;
+  longitude: string;
+  continent: string;
+  timezone: string;
+  accuracyRadius: number;
+  asn: number;
+  asnOrganization: string;
+  asnNetwork: string;
+}
 
 interface FlowDetailsProps {
   open: boolean;
@@ -39,7 +52,23 @@ async function fetchVendor(mac: string | undefined) {
   return data.vendor;
 }
 
+async function fetchIpLookup(ip: string, domain: string): Promise<IpLookupData | null> {
+  try {
+    const response = await fetch(`${domain}/${ip}`);
+    if (!response.ok) {
+      console.error('Failed to fetch IP lookup data');
+      return null;
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching IP lookup:', error);
+    return null;
+  }
+}
+
 export function FlowDetailsDialog({ open, onOpenChange, flowData }: FlowDetailsProps) {
+  const [showIpDetails, setShowIpDetails] = useState(false);
+  
   const { data: hostname } = useQuery({
     queryKey: ['device-hostname', flowData.device?.macAddress],
     queryFn: () => fetchDeviceHostname(flowData.device?.macAddress),
@@ -50,6 +79,17 @@ export function FlowDetailsDialog({ open, onOpenChange, flowData }: FlowDetailsP
     queryKey: ['device-vendor', flowData.device?.macAddress],
     queryFn: () => fetchVendor(flowData.device?.macAddress),
     enabled: !!flowData.device?.macAddress,
+  });
+
+  const { data: config } = useQuery({
+    queryKey: ['config'],
+    queryFn: getConfig,
+  });
+
+  const { data: ipLookup, isLoading: isLoadingIp } = useQuery({
+    queryKey: ['ip-lookup', flowData.destination?.ipAddress],
+    queryFn: () => fetchIpLookup(flowData.destination?.ipAddress || '', config?.ip_lookup_domain || 'ip.benisai.com'),
+    enabled: showIpDetails && !!flowData.destination?.ipAddress && !!config?.ip_lookup_domain,
   });
   
   const digestValue = flowData.details?.digest || '';
@@ -110,10 +150,65 @@ export function FlowDetailsDialog({ open, onOpenChange, flowData }: FlowDetailsP
                   <span>Name</span>
                   <span>{flowData.destination?.name}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center">
                   <span>IP Address</span>
-                  <span>{flowData.destination?.ipAddress}</span>
+                  <button
+                    onClick={() => setShowIpDetails(!showIpDetails)}
+                    className="flex items-center gap-2 text-dashboard-accent hover:text-dashboard-accent/80 transition-colors"
+                  >
+                    <MapPin className="w-4 h-4" />
+                    <span>{flowData.destination?.ipAddress}</span>
+                    {showIpDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
                 </div>
+                
+                {showIpDetails && (
+                  <div className="mt-4 p-4 bg-dashboard-background/50 rounded-lg border border-gray-800 space-y-3">
+                    {isLoadingIp ? (
+                      <div className="text-center text-gray-400">Loading IP details...</div>
+                    ) : ipLookup ? (
+                      <>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div className="text-gray-400">Country:</div>
+                          <div>{ipLookup.country}</div>
+                          <div className="text-gray-400">Continent:</div>
+                          <div>{ipLookup.continent}</div>
+                          <div className="text-gray-400">Timezone:</div>
+                          <div className="text-xs">{ipLookup.timezone}</div>
+                          <div className="text-gray-400">ASN:</div>
+                          <div>{ipLookup.asn}</div>
+                          <div className="text-gray-400">Organization:</div>
+                          <div className="text-xs">{ipLookup.asnOrganization}</div>
+                          <div className="text-gray-400">Network:</div>
+                          <div className="text-xs">{ipLookup.asnNetwork}</div>
+                        </div>
+                        
+                        {ipLookup.latitude && ipLookup.longitude && (
+                          <div className="mt-4">
+                            <div className="text-gray-400 text-sm mb-2">Location Map</div>
+                            <div className="w-full h-48 rounded-lg overflow-hidden border border-gray-700">
+                              <iframe
+                                width="100%"
+                                height="100%"
+                                frameBorder="0"
+                                scrolling="no"
+                                marginHeight={0}
+                                marginWidth={0}
+                                src={`https://www.openstreetmap.org/export/embed.html?bbox=${parseFloat(ipLookup.longitude) - 0.5},${parseFloat(ipLookup.latitude) - 0.5},${parseFloat(ipLookup.longitude) + 0.5},${parseFloat(ipLookup.latitude) + 0.5}&layer=mapnik&marker=${ipLookup.latitude},${ipLookup.longitude}`}
+                              />
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1">
+                              Coordinates: {ipLookup.latitude}, {ipLookup.longitude}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="text-center text-red-400">Failed to load IP details</div>
+                    )}
+                  </div>
+                )}
+                
                 <div className="flex justify-between">
                   <span>Port</span>
                   <span>{flowData.destination?.port}</span>

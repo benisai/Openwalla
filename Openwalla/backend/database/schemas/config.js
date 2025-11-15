@@ -17,6 +17,7 @@ module.exports = async function (db, envConfig) {
     retention_days: envConfig.retention_days,
     auth_username: envConfig.auth_username,
     auth_password: envConfig.auth_password,
+    ip_lookup_domain: envConfig.ip_lookup_domain,
   };
   
     return new Promise((resolve, reject) => {

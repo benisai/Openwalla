@@ -283,7 +283,7 @@ router.get('/usage/:digest', (req, res) => {
     return res.status(400).json({ error: 'Digest parameter is required' });
   }
   
-  console.log('Fetching flow usage for digest:', digest);
+  //console.log('Fetching flow usage for digest:', digest);
   
   const sql = `
     SELECT 
@@ -306,7 +306,7 @@ router.get('/usage/:digest', (req, res) => {
     console.log('Raw database result:', row);
     
     if (!row || (row.localBytes === null && row.otherBytes === null && row.totalBytes === null)) {
-      console.log('No usage data found for digest:', digest);
+      //console.log('No usage data found for digest:', digest);
       return res.json({ localBytes: 0, otherBytes: 0, totalBytes: 0 });
     }
     
