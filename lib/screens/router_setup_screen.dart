@@ -93,7 +93,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
 
   String get _setupCommand {
     final features = _selectedFeatures.join(' ');
-    return [
+    final preparation = [
       'export OPENWALLA_RAW_BASE=$_rawSetupBase',
       'export OPENWALLA_ROOT=/tmp/openwalla-app-setup',
       'fetch() { if command -v wget >/dev/null 2>&1; then wget -qO "\$2" "\$1"; else curl -fsSL "\$1" -o "\$2"; fi; }',
@@ -102,8 +102,18 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
       'rm -f setup-openwrt-router.sh',
       'fetch "\$OPENWALLA_RAW_BASE/setup-openwrt-router.sh" "setup-openwrt-router.sh"',
       'chmod 0755 setup-openwrt-router.sh',
-      'sh ./setup-openwrt-router.sh $features',
     ].join(' && ');
+    return '$preparation && { '
+        'echo "[openwalla-app] Installer started."; '
+        'sh ./setup-openwrt-router.sh $features & OPENWALLA_SETUP_PID=\$!; '
+        'while kill -0 "\$OPENWALLA_SETUP_PID" 2>/dev/null; do '
+        'sleep 15; '
+        'if kill -0 "\$OPENWALLA_SETUP_PID" 2>/dev/null; then '
+        'echo "[openwalla-app] Installation is still running..."; '
+        'fi; '
+        'done; '
+        'wait "\$OPENWALLA_SETUP_PID"; '
+        '}';
   }
 
   String get _uninstallCommand {
@@ -150,13 +160,18 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
       initialOutput: _lastOutput!,
       running: true,
     );
+    var consoleVisible = false;
     if (mounted) {
+      consoleVisible = true;
       unawaited(
         showSshConsoleSheet(
           context: context,
           controller: console,
           title: 'Openwalla Router Setup',
-        ).whenComplete(console.dispose),
+        ).whenComplete(() {
+          consoleVisible = false;
+          console.dispose();
+        }),
       );
     }
 
@@ -174,7 +189,17 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
           });
         },
       );
+      if (!output.contains('[openwalla-setup] Setup complete.')) {
+        throw StateError(
+          'The SSH command ended before the router confirmed setup completion.',
+        );
+      }
       await _enableDashboardCardsForInstalledFeatures();
+      if (!mounted) return;
+      console.setOutput(
+        '${output.trimRight()}\n\nRefreshing the router connection...',
+      );
+      await appState.retryDashboardConnection(context: context);
       if (!mounted) return;
       setState(() {
         _lastOutput = output.trim().isEmpty
@@ -183,7 +208,13 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
         _setupComplete = true;
       });
       console.setOutput(_lastOutput!);
-      _showSnack('Setup Complete', success: true);
+      console.complete();
+      if (consoleVisible && mounted) {
+        Navigator.of(context).pop();
+        await Future<void>.delayed(const Duration(milliseconds: 180));
+      }
+      if (!mounted) return;
+      await _showSetupSuccessDialog();
     } catch (e) {
       if (!mounted) return;
       console.setOutput(
@@ -200,6 +231,38 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
       console.complete();
       if (mounted) setState(() => _isInstalling = false);
     }
+  }
+
+  Future<void> _showSetupSuccessDialog() async {
+    final profileName = _selectedProfile?.title ?? 'Router setup';
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          icon: const Icon(
+            Icons.check_circle_rounded,
+            color: Color(0xFF20CF70),
+            size: 42,
+          ),
+          title: const Text('Setup Successful'),
+          content: Text(
+            '$profileName completed successfully. Openwalla is ready to use.',
+          ),
+          actions: [
+            FilledButton.icon(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              icon: const Icon(Icons.dashboard_rounded),
+              label: const Text('Go to Dashboard'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    ref.read(appStateProvider).requestedTab = 0;
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   Future<void> _runUninstall() async {

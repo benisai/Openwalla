@@ -170,6 +170,20 @@ class _SshConsolePanelState extends State<_SshConsolePanel> {
   final _horizontalController = ScrollController();
 
   @override
+  void didUpdateWidget(covariant _SshConsolePanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.output == widget.output) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_verticalController.hasClients) return;
+      _verticalController.animateTo(
+        _verticalController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  @override
   void dispose() {
     _verticalController.dispose();
     _horizontalController.dispose();

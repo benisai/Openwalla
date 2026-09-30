@@ -2552,7 +2552,7 @@ class AppState extends ChangeNotifier {
       const output =
           'Connecting with saved router credentials...\n'
           'Installing selected Openwalla setup components...\n'
-          'Setup finished.';
+          '[openwalla-setup] Setup complete.';
       onOutput?.call(output);
       return output;
     }
