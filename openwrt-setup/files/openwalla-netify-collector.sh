@@ -29,6 +29,7 @@ FLOW_STATS_BUCKET_SECONDS="300"
 FLOW_STATS_RETENTION_SECONDS="2592000"
 SQLITE_BIN=""
 JSHN_AVAILABLE="0"
+ROUTER_LAN_IPV4S=""
 
 log() {
 	printf "%s %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
@@ -168,8 +169,48 @@ load_config() {
 	fi
 }
 
+refresh_router_lan_ipv4s() {
+	local addresses value
+	addresses=""
+
+	if command -v ubus >/dev/null 2>&1 && command -v jsonfilter >/dev/null 2>&1; then
+		value="$(ubus call network.interface.lan status 2>/dev/null | jsonfilter -e '@["ipv4-address"][*].address' 2>/dev/null || true)"
+		[ -n "$value" ] && addresses="$addresses $value"
+	fi
+
+	if command -v uci >/dev/null 2>&1; then
+		value="$(uci -q get network.lan.ipaddr 2>/dev/null || true)"
+		[ -n "$value" ] && addresses="$addresses $value"
+	fi
+
+	if command -v ip >/dev/null 2>&1; then
+		value="$(ip -4 -o addr show dev br-lan 2>/dev/null | awk '{print $4}' || true)"
+		[ -n "$value" ] && addresses="$addresses $value"
+	fi
+
+	ROUTER_LAN_IPV4S="$(
+		for value in $addresses; do
+			value="${value%%/*}"
+			case "$value" in
+				[0-9]*.[0-9]*.[0-9]*.[0-9]*) printf '%s\n' "$value" ;;
+			esac
+		done | awk '!seen[$0]++'
+	)"
+}
+
+is_router_lan_destination() {
+	local candidate router_ip
+	candidate="${1:-}"
+	[ -n "$candidate" ] || return 1
+	for router_ip in $ROUTER_LAN_IPV4S; do
+		[ "$candidate" = "$router_ip" ] && return 0
+	done
+	return 1
+}
+
 refresh_runtime_config() {
 	load_config
+	refresh_router_lan_ipv4s
 	RETENTION_ROWS="$(sanitize_int "$RETENTION_ROWS" "$DEFAULT_RETENTION_ROWS")"
 	STREAM_TIMEOUT="$(sanitize_int "$STREAM_TIMEOUT" "$DEFAULT_STREAM_TIMEOUT")"
 	FLOW_STATS_POLL_SECONDS="$(sanitize_int "$FLOW_STATS_POLL_SECONDS" "5")"
@@ -295,6 +336,7 @@ upsert_flow_label() {
 	case "$ip_protocol" in 6) protocol="tcp" ;; 17) protocol="udp" ;; *) return 0 ;; esac
 	local_ip="$(extract_json_string "$line" local_ip)"
 	other_ip="$(extract_json_string "$line" other_ip)"
+	is_router_lan_destination "$other_ip" && return 0
 	local_port="$(extract_json_number "$line" local_port)"
 	other_port="$(extract_json_number "$line" other_port)"
 	case "$local_ip" in *:*) return 0 ;; esac
@@ -606,6 +648,7 @@ insert_flow() {
 	local line escaped
 	line="$1"
 	parse_flow_columns "$line" || return 1
+	is_router_lan_destination "$dest_ip" && return 0
 	escaped="$(sql_escape "$line")"
 	sql_exec "INSERT INTO flow_raw(
 		timeinsert,local_ip,local_mac,fqdn,dest_ip,dest_port,dest_type,
