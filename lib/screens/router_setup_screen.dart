@@ -26,11 +26,11 @@ extension on _SetupProfile {
     _SetupProfile.standard =>
       'Basic plus AdBlock, Parental Controls, Quarantine, Smart Queue, DDNS, and WireGuard.',
     _SetupProfile.advanced =>
-      'Basic and Standard plus PBR and the Netify Detailed Flow stack.',
+      'Basic and Standard plus Policy-Based Routing (PBR).',
     _SetupProfile.flows =>
       'Install or redeploy Netify and the Detailed Flow collector.',
     _SetupProfile.everything =>
-      'All bundled router features except Network Flows. Install flows separately.',
+      'All bundled router features, including Netify Detailed Flow.',
     _SetupProfile.remove =>
       'Choose installed Openwalla components to remove from the router.',
   };
@@ -84,9 +84,9 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
     return switch (_selectedProfile) {
       _SetupProfile.basic => _basicFeatures,
       _SetupProfile.standard => _standardFeatures,
-      _SetupProfile.advanced => [..._standardFeatures, 'pbr', 'netify'],
+      _SetupProfile.advanced => [..._standardFeatures, 'pbr'],
       _SetupProfile.flows => const ['netify'],
-      _SetupProfile.everything => [..._standardFeatures, 'pbr'],
+      _SetupProfile.everything => [..._standardFeatures, 'pbr', 'netify'],
       _ => const [],
     };
   }
@@ -507,7 +507,6 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
       _SetupProfile.advanced => [
         ..._installLabels(_SetupProfile.standard),
         'Policy-Based Routing (PBR)',
-        ..._installLabels(_SetupProfile.flows),
       ],
       _SetupProfile.flows => const [
         'Netify deep-packet inspection service',
@@ -517,6 +516,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
       _SetupProfile.everything => [
         ..._installLabels(_SetupProfile.standard),
         'Policy-Based Routing (PBR)',
+        ..._installLabels(_SetupProfile.flows),
       ],
       _SetupProfile.remove => const [],
     };
