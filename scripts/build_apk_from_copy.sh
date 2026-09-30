@@ -24,7 +24,7 @@ APK_TEST_COMMIT_MESSAGE="${OPENWALLA_APK_TEST_COMMIT_MESSAGE:-Update APK test bu
 usage() {
   echo "Usage: $0 [debug|profile|release] [--upload] [--apk-test] [--split-per-abi] [--apk-test-git] [--pixel-test]" >&2
   echo "  --upload  Build split APKs, copy target ABI into APK-TEST/, then git add/commit/push it." >&2
-  echo "  --apk-test  Copy the verified APK into APK-TEST/ for committing to the repo." >&2
+  echo "  --apk-test  Build split APKs and copy the configured test ABI into APK-TEST/." >&2
   echo "  --split-per-abi  Build smaller ABI-specific APKs." >&2
   echo "  --apk-test-git  After --apk-test, git add/commit/push copied APK test artifacts." >&2
   echo "  --pixel-test  Shortcut for: debug --split-per-abi --apk-test --apk-test-git." >&2
@@ -66,6 +66,7 @@ for arg in "$@"; do
       ;;
     --apk-test)
       COPY_APK_TEST=true
+      SPLIT_PER_ABI=true
       ;;
     --split-per-abi)
       SPLIT_PER_ABI=true
@@ -73,6 +74,7 @@ for arg in "$@"; do
     --apk-test-git)
       GIT_APK_TEST=true
       COPY_APK_TEST=true
+      SPLIT_PER_ABI=true
       ;;
     --pixel-test)
       BUILD_MODE="debug"
