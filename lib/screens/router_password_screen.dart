@@ -20,10 +20,7 @@ class _RouterPasswordScreenState extends ConsumerState<RouterPasswordScreen> {
   bool _isSaving = false;
 
   bool get _canSave {
-    final password = _passwordController.text;
-    return !_isSaving &&
-        password.length >= 8 &&
-        password == _confirmController.text;
+    return !_isSaving;
   }
 
   @override
@@ -164,7 +161,7 @@ class _RouterPasswordScreenState extends ConsumerState<RouterPasswordScreen> {
                         labelText: 'New password',
                         prefixIcon: const Icon(Icons.lock_outline_rounded),
                         border: const OutlineInputBorder(),
-                        helperText: 'Use at least 8 characters',
+                        helperText: 'Enter a new OpenWrt root password',
                         suffixIcon: IconButton(
                           tooltip: _passwordVisible
                               ? 'Hide password'
@@ -180,8 +177,8 @@ class _RouterPasswordScreenState extends ConsumerState<RouterPasswordScreen> {
                         ),
                       ),
                       validator: (value) {
-                        if (value == null || value.length < 8) {
-                          return 'Enter at least 8 characters.';
+                        if (value == null || value.isEmpty) {
+                          return 'Enter a new password.';
                         }
                         return null;
                       },
@@ -195,7 +192,7 @@ class _RouterPasswordScreenState extends ConsumerState<RouterPasswordScreen> {
                       textInputAction: TextInputAction.done,
                       onChanged: (_) => setState(() {}),
                       onFieldSubmitted: (_) {
-                        if (_canSave) _save();
+                        if (!_isSaving) _save();
                       },
                       decoration: InputDecoration(
                         labelText: 'Confirm password',

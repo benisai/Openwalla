@@ -2504,24 +2504,37 @@ class AppState extends ChangeNotifier {
     BuildContext? context,
   }) async {
     final router = _routerService?.selectedRouter;
+    final sysauth = _authService?.sysauth;
     if (router == null) {
       throw StateError('No selected router connection is available');
     }
-    if (newPassword.length < 8) {
-      throw ArgumentError('Router password must be at least 8 characters.');
+    if (newPassword.isEmpty) {
+      throw ArgumentError('Router password cannot be empty.');
     }
 
     if (!_reviewerModeEnabled) {
-      final quotedPassword = _shellQuote(newPassword);
-      final output = await runRouterSetupCommand(
-        'NEW_PASSWORD=$quotedPassword; '
-        'if printf "%s\\n%s\\n" "\$NEW_PASSWORD" "\$NEW_PASSWORD" | '
-        'passwd root >/dev/null 2>&1; then '
-        'echo OPENWALLA_PASSWORD_UPDATED; '
-        'else exit 1; fi',
+      if (sysauth == null || _apiService == null) {
+        throw StateError('No authenticated router session is available');
+      }
+      final result = await _apiService!.call(
+        router.ipAddress,
+        sysauth,
+        router.useHttps,
+        object: 'luci',
+        method: 'setPassword',
+        params: {
+          'username': 'root',
+          'password': newPassword,
+          'oldpassword': '',
+          'rpcd': false,
+        },
         context: context,
       );
-      if (!output.contains('OPENWALLA_PASSWORD_UPDATED')) {
+      final payload = result is List && result.length > 1 ? result[1] : result;
+      final passwordResult = payload is Map ? payload['result'] : null;
+      if (passwordResult != true &&
+          passwordResult != 1 &&
+          passwordResult != '1') {
         throw StateError('The router did not confirm the password change.');
       }
     }
