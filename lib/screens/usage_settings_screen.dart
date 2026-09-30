@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/design/luci_design_system.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/state/app_state.dart';
-import 'package:luci_mobile/widgets/luci_app_bar.dart';
+import 'package:openwalla/design/luci_design_system.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/state/app_state.dart';
+import 'package:openwalla/widgets/luci_app_bar.dart';
 
 class UsageSettingsScreen extends ConsumerStatefulWidget {
   const UsageSettingsScreen({super.key});

@@ -3,12 +3,12 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/design/luci_design_system.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/screens/router_setup_screen.dart';
-import 'package:luci_mobile/screens/reboot_countdown_screen.dart';
-import 'package:luci_mobile/state/app_state.dart';
-import 'package:luci_mobile/widgets/luci_app_bar.dart';
+import 'package:openwalla/design/luci_design_system.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/screens/router_setup_screen.dart';
+import 'package:openwalla/screens/reboot_countdown_screen.dart';
+import 'package:openwalla/state/app_state.dart';
+import 'package:openwalla/widgets/luci_app_bar.dart';
 
 class BackupRestoreScreen extends ConsumerStatefulWidget {
   const BackupRestoreScreen({super.key});

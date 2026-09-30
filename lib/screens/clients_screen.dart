@@ -2,17 +2,18 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/models/client.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/design/luci_design_system.dart';
-import 'package:luci_mobile/state/app_state.dart';
-import 'package:luci_mobile/widgets/luci_app_bar.dart';
-import 'package:luci_mobile/widgets/luci_loading_states.dart';
-import 'package:luci_mobile/widgets/openwalla_toast.dart';
-import 'package:luci_mobile/widgets/luci_toast.dart';
-import 'package:luci_mobile/widgets/luci_refresh_components.dart';
-import 'package:luci_mobile/widgets/luci_animation_system.dart';
-import 'package:luci_mobile/utils/self_device_guard.dart';
+import 'package:openwalla/models/client.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/screens/flows_screen.dart';
+import 'package:openwalla/design/luci_design_system.dart';
+import 'package:openwalla/state/app_state.dart';
+import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_loading_states.dart';
+import 'package:openwalla/widgets/openwalla_toast.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
+import 'package:openwalla/widgets/luci_refresh_components.dart';
+import 'package:openwalla/widgets/luci_animation_system.dart';
+import 'package:openwalla/utils/self_device_guard.dart';
 
 class ClientsScreen extends ConsumerStatefulWidget {
   const ClientsScreen({super.key});
@@ -22,6 +23,8 @@ class ClientsScreen extends ConsumerStatefulWidget {
 }
 
 enum ClientFilter { online, blocked, offline }
+
+enum _DeviceRemovalAction { hide, delete }
 
 class _DeviceIconOption {
   final String key;
@@ -595,14 +598,26 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
   Future<void> _setClientInternetBlocked(Client client, bool blocked) async {
     final mac = _normalizeMac(client.macAddress);
     if (mac.isEmpty || mac == 'N/A') return;
+    final wasQuarantined = client.isQuarantined;
 
     setState(() {
       _blockingMacs.add(mac);
       _applyCachedClientBlockState(mac, blocked);
       _clientsFuture = Future.value(_visibleClients);
     });
+    if (!blocked) {
+      ref.read(appStateProvider).queueClientInternetUnblock(client);
+      if (!mounted) return;
+      setState(() => _blockingMacs.remove(mac));
+      context.showToastSuccess(
+        wasQuarantined ? 'Device unquarantined' : 'Device unblocked',
+        subtitle: client.displayName,
+        actionKey: 'client-block-$mac',
+      );
+      return;
+    }
     context.showToastLoading(
-      blocked ? 'Blocking device...' : 'Unblocking device...',
+      'Blocking device...',
       subtitle: client.displayName,
       actionKey: 'client-block-$mac',
     );
@@ -613,7 +628,7 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
           .setClientInternetBlocked(client, blocked);
       if (!mounted) return;
       context.showToastSuccess(
-        blocked ? 'Internet access blocked' : 'Device unblocked',
+        'Internet access blocked',
         subtitle: client.displayName,
         actionKey: 'client-block-$mac',
       );
@@ -680,7 +695,7 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
   }
 
   Future<void> _showDeleteDeviceSheet(Client client) async {
-    final shouldDelete = await showModalBottomSheet<bool>(
+    final action = await showModalBottomSheet<_DeviceRemovalAction>(
       context: context,
       showDragHandle: true,
       useSafeArea: true,
@@ -716,7 +731,7 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Delete ${client.displayName}?',
+                          'Remove ${client.displayName}?',
                           style: Theme.of(sheetContext).textTheme.titleLarge
                               ?.copyWith(fontWeight: FontWeight.w900),
                         ),
@@ -747,7 +762,7 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
                     const SizedBox(width: 10),
                     const Expanded(
                       child: Text(
-                        'This deletes the device from Openwalla and removes its OpenWrt DHCP hostname or static IP reservation. It does not block network access.',
+                        'Hide keeps DHCP settings but exempts this MAC from Devices and Quarantine detection. Delete removes its Openwalla record and OpenWrt DHCP entry.',
                       ),
                     ),
                   ],
@@ -757,15 +772,20 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.of(sheetContext).pop(false),
-                      child: const Text('Cancel'),
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.of(
+                        sheetContext,
+                      ).pop(_DeviceRemovalAction.hide),
+                      icon: const Icon(Icons.visibility_off_outlined),
+                      label: const Text('Hide'),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: FilledButton.icon(
-                      onPressed: () => Navigator.of(sheetContext).pop(true),
+                      onPressed: () => Navigator.of(
+                        sheetContext,
+                      ).pop(_DeviceRemovalAction.delete),
                       icon: const Icon(Icons.delete_outline_rounded),
                       label: const Text('Delete'),
                       style: FilledButton.styleFrom(
@@ -781,11 +801,15 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
         );
       },
     );
-    if (shouldDelete != true || !mounted) return;
+    if (action == null || !mounted) return;
     try {
-      await ref
-          .read(appStateProvider)
-          .deleteOpenwallaDeviceRecord(client, context: context);
+      if (action == _DeviceRemovalAction.hide) {
+        await ref.read(appStateProvider).hideOpenwallaDeviceRecord(client);
+      } else {
+        await ref
+            .read(appStateProvider)
+            .deleteOpenwallaDeviceRecord(client, context: context);
+      }
       if (!mounted) return;
       final normalizedMac = client.macAddress.toUpperCase().replaceAll(
         '-',
@@ -809,14 +833,18 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
         _clientsFuture = Future.value(_visibleClients);
       });
       context.showToastSuccess(
-        'Device removed',
+        action == _DeviceRemovalAction.hide
+            ? 'Device hidden'
+            : 'Device removed',
         subtitle: client.displayName,
         actionKey: 'remove-device-$normalizedMac',
       );
     } catch (e) {
       if (!mounted) return;
       context.showToastError(
-        'Device could not be removed',
+        action == _DeviceRemovalAction.hide
+            ? 'Device could not be hidden'
+            : 'Device could not be removed',
         subtitle: e.toString().replaceFirst('Bad state: ', ''),
         actionKey: 'remove-device-${_normalizeMac(client.macAddress)}',
       );
@@ -959,6 +987,8 @@ class _DeviceSettingsSheetState extends ConsumerState<_DeviceSettingsSheet> {
   bool _isBlocking = false;
   bool _isPausing = false;
   bool _hasSavedChanges = false;
+  bool _netifyFlowsEnabled = false;
+  int _deviceFlowCount = 0;
 
   @override
   void initState() {
@@ -983,6 +1013,37 @@ class _DeviceSettingsSheetState extends ConsumerState<_DeviceSettingsSheet> {
     _savedName = _initialName;
     _savedIconKey = _selectedIconKey;
     _nameController.addListener(_handleNameChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadDeviceFlows());
+  }
+
+  Future<void> _loadDeviceFlows() async {
+    final appState = ref.read(appStateProvider);
+    final provider = await appState.detectFlowProvider(context: context);
+    if (!mounted) return;
+    final enabled = provider == OpenwallaFlowProvider.netify;
+    final count = enabled
+        ? await appState.fetchNetifyFlowCount(
+            deviceMac: widget.client.macAddress,
+            hoursBack: 24,
+            context: context,
+          )
+        : 0;
+    if (!mounted) return;
+    setState(() {
+      _netifyFlowsEnabled = enabled;
+      _deviceFlowCount = count;
+    });
+  }
+
+  void _openDeviceFlows() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FlowsScreen(
+          deviceMac: widget.client.macAddress,
+          deviceName: _nameController.text.trim(),
+        ),
+      ),
+    );
   }
 
   @override
@@ -1016,7 +1077,14 @@ class _DeviceSettingsSheetState extends ConsumerState<_DeviceSettingsSheet> {
       return false;
     }
 
+    final previousName = _savedName;
+    final previousIconKey = _savedIconKey;
     setState(() => _isSavingName = true);
+    widget.onIdentityUpdated(
+      hostname: name,
+      deviceIcon: _selectedIconKey,
+      staticIpAddress: _currentStaticIp,
+    );
     try {
       await ref
           .read(appStateProvider)
@@ -1046,6 +1114,11 @@ class _DeviceSettingsSheetState extends ConsumerState<_DeviceSettingsSheet> {
       return true;
     } catch (e) {
       if (!mounted) return false;
+      widget.onIdentityUpdated(
+        hostname: previousName,
+        deviceIcon: previousIconKey,
+        staticIpAddress: _currentStaticIp,
+      );
       _showError('Failed to save device name: $e');
       setState(() => _isSavingName = false);
       return false;
@@ -1487,6 +1560,13 @@ class _DeviceSettingsSheetState extends ConsumerState<_DeviceSettingsSheet> {
               ),
               const SizedBox(height: 18),
               _DeviceUsagePanel(client: widget.client),
+              if (_netifyFlowsEnabled) ...[
+                const SizedBox(height: 12),
+                _DeviceNetifyPanel(
+                  flowCount: _deviceFlowCount,
+                  onTap: _openDeviceFlows,
+                ),
+              ],
               _ActiveScheduleNotice(client: widget.client),
               const SizedBox(height: 22),
               _DeviceAddressRow(
@@ -1528,6 +1608,14 @@ class _DeviceSettingsSheetState extends ConsumerState<_DeviceSettingsSheet> {
                 width: double.infinity,
                 child: FilledButton.tonalIcon(
                   onPressed: isIdentityBusy ? null : _save,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _identityDirty
+                        ? colorScheme.primary.withValues(alpha: 0.24)
+                        : colorScheme.surfaceContainerHighest,
+                    foregroundColor: _identityDirty
+                        ? colorScheme.primary
+                        : colorScheme.onSurfaceVariant,
+                  ),
                   icon: _isSaving
                       ? const SizedBox(
                           width: 18,
@@ -1610,6 +1698,112 @@ class _DeviceSettingsSheetState extends ConsumerState<_DeviceSettingsSheet> {
         side: BorderSide(color: color.withValues(alpha: 0.58)),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+  }
+}
+
+class _DeviceNetifyPanel extends StatelessWidget {
+  static const Color _flowColor = Color(0xFF8B5CF6);
+
+  final int flowCount;
+  final VoidCallback onTap;
+
+  const _DeviceNetifyPanel({required this.flowCount, required this.onTap});
+
+  String get _formattedCount {
+    if (flowCount < 1000) return flowCount.toString();
+    if (flowCount < 1000000) {
+      final thousands = flowCount / 1000;
+      return '${thousands.toStringAsFixed(thousands >= 10 ? 0 : 1)}K';
+    }
+    final millions = flowCount / 1000000;
+    return '${millions.toStringAsFixed(millions >= 10 ? 0 : 1)}M';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      color: colors.surface,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: colors.outlineVariant.withValues(alpha: 0.5),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: _flowColor.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.account_tree_rounded,
+                  color: _flowColor,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Detailed Flow',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          _formattedCount,
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(
+                                color: colors.onSurface,
+                                fontWeight: FontWeight.w900,
+                                height: 1,
+                              ),
+                        ),
+                        const SizedBox(width: 8),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 2),
+                          child: Text(
+                            'Netify',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: colors.onSurfaceVariant,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 16,
+                color: colors.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:luci_mobile/models/system_resource_metrics.dart';
+import 'package:openwalla/models/system_resource_metrics.dart';
 
 void main() {
   test('parses and formats system uptime', () {

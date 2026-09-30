@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:luci_mobile/services/interfaces/api_service_interface.dart';
-import 'package:luci_mobile/config/app_config.dart';
+import 'package:openwalla/services/interfaces/api_service_interface.dart';
+import 'package:openwalla/config/app_config.dart';
 
 class MockApiService implements IApiService {
   static final Random _random = Random();

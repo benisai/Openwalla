@@ -3,11 +3,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/models/dashboard_preferences.dart';
-import 'package:luci_mobile/widgets/luci_app_bar.dart';
-import 'package:luci_mobile/design/luci_design_system.dart';
-import 'package:luci_mobile/widgets/luci_animation_system.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/models/dashboard_preferences.dart';
+import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/design/luci_design_system.dart';
+import 'package:openwalla/widgets/luci_animation_system.dart';
 
 class RouterDashboardSettingsScreen extends ConsumerStatefulWidget {
   final String? routerId;
@@ -610,81 +610,6 @@ class _RouterDashboardSettingsScreenState
                 },
               ),
               _buildCardVisibilitySwitch(
-                title: 'Flows',
-                subtitle: 'Show the selected flow summary card',
-                icon: Icons.account_tree_rounded,
-                value: _preferences.showFlowsCard,
-                onChanged: (value) {
-                  setState(() {
-                    _preferences = _preferences.copyWith(showFlowsCard: value);
-                  });
-                  _onPreferenceChanged();
-                },
-              ),
-              if (_preferences.showFlowsCard) ...[
-                const Divider(height: 1),
-                RadioListTile<DashboardFlowMode>(
-                  title: Text(
-                    'Detailed Flow',
-                    style: LuciTextStyles.detailValue(
-                      context,
-                    ).copyWith(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: Text(
-                    'Use Netify flow data when available',
-                    style: LuciTextStyles.cardSubtitle(context),
-                  ),
-                  secondary: Icon(
-                    Icons.account_tree_rounded,
-                    size: 22,
-                    color: _preferences.flowMode == DashboardFlowMode.detailed
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  value: DashboardFlowMode.detailed,
-                  groupValue: _preferences.flowMode,
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() {
-                      _preferences = _preferences.copyWith(flowMode: value);
-                    });
-                    _onPreferenceChanged();
-                  },
-                  activeColor: Theme.of(context).colorScheme.primary,
-                  controlAffinity: ListTileControlAffinity.leading,
-                ),
-                RadioListTile<DashboardFlowMode>(
-                  title: Text(
-                    'Simple Flow',
-                    style: LuciTextStyles.detailValue(
-                      context,
-                    ).copyWith(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: Text(
-                    'Use Conntrack connection flow data',
-                    style: LuciTextStyles.cardSubtitle(context),
-                  ),
-                  secondary: Icon(
-                    Icons.route_rounded,
-                    size: 22,
-                    color: _preferences.flowMode == DashboardFlowMode.simple
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  value: DashboardFlowMode.simple,
-                  groupValue: _preferences.flowMode,
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() {
-                      _preferences = _preferences.copyWith(flowMode: value);
-                    });
-                    _onPreferenceChanged();
-                  },
-                  activeColor: Theme.of(context).colorScheme.primary,
-                  controlAffinity: ListTileControlAffinity.leading,
-                ),
-              ],
-              _buildCardVisibilitySwitch(
                 title: 'Statistics',
                 subtitle: 'Show the Statistics tab in the bottom navigation',
                 icon: Icons.query_stats_rounded,
@@ -694,6 +619,18 @@ class _RouterDashboardSettingsScreenState
                     _preferences = _preferences.copyWith(
                       showStatisticsTab: value,
                     );
+                  });
+                  _onPreferenceChanged();
+                },
+              ),
+              _buildCardVisibilitySwitch(
+                title: 'Flows',
+                subtitle: 'Show the network flows card',
+                icon: Icons.account_tree_rounded,
+                value: _preferences.showFlowsCard,
+                onChanged: (value) {
+                  setState(() {
+                    _preferences = _preferences.copyWith(showFlowsCard: value);
                   });
                   _onPreferenceChanged();
                 },
@@ -1137,102 +1074,56 @@ class _RouterDashboardSettingsScreenState
   Widget _buildWiredInterfacesSection() {
     if (_availableWiredInterfaces.isEmpty) return const SizedBox.shrink();
     final sortedInterfaces = _availableWiredInterfaces.toList()..sort();
+    final selectedInterfaces = _preferences.enabledWiredInterfaces.isEmpty
+        ? Set<String>.from(_availableWiredInterfaces)
+        : _preferences.enabledWiredInterfaces;
     return _buildStaticSection(
       title: 'Network Interfaces',
       subtitle: 'Choose which wired/VPN interfaces to display',
       icon: Icons.cable,
       children: [
-        Container(
-          decoration: BoxDecoration(
-            color: Theme.of(
-              context,
-            ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            children: [
-              SwitchListTile.adaptive(
-                title: Text(
-                  'Show All Interfaces',
-                  style: LuciTextStyles.detailValue(
-                    context,
-                  ).copyWith(fontWeight: FontWeight.w600),
-                ),
-                value: _preferences.enabledWiredInterfaces.isEmpty,
-                onChanged: (value) {
-                  setState(() {
-                    if (value) {
-                      _preferences = _preferences.copyWith(
-                        enabledWiredInterfaces: {},
-                        wiredInterfaceSelectionInitialized: true,
-                      );
-                    } else {
-                      _preferences = _preferences.copyWith(
-                        enabledWiredInterfaces: Set.from(
-                          _availableWiredInterfaces,
-                        ),
-                        wiredInterfaceSelectionInitialized: true,
-                      );
-                    }
-                  });
-                  _onPreferenceChanged();
-                },
-                activeTrackColor: Theme.of(context).colorScheme.primary,
-                activeThumbColor: Theme.of(context).colorScheme.onPrimary,
+        ...sortedInterfaces.map((interface) {
+          final isEnabled = selectedInterfaces.contains(interface);
+          final description = _getInterfaceDescription(interface);
+          return Padding(
+            padding: EdgeInsets.symmetric(vertical: LuciSpacing.xs),
+            child: CheckboxListTile(
+              title: Text(
+                interface.toUpperCase(),
+                style: LuciTextStyles.detailValue(context),
               ),
-            ],
-          ),
-        ),
-        if (_preferences.enabledWiredInterfaces.isNotEmpty ||
-            _disabledWiredInterfaces.isNotEmpty) ...[
-          SizedBox(height: LuciSpacing.sm),
-          ...sortedInterfaces.map((interface) {
-            final isEnabled = _preferences.enabledWiredInterfaces.contains(
-              interface,
-            );
-            final description = _getInterfaceDescription(interface);
-            return Padding(
-              padding: EdgeInsets.symmetric(vertical: LuciSpacing.xs),
-              child: CheckboxListTile(
-                title: Text(
-                  interface.toUpperCase(),
-                  style: LuciTextStyles.detailValue(context),
-                ),
-                subtitle: description,
-                secondary: Icon(
-                  Icons.cable,
-                  size: 20,
-                  color: isEnabled
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(
-                          context,
-                        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-                ),
-                value: isEnabled,
-                onChanged: (value) {
-                  setState(() {
-                    final newSet = Set<String>.from(
-                      _preferences.enabledWiredInterfaces,
-                    );
-                    if (value ?? false) {
-                      newSet.add(interface);
-                    } else {
-                      newSet.remove(interface);
-                    }
-                    _preferences = _preferences.copyWith(
-                      enabledWiredInterfaces: newSet,
-                      wiredInterfaceSelectionInitialized: true,
-                    );
-                  });
-                  _onPreferenceChanged();
-                },
-                activeColor: Theme.of(context).colorScheme.primary,
-                controlAffinity: ListTileControlAffinity.leading,
-                dense: description != null,
+              subtitle: description,
+              secondary: Icon(
+                Icons.cable,
+                size: 20,
+                color: isEnabled
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(
+                        context,
+                      ).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
               ),
-            );
-          }),
-        ],
+              value: isEnabled,
+              onChanged: (value) {
+                setState(() {
+                  final newSet = Set<String>.from(selectedInterfaces);
+                  if (value ?? false) {
+                    newSet.add(interface);
+                  } else {
+                    newSet.remove(interface);
+                  }
+                  _preferences = _preferences.copyWith(
+                    enabledWiredInterfaces: newSet,
+                    wiredInterfaceSelectionInitialized: true,
+                  );
+                });
+                _onPreferenceChanged();
+              },
+              activeColor: Theme.of(context).colorScheme.primary,
+              controlAffinity: ListTileControlAffinity.leading,
+              dense: description != null,
+            ),
+          );
+        }),
       ],
     );
   }

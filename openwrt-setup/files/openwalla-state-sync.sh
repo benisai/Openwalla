@@ -53,6 +53,15 @@ read_netify_db() {
 	echo "$path"
 }
 
+read_netify_flow_stats_db() {
+	local path
+	path="$(uci_get openwalla.flow_stats.db_path)"
+	if [ -z "$path" ]; then
+		path="/tmp/openwalla-netify-flow-stats.sqlite"
+	fi
+	echo "$path"
+}
+
 read_connection_flows_db() {
 	local path
 	path="$(uci_get openwalla.connection_flows.db_path)"
@@ -183,7 +192,6 @@ save_runtime_logs() {
 		/tmp/openwalla-connection-flows-collector.log \
 		/tmp/openwalla-devices-collector.log \
 		/tmp/openwalla-device-bandwidth-collector.log \
-		/tmp/openwalla-device-quarantine.log \
 		/tmp/openwalla-dns-monitor.last.log \
 		/tmp/openwalla-paternal-pause.last.log \
 		/tmp/openwalla-network-monitor.last.log \
@@ -217,6 +225,7 @@ read_last_backup_epoch() {
 	newest=0
 	for file in \
 		"$state_dir/openwalla-netify.sqlite" \
+		"$state_dir/openwalla-netify-flow-stats.sqlite" \
 		"$state_dir/openwalla-connection-flows.sqlite" \
 		"$state_dir/openwalla-devices.sqlite" \
 		"$state_dir/openwalla-device-bandwidth.sqlite" \
@@ -278,9 +287,10 @@ restore_vnstat_dir() {
 }
 
 save_state() {
-	local state_dir netify_db flows_db devices_db device_bandwidth_db notifications_db parental_db ping_file dns_file speedtest_file quarantine_state_file
+	local state_dir netify_db netify_flow_stats_db flows_db devices_db device_bandwidth_db notifications_db parental_db ping_file dns_file speedtest_file quarantine_state_file
 	state_dir="$(read_state_dir)"
 	netify_db="$(read_netify_db)"
+	netify_flow_stats_db="$(read_netify_flow_stats_db)"
 	flows_db="$(read_connection_flows_db)"
 	devices_db="$(read_devices_db)"
 	device_bandwidth_db="$(read_device_bandwidth_db)"
@@ -293,6 +303,7 @@ save_state() {
 
 	mkdir -p "$state_dir"
 	save_sqlite "$netify_db" "$state_dir/openwalla-netify.sqlite"
+	save_sqlite "$netify_flow_stats_db" "$state_dir/openwalla-netify-flow-stats.sqlite"
 	save_sqlite "$flows_db" "$state_dir/openwalla-connection-flows.sqlite"
 	save_sqlite "$devices_db" "$state_dir/openwalla-devices.sqlite"
 	save_sqlite "$device_bandwidth_db" "$state_dir/openwalla-device-bandwidth.sqlite"
@@ -311,9 +322,10 @@ save_state() {
 }
 
 restore_state() {
-	local state_dir netify_db flows_db devices_db device_bandwidth_db notifications_db parental_db ping_file dns_file speedtest_file quarantine_state_file
+	local state_dir netify_db netify_flow_stats_db flows_db devices_db device_bandwidth_db notifications_db parental_db ping_file dns_file speedtest_file quarantine_state_file
 	state_dir="$(read_state_dir)"
 	netify_db="$(read_netify_db)"
+	netify_flow_stats_db="$(read_netify_flow_stats_db)"
 	flows_db="$(read_connection_flows_db)"
 	devices_db="$(read_devices_db)"
 	device_bandwidth_db="$(read_device_bandwidth_db)"
@@ -326,6 +338,7 @@ restore_state() {
 
 	[ -d "$state_dir" ] || return 0
 	restore_copy "$state_dir/openwalla-netify.sqlite" "$netify_db"
+	restore_copy "$state_dir/openwalla-netify-flow-stats.sqlite" "$netify_flow_stats_db"
 	restore_copy "$state_dir/openwalla-connection-flows.sqlite" "$flows_db"
 	restore_copy "$state_dir/openwalla-devices.sqlite" "$devices_db"
 	restore_copy "$state_dir/openwalla-device-bandwidth.sqlite" "$device_bandwidth_db"

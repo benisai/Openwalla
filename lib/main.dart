@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:luci_mobile/state/app_state.dart';
-import 'package:luci_mobile/screens/login_screen.dart';
-import 'package:luci_mobile/screens/main_screen.dart';
-import 'package:luci_mobile/screens/settings_screen.dart';
-import 'package:luci_mobile/screens/splash_screen.dart';
-import 'package:luci_mobile/screens/welcome_setup_screen.dart';
+import 'package:openwalla/state/app_state.dart';
+import 'package:openwalla/screens/login_screen.dart';
+import 'package:openwalla/screens/main_screen.dart';
+import 'package:openwalla/screens/settings_screen.dart';
+import 'package:openwalla/screens/splash_screen.dart';
+import 'package:openwalla/screens/welcome_setup_screen.dart';
 
 void main() {
   runApp(ProviderScope(child: const LuCIApp()));

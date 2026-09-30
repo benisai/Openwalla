@@ -1,12 +1,12 @@
-import 'package:luci_mobile/services/interfaces/auth_service_interface.dart';
-import 'package:luci_mobile/services/interfaces/api_service_interface.dart';
-import 'package:luci_mobile/services/auth_service.dart';
-import 'package:luci_mobile/services/api_service.dart';
-import 'package:luci_mobile/services/mock_auth_service.dart';
-import 'package:luci_mobile/services/mock_api_service.dart';
-import 'package:luci_mobile/services/secure_storage_service.dart';
-import 'package:luci_mobile/services/router_service.dart';
-import 'package:luci_mobile/services/throughput_service.dart';
+import 'package:openwalla/services/interfaces/auth_service_interface.dart';
+import 'package:openwalla/services/interfaces/api_service_interface.dart';
+import 'package:openwalla/services/auth_service.dart';
+import 'package:openwalla/services/api_service.dart';
+import 'package:openwalla/services/mock_auth_service.dart';
+import 'package:openwalla/services/mock_api_service.dart';
+import 'package:openwalla/services/secure_storage_service.dart';
+import 'package:openwalla/services/router_service.dart';
+import 'package:openwalla/services/throughput_service.dart';
 
 abstract class ServiceFactory {
   IAuthService createAuthService();

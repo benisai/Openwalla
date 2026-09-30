@@ -3,36 +3,36 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:luci_mobile/state/app_state.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/models/system_resource_metrics.dart';
-import 'package:luci_mobile/widgets/luci_app_bar.dart';
-import 'package:luci_mobile/widgets/luci_animation_system.dart';
-import 'package:luci_mobile/models/dashboard_preferences.dart';
-import 'package:luci_mobile/screens/adblock_screen.dart';
-import 'package:luci_mobile/screens/clients_screen.dart';
-import 'package:luci_mobile/screens/cron_scheduler_screen.dart';
-import 'package:luci_mobile/screens/dns_screen.dart';
-import 'package:luci_mobile/screens/ddns_screen.dart';
-import 'package:luci_mobile/screens/flows_screen.dart';
-import 'package:luci_mobile/screens/interfaces_screen.dart';
-import 'package:luci_mobile/screens/live_throughput_screen.dart';
-import 'package:luci_mobile/screens/multi_wan_screen.dart';
-import 'package:luci_mobile/screens/network_performance_screen.dart';
-import 'package:luci_mobile/screens/notifications_screen.dart';
-import 'package:luci_mobile/screens/quarantine_screen.dart';
-import 'package:luci_mobile/screens/rules_screen.dart';
-import 'package:luci_mobile/screens/router_setup_screen.dart';
-import 'package:luci_mobile/modules/parental_controls/screens/parental_controls_screen.dart';
-import 'package:luci_mobile/screens/simple_flows_screen.dart';
-import 'package:luci_mobile/screens/routes_screen.dart';
-import 'package:luci_mobile/screens/services_screen.dart';
-import 'package:luci_mobile/screens/smart_queue_screen.dart';
-import 'package:luci_mobile/screens/system_resources_screen.dart';
-import 'package:luci_mobile/screens/tor_screen.dart';
-import 'package:luci_mobile/screens/tailscale_screen.dart';
-import 'package:luci_mobile/screens/vpn_screen.dart';
-import 'package:luci_mobile/models/router.dart' as model;
+import 'package:openwalla/state/app_state.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/models/system_resource_metrics.dart';
+import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_animation_system.dart';
+import 'package:openwalla/models/dashboard_preferences.dart';
+import 'package:openwalla/screens/adblock_screen.dart';
+import 'package:openwalla/screens/clients_screen.dart';
+import 'package:openwalla/screens/cron_scheduler_screen.dart';
+import 'package:openwalla/screens/dns_screen.dart';
+import 'package:openwalla/screens/ddns_screen.dart';
+import 'package:openwalla/screens/flows_screen.dart';
+import 'package:openwalla/screens/interfaces_screen.dart';
+import 'package:openwalla/screens/live_throughput_screen.dart';
+import 'package:openwalla/screens/multi_wan_screen.dart';
+import 'package:openwalla/screens/network_performance_screen.dart';
+import 'package:openwalla/screens/notifications_screen.dart';
+import 'package:openwalla/screens/quarantine_screen.dart';
+import 'package:openwalla/screens/rules_screen.dart';
+import 'package:openwalla/screens/router_setup_screen.dart';
+import 'package:openwalla/modules/parental_controls/screens/parental_controls_screen.dart';
+import 'package:openwalla/screens/simple_flows_screen.dart';
+import 'package:openwalla/screens/routes_screen.dart';
+import 'package:openwalla/screens/services_screen.dart';
+import 'package:openwalla/screens/smart_queue_screen.dart';
+import 'package:openwalla/screens/system_resources_screen.dart';
+import 'package:openwalla/screens/tor_screen.dart';
+import 'package:openwalla/screens/tailscale_screen.dart';
+import 'package:openwalla/screens/vpn_screen.dart';
+import 'package:openwalla/models/router.dart' as model;
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -55,6 +55,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   static const double _openwallaRadius = 8;
   Timer? _summaryRefreshTimer;
   bool _summaryRefreshInFlight = false;
+  bool _dashboardRefreshInFlight = false;
   final PageController _shortcutPageController = PageController();
   int _shortcutPanelPage = 0;
 
@@ -69,10 +70,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   }
 
   Future<void> _loadDashboardAndWarmStatistics({bool force = false}) async {
-    final appState = ref.read(appStateProvider);
-    await appState.fetchDashboardData();
-    if (!mounted) return;
-    appState.warmStatisticsData(force: force);
+    if (_dashboardRefreshInFlight) return;
+    setState(() => _dashboardRefreshInFlight = true);
+    try {
+      final appState = ref.read(appStateProvider);
+      await appState.fetchDashboardData();
+      if (!mounted) return;
+      appState.warmStatisticsData(force: force);
+    } finally {
+      if (mounted) {
+        setState(() => _dashboardRefreshInFlight = false);
+      }
+    }
   }
 
   @override
@@ -1536,6 +1545,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     );
     if (!mounted || confirmed != true) return;
     await ref.read(appStateProvider).removeRouter(router.id);
+    if (!mounted) return;
+    if (ref.read(appStateProvider).routers.isEmpty) {
+      unawaited(
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil('/login', (route) => false),
+      );
+    }
   }
 
   @override
@@ -1552,6 +1569,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     return Scaffold(
       appBar: LuciAppBar(
         centerTitle: true,
+        balanceActions: true,
         title: null, // Always use titleWidget now
         titleWidget: routers.isNotEmpty
             ? Center(
@@ -1796,6 +1814,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                 ),
               )
             : _buildTitleWithTimestamp(headerText, appState),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh dashboard',
+            onPressed: _dashboardRefreshInFlight
+                ? null
+                : () => unawaited(_loadDashboardAndWarmStatistics(force: true)),
+            icon: _dashboardRefreshInFlight
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh_rounded),
+          ),
+        ],
       ),
       body: Stack(children: [_buildBody(appState)]),
     );

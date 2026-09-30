@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/models/client.dart';
-import 'package:luci_mobile/state/app_state.dart';
-import 'package:luci_mobile/widgets/luci_app_bar.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/models/client.dart';
+import 'package:openwalla/state/app_state.dart';
+import 'package:openwalla/widgets/luci_app_bar.dart';
 
 class SchedulerScreen extends ConsumerStatefulWidget {
   const SchedulerScreen({super.key});

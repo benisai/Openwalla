@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/state/app_state.dart';
-import 'package:luci_mobile/widgets/luci_app_bar.dart';
-import 'package:luci_mobile/widgets/openwrt_feature_gate.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/state/app_state.dart';
+import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/openwrt_feature_gate.dart';
 
 class MultiWanScreen extends ConsumerStatefulWidget {
   const MultiWanScreen({super.key});

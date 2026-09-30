@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:luci_mobile/screens/dashboard_screen.dart';
-import 'package:luci_mobile/screens/more_screen.dart';
-import 'package:luci_mobile/screens/statistics_screen.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/widgets/luci_navigation_enhancements.dart';
+import 'package:openwalla/screens/dashboard_screen.dart';
+import 'package:openwalla/screens/more_screen.dart';
+import 'package:openwalla/screens/statistics_screen.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/widgets/luci_navigation_enhancements.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class MainScreen extends ConsumerStatefulWidget {

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:luci_mobile/models/cron_job.dart';
+import 'package:openwalla/models/cron_job.dart';
 
 void main() {
   test('cron document preserves unrelated lines when editing', () {

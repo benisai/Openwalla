@@ -3,18 +3,19 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/models/dashboard_preferences.dart';
-import 'package:luci_mobile/widgets/luci_app_bar.dart';
-import 'package:luci_mobile/widgets/ssh_console_sheet.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/models/dashboard_preferences.dart';
+import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/ssh_console_sheet.dart';
 
-enum _SetupProfile { basic, standard, advanced, everything, remove }
+enum _SetupProfile { basic, standard, advanced, everything, flows, remove }
 
 extension on _SetupProfile {
   String get title => switch (this) {
     _SetupProfile.basic => 'Basic Install',
     _SetupProfile.standard => 'Standard Install',
     _SetupProfile.advanced => 'Advanced Install',
+    _SetupProfile.flows => 'Flows Install',
     _SetupProfile.everything => 'Everything',
     _SetupProfile.remove => 'Remove Installed Apps',
   };
@@ -24,9 +25,12 @@ extension on _SetupProfile {
       'Core packages and helpers required for Openwalla to function.',
     _SetupProfile.standard =>
       'Basic plus AdBlock, Parental Controls, Quarantine, Smart Queue, DDNS, and WireGuard.',
-    _SetupProfile.advanced => 'Basic and Standard plus PBR.',
+    _SetupProfile.advanced =>
+      'Basic and Standard plus PBR and the Netify Detailed Flow stack.',
+    _SetupProfile.flows =>
+      'Install or redeploy Netify and the Detailed Flow collector.',
     _SetupProfile.everything =>
-      'Basic, Standard, and Advanced plus Detailed and Simple Flows.',
+      'All bundled router features except Network Flows. Install flows separately.',
     _SetupProfile.remove =>
       'Choose installed Openwalla components to remove from the router.',
   };
@@ -35,6 +39,7 @@ extension on _SetupProfile {
     _SetupProfile.basic => Icons.foundation_rounded,
     _SetupProfile.standard => Icons.auto_awesome_rounded,
     _SetupProfile.advanced => Icons.tune_rounded,
+    _SetupProfile.flows => Icons.account_tree_rounded,
     _SetupProfile.everything => Icons.apps_rounded,
     _SetupProfile.remove => Icons.delete_sweep_outlined,
   };
@@ -79,13 +84,9 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
     return switch (_selectedProfile) {
       _SetupProfile.basic => _basicFeatures,
       _SetupProfile.standard => _standardFeatures,
-      _SetupProfile.advanced => [..._standardFeatures, 'pbr'],
-      _SetupProfile.everything => [
-        ..._standardFeatures,
-        'pbr',
-        'netify',
-        'conntrack',
-      ],
+      _SetupProfile.advanced => [..._standardFeatures, 'pbr', 'netify'],
+      _SetupProfile.flows => const ['netify'],
+      _SetupProfile.everything => [..._standardFeatures, 'pbr'],
       _ => const [],
     };
   }
@@ -421,7 +422,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
           ? _WizardIntroCard(
               title: 'Install Detailed Flow Support',
               subtitle:
-                  'This focused setup installs Netify, sqlite support, the Openwalla Netify collector, and the helper service needed for Detailed Flow data. For best results, use a router with at least 512 MB RAM and a 4-core CPU.',
+                  'This focused setup installs Netify, sqlite support, and the Openwalla Netify collector needed for Detailed Flow data. For best results, use a router with at least 512 MB RAM and a 4-core CPU.',
               icon: Icons.account_tree_rounded,
             )
           : _SetupPermissionCard(
@@ -473,14 +474,11 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
           subtitle: profile.description,
           child: _InstallerList(items: _installLabels(profile)),
         ),
-        if (profile == _SetupProfile.everything) ...[
-          const SizedBox(height: 12),
-          const _FlowInstallWarningCard(),
-        ],
         const SizedBox(height: 12),
         _SetupPermissionCard(
           isInstalling: _isInstalling,
-          extraSoftware: _selectedFeatures.length - _basicFeatures.length,
+          extraSoftware: (_selectedFeatures.length - _basicFeatures.length)
+              .clamp(0, _selectedFeatures.length),
           featureCount: _selectedFeatures.length,
           onToggleDetails: () => setState(() => _showDetails = true),
         ),
@@ -509,11 +507,16 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
       _SetupProfile.advanced => [
         ..._installLabels(_SetupProfile.standard),
         'Policy-Based Routing (PBR)',
+        ..._installLabels(_SetupProfile.flows),
+      ],
+      _SetupProfile.flows => const [
+        'Netify deep-packet inspection service',
+        'Detailed Flow SQLite collector',
+        'Hybrid relational and JSON flow database',
       ],
       _SetupProfile.everything => [
-        ..._installLabels(_SetupProfile.advanced),
-        'Detailed Flows (Netify)',
-        'Simple Flows (Conntrack)',
+        ..._installLabels(_SetupProfile.standard),
+        'Policy-Based Routing (PBR)',
       ],
       _SetupProfile.remove => const [],
     };
@@ -839,38 +842,6 @@ class _InstallerList extends StatelessWidget {
             ),
           )
           .toList(),
-    );
-  }
-}
-
-class _FlowInstallWarningCard extends StatelessWidget {
-  const _FlowInstallWarningCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Card(
-      color: colorScheme.errorContainer.withValues(alpha: 0.18),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(Icons.warning_amber_rounded, color: colorScheme.primary),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Flow collectors can be heavy. Routers with less than 512 MB RAM or fewer than 4 CPU cores may slow down or crash.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurface,
-                  fontWeight: FontWeight.w800,
-                  height: 1.35,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

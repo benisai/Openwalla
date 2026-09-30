@@ -5,8 +5,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/models/client.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/models/client.dart';
 import '../models/parental_profile.dart';
 import '../models/parental_controls_store.dart';
 

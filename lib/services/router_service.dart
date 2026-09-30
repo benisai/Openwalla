@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-import 'package:luci_mobile/models/router.dart' as model;
-import 'package:luci_mobile/services/secure_storage_service.dart';
+import 'package:openwalla/models/router.dart' as model;
+import 'package:openwalla/services/secure_storage_service.dart';
 
 class RouterService {
   final SecureStorageService _secureStorageService = SecureStorageService();

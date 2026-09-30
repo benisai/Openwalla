@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:luci_mobile/widgets/openwalla_toast.dart';
+import 'package:openwalla/widgets/openwalla_toast.dart';
 
 extension LuciToastContext on BuildContext {
   void showToastLoading(String message, {String? subtitle, String? actionKey}) {

@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/main.dart';
+import 'package:openwalla/main.dart';
 import 'package:flutter/services.dart';
-import 'package:luci_mobile/models/interface.dart';
-import 'package:luci_mobile/models/wifi_scan_result.dart';
-import 'package:luci_mobile/state/app_state.dart';
+import 'package:openwalla/models/interface.dart';
+import 'package:openwalla/models/wifi_scan_result.dart';
+import 'package:openwalla/state/app_state.dart';
 import 'dart:math';
-import 'package:luci_mobile/widgets/luci_app_bar.dart';
-import 'package:luci_mobile/screens/router_dashboard_settings_screen.dart';
-import 'package:luci_mobile/design/luci_design_system.dart';
-import 'package:luci_mobile/widgets/luci_loading_states.dart';
-import 'package:luci_mobile/widgets/luci_refresh_components.dart';
+import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/screens/router_dashboard_settings_screen.dart';
+import 'package:openwalla/design/luci_design_system.dart';
+import 'package:openwalla/widgets/luci_loading_states.dart';
+import 'package:openwalla/widgets/luci_refresh_components.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 bool shouldShowWiredInterface({
@@ -62,6 +62,7 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
   bool _isLoadingPublicIp = false;
   final Set<String> _updatingWirelessRadios = <String>{};
   final Set<String> _updatingWirelessInterfaces = <String>{};
+  final Set<String> _updatingNetworkInterfaces = <String>{};
   List<OpenwrtPortForward> _portForwards = const [];
   List<OpenwrtFirewallZone> _firewallZones = const [];
   OpenwrtFirewallDefaults _firewallDefaults = const OpenwrtFirewallDefaults(
@@ -602,6 +603,107 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
     );
     if (updated == true && mounted) {
       await ref.read(appStateProvider).fetchDashboardData();
+    }
+  }
+
+  Future<bool> _confirmInterfaceAction(
+    NetworkInterface interface, {
+    required bool restart,
+  }) async {
+    final action = restart
+        ? 'Restart'
+        : interface.isUp
+        ? 'Stop'
+        : 'Turn On';
+    final isLan = _normalizeInterfaceKey(interface.name) == 'lan';
+    final message = restart
+        ? 'Restarting ${interface.name.toUpperCase()} will briefly interrupt devices using this interface.'
+        : interface.isUp
+        ? isLan
+              ? 'Stopping LAN will disconnect this app and devices using the LAN interface. You may need another connection or router access method to turn it back on.'
+              : 'Stopping ${interface.name.toUpperCase()} will disconnect devices using this interface.'
+        : 'Turn on ${interface.name.toUpperCase()} now?';
+    return await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text('$action ${interface.name.toUpperCase()}?'),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                style: !restart && interface.isUp
+                    ? FilledButton.styleFrom(
+                        backgroundColor: Theme.of(
+                          dialogContext,
+                        ).colorScheme.error,
+                        foregroundColor: Theme.of(
+                          dialogContext,
+                        ).colorScheme.onError,
+                      )
+                    : null,
+                child: Text(action),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Future<void> _runInterfaceAction(
+    NetworkInterface interface, {
+    required bool restart,
+  }) async {
+    final name = interface.name;
+    if (_updatingNetworkInterfaces.contains(name)) return;
+    if (!await _confirmInterfaceAction(interface, restart: restart) ||
+        !mounted) {
+      return;
+    }
+
+    setState(() => _updatingNetworkInterfaces.add(name));
+    try {
+      final appState = ref.read(appStateProvider);
+      if (restart) {
+        await appState.restartNetworkInterface(name, context: context);
+      } else {
+        await appState.setNetworkInterfaceOperationalState(
+          name,
+          enabled: !interface.isUp,
+          context: context,
+        );
+      }
+      if (!mounted) return;
+      final action = restart
+          ? 'restart'
+          : interface.isUp
+          ? 'stop'
+          : 'turn on';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${interface.name.toUpperCase()} $action scheduled.'),
+        ),
+      );
+      Future<void>.delayed(const Duration(seconds: 4), () async {
+        if (!mounted) return;
+        await ref.read(appStateProvider).fetchDashboardData();
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not update ${interface.name.toUpperCase()}: $error',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _updatingNetworkInterfaces.remove(name));
+      }
     }
   }
 
@@ -1951,28 +2053,54 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
           child: _buildStatsRow(context, interface.stats),
         ),
-        if (canEditLan) ...[
-          const SizedBox(height: 8),
-          const Divider(height: 1, indent: 16, endIndent: 16),
-          const SizedBox(height: 12),
-          Center(
-            child: FilledButton.tonalIcon(
-              onPressed: () => _showEditInterfaceSheet(interface),
-              icon: const Icon(Icons.tune_rounded, size: 18),
-              label: const Text('Edit LAN Settings'),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 18,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(999),
+        const SizedBox(height: 8),
+        const Divider(height: 1, indent: 16, endIndent: 16),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _updatingNetworkInterfaces.contains(interface.name)
+                      ? null
+                      : () => _runInterfaceAction(interface, restart: false),
+                  icon: Icon(
+                    interface.isUp
+                        ? Icons.stop_circle_outlined
+                        : Icons.play_circle_outline_rounded,
+                    size: 18,
+                  ),
+                  label: Text(interface.isUp ? 'Stop' : 'On'),
                 ),
               ),
-            ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _updatingNetworkInterfaces.contains(interface.name)
+                      ? null
+                      : () => _runInterfaceAction(interface, restart: true),
+                  icon: const Icon(Icons.restart_alt_rounded, size: 18),
+                  label: const Text('Restart'),
+                ),
+              ),
+              if (canEditLan) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.tonalIcon(
+                    onPressed:
+                        _updatingNetworkInterfaces.contains(interface.name)
+                        ? null
+                        : () => _showEditInterfaceSheet(interface),
+                    icon: const Icon(Icons.tune_rounded, size: 18),
+                    label: const Text('Edit'),
+                  ),
+                ),
+              ],
+            ],
           ),
-          const SizedBox(height: 14),
-        ],
+        ),
+        const SizedBox(height: 14),
       ],
     );
   }
@@ -4935,9 +5063,16 @@ class _RepeaterConnectionSheetState
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
+      final detail = e
+          .toString()
+          .replaceFirst('Bad state: ', '')
+          .replaceFirst('StateError: ', '')
+          .trim();
       setState(() {
         _isJoining = false;
-        _error = 'Join failed: $e';
+        _error = detail.isEmpty
+            ? 'Could not connect to $ssid.'
+            : 'Could not connect to $ssid. $detail';
       });
     }
   }

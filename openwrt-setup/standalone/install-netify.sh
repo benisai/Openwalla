@@ -22,6 +22,7 @@ install_first_available_pkg "sqlite-cli" sqlite3-cli sqlite3
 
 ensure_openwalla_config
 ensure_uci_section collector netify
+ensure_uci_section flow_stats flow_stats
 ensure_uci_section features ui
 
 install_file "$FILES_DIR/openwalla-netify-collector.sh" /usr/bin/openwalla-netify-collector 0755
@@ -37,6 +38,11 @@ set_uci openwalla.collector.retention_rows "500000"
 set_uci openwalla.collector.stream_timeout "45"
 set_uci openwalla.collector.exclude_protocols "MDNS,DNS,QUIC,DHCPv6,ICMP"
 set_uci openwalla.collector.ignore_wan_source "1"
+set_uci_default openwalla.flow_stats.enabled "0"
+set_uci_default openwalla.flow_stats.db_path "/tmp/openwalla-netify-flow-stats.sqlite"
+set_uci_default openwalla.flow_stats.poll "5"
+set_uci_default openwalla.flow_stats.bucket_seconds "300"
+set_uci_default openwalla.flow_stats.retention_seconds "2592000"
 uci commit openwalla
 
 NETIFYD_CONF="/etc/netifyd.conf"

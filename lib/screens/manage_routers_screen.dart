@@ -1,12 +1,13 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/models/router.dart' as model;
-import 'package:luci_mobile/widgets/luci_app_bar.dart';
-import 'package:luci_mobile/utils/url_parser.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/models/router.dart' as model;
+import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/utils/url_parser.dart';
 
 class ManageRoutersScreen extends ConsumerStatefulWidget {
   const ManageRoutersScreen({super.key, this.isFromLogin = false});
@@ -271,6 +272,21 @@ class _ManageRoutersScreenState extends ConsumerState<ManageRoutersScreen> {
                                     );
                                   } else {
                                     await appState.removeRouter(router.id);
+                                  }
+                                  if (!context.mounted) return;
+                                  if (appState.routers.isEmpty) {
+                                    if (widget.isFromLogin) {
+                                      Navigator.of(context).pop();
+                                    } else {
+                                      unawaited(
+                                        Navigator.of(
+                                          context,
+                                        ).pushNamedAndRemoveUntil(
+                                          '/login',
+                                          (route) => false,
+                                        ),
+                                      );
+                                    }
                                   }
                                 }
                               },

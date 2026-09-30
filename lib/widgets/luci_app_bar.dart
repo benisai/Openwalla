@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:luci_mobile/design/luci_design_system.dart';
+import 'package:openwalla/design/luci_design_system.dart';
 
 class LuciAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String? title;
   final Widget? titleWidget;
   final bool centerTitle;
   final bool showBack;
+  final bool balanceActions;
   final List<Widget>? actions;
   final Color? backgroundColor;
   final double elevation;
@@ -17,6 +18,7 @@ class LuciAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.titleWidget,
     this.centerTitle = true,
     this.showBack = false,
+    this.balanceActions = false,
     this.actions,
     this.backgroundColor,
     this.elevation = 0.0,
@@ -42,6 +44,11 @@ class LuciAppBar extends StatelessWidget implements PreferredSizeWidget {
               onPressed: onBack ?? () => Navigator.of(context).maybePop(),
               tooltip: 'Back',
             )
+          : balanceActions && actions?.isNotEmpty == true
+          ? const SizedBox.shrink()
+          : null,
+      leadingWidth: balanceActions && !showBack && actions?.isNotEmpty == true
+          ? 48.0 * actions!.length
           : null,
       title:
           titleWidget ??

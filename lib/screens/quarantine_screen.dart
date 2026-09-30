@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/models/client.dart';
-import 'package:luci_mobile/state/app_state.dart';
-import 'package:luci_mobile/widgets/luci_app_bar.dart';
-import 'package:luci_mobile/widgets/luci_toast.dart';
-import 'package:luci_mobile/widgets/openwrt_feature_gate.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/models/client.dart';
+import 'package:openwalla/state/app_state.dart';
+import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
+import 'package:openwalla/widgets/openwrt_feature_gate.dart';
 
 class QuarantineScreen extends ConsumerStatefulWidget {
   const QuarantineScreen({super.key});
@@ -97,46 +97,6 @@ class _QuarantineScreenState extends ConsumerState<QuarantineScreen> {
     }
   }
 
-  Future<void> _setInterval(int seconds) async {
-    final snapshot = _snapshot;
-    if (snapshot == null || _working) return;
-    setState(() => _working = true);
-    const actionKey = 'quarantine-interval';
-    context.showToastLoading('Saving scan interval...', actionKey: actionKey);
-    try {
-      final state = await ref
-          .read(appStateProvider)
-          .saveQuarantineSettings(
-            enabled: snapshot.enabled,
-            intervalSeconds: seconds,
-            context: context,
-          );
-      if (!mounted) return;
-      setState(() {
-        _snapshot = OpenwallaQuarantineSnapshot(
-          enabled: state.enabled,
-          running: state.running,
-          intervalSeconds: state.intervalSeconds,
-          devices: snapshot.devices,
-        );
-      });
-      context.showToastSuccess(
-        'Scan interval updated',
-        subtitle: 'Checking every ${state.intervalSeconds} seconds.',
-        actionKey: actionKey,
-      );
-    } catch (error) {
-      if (!mounted) return;
-      context.showToastError(
-        'Unable to save scan interval',
-        subtitle: error.toString().replaceFirst('Bad state: ', ''),
-        actionKey: actionKey,
-      );
-    } finally {
-      if (mounted) setState(() => _working = false);
-    }
-  }
-
   Future<void> _scanNow() async {
     if (_working) return;
     setState(() => _working = true);
@@ -184,34 +144,34 @@ class _QuarantineScreenState extends ConsumerState<QuarantineScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    setState(() => _working = true);
     final actionKey = 'quarantine-release-${client.macAddress}';
-    context.showToastLoading(
-      'Releasing device...',
+    final snapshot = _snapshot;
+    if (snapshot != null) {
+      final normalizedMac = client.macAddress.toUpperCase().replaceAll(
+        '-',
+        ':',
+      );
+      setState(() {
+        _snapshot = OpenwallaQuarantineSnapshot(
+          enabled: snapshot.enabled,
+          running: snapshot.running,
+          intervalSeconds: snapshot.intervalSeconds,
+          devices: snapshot.devices
+              .where(
+                (device) =>
+                    device.macAddress.toUpperCase().replaceAll('-', ':') !=
+                    normalizedMac,
+              )
+              .toList(),
+        );
+      });
+    }
+    ref.read(appStateProvider).queueClientInternetUnblock(client);
+    context.showToastSuccess(
+      'Device released',
       subtitle: client.displayName,
       actionKey: actionKey,
     );
-    try {
-      await ref
-          .read(appStateProvider)
-          .releaseQuarantinedDevice(client, context: context);
-      await _load();
-      if (!mounted) return;
-      context.showToastSuccess(
-        'Device released',
-        subtitle: client.displayName,
-        actionKey: actionKey,
-      );
-    } catch (error) {
-      if (!mounted) return;
-      context.showToastError(
-        'Unable to release device',
-        subtitle: error.toString().replaceFirst('Bad state: ', ''),
-        actionKey: actionKey,
-      );
-    } finally {
-      if (mounted) setState(() => _working = false);
-    }
   }
 
   @override
@@ -280,7 +240,6 @@ class _QuarantineScreenState extends ConsumerState<QuarantineScreen> {
           snapshot: snapshot,
           working: _working,
           onEnabledChanged: _setEnabled,
-          onIntervalChanged: _setInterval,
           onScanNow: _scanNow,
         ),
         const SizedBox(height: 20),
@@ -326,14 +285,12 @@ class _QuarantineControlCard extends StatelessWidget {
   final OpenwallaQuarantineSnapshot snapshot;
   final bool working;
   final ValueChanged<bool> onEnabledChanged;
-  final ValueChanged<int> onIntervalChanged;
   final VoidCallback onScanNow;
 
   const _QuarantineControlCard({
     required this.snapshot,
     required this.working,
     required this.onEnabledChanged,
-    required this.onIntervalChanged,
     required this.onScanNow,
   });
 
@@ -343,14 +300,6 @@ class _QuarantineControlCard extends StatelessWidget {
     final activeColor = snapshot.enabled
         ? const Color(0xFF20CF70)
         : colors.onSurfaceVariant;
-    final intervals = <int>{
-      10,
-      15,
-      30,
-      60,
-      120,
-      snapshot.intervalSeconds,
-    }.toList()..sort();
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -405,25 +354,12 @@ class _QuarantineControlCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: DropdownButtonFormField<int>(
-                    initialValue: snapshot.intervalSeconds,
+                  child: InputDecorator(
                     decoration: const InputDecoration(
                       labelText: 'Scan interval',
                       prefixIcon: Icon(Icons.timer_outlined),
                     ),
-                    items: intervals
-                        .map(
-                          (seconds) => DropdownMenuItem(
-                            value: seconds,
-                            child: Text('$seconds seconds'),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: working
-                        ? null
-                        : (value) {
-                            if (value != null) onIntervalChanged(value);
-                          },
+                    child: Text('${snapshot.intervalSeconds} seconds'),
                   ),
                 ),
                 const SizedBox(width: 10),

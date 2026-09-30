@@ -6,9 +6,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/widgets/luci_toast.dart';
-import 'package:luci_mobile/widgets/ssh_console_sheet.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
+import 'package:openwalla/widgets/ssh_console_sheet.dart';
 import '../models/parental_profile.dart';
 import '../controllers/parental_controls_controller.dart';
 import '../widgets/add_edit_profile_dialog.dart';

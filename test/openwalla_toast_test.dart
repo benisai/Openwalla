@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:luci_mobile/widgets/openwalla_toast.dart';
+import 'package:openwalla/widgets/openwalla_toast.dart';
 
 void main() {
   testWidgets('replaces a loading toast with a timed success toast', (

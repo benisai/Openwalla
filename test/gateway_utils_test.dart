@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:luci_mobile/utils/gateway_utils.dart';
+import 'package:openwalla/utils/gateway_utils.dart';
 
 void main() {
   test('proposes the first address on the local IPv4 subnet', () {

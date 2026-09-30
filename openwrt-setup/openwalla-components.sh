@@ -5,8 +5,8 @@
 
 set -u
 
-COMPONENT_VERSION="2026.09.25.9"
 RAW_BASE="${OPENWALLA_RAW_BASE:-https://raw.githubusercontent.com/benisai/openwalla-apk/main/openwrt-setup}"
+VERSION_URL="${OPENWALLA_VERSION_URL:-${RAW_BASE%/openwrt-setup}/pub_script_version.yaml}"
 ACTION="${1:-status}"
 TMP_DIR="/tmp/openwalla-component-update.$$"
 UPDATED=0
@@ -123,6 +123,14 @@ check_file() {
 }
 
 mkdir -p "$TMP_DIR"
+VERSION_FILE="$TMP_DIR/pub_script_version.yaml"
+COMPONENT_VERSION="unknown"
+if download "$VERSION_URL" "$VERSION_FILE"; then
+	COMPONENT_VERSION="$(awk -F ': *' '$1 == "version" { print $2; exit }' "$VERSION_FILE")"
+	[ -n "$COMPONENT_VERSION" ] || COMPONENT_VERSION="unknown"
+else
+	echo "ERROR|Unable to read published script version"
+fi
 echo "AVAILABLE_VERSION|$COMPONENT_VERSION"
 echo "INSTALLED_VERSION|$(uci -q get openwalla.core.component_version 2>/dev/null || echo unknown)"
 
@@ -144,8 +152,6 @@ files/openwalla-device-traffic-summary.sh|/usr/bin/openwalla-device-traffic-summ
 files/openwalla-paternal-pause.sh|/usr/bin/openwalla-paternal-pause|0755|
 files/openwalla-scheduler.sh|/usr/bin/openwalla-scheduler|0755|
 files/openwalla-parental.sh|/usr/bin/openwalla-parental|0755|
-files/openwalla-device-quarantine.sh|/usr/bin/openwalla-device-quarantine|0755|openwalla-device-quarantine
-files/openwalla-device-quarantine.init|/etc/init.d/openwalla-device-quarantine|0755|openwalla-device-quarantine
 files/openwalla-device-quarantine.hotplug|/etc/hotplug.d/dhcp/95-openwalla-quarantine|0755|
 files/openwalla-device-quarantine.hotplug|/etc/hotplug.d/neigh/95-openwalla-quarantine|0755|
 files/openwalla-state-sync.sh|/usr/bin/openwalla-state-sync|0755|openwalla-state-sync

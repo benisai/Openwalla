@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/screens/router_setup_screen.dart';
-import 'package:luci_mobile/state/app_state.dart';
-import 'package:luci_mobile/widgets/ssh_console_sheet.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/screens/router_setup_screen.dart';
+import 'package:openwalla/state/app_state.dart';
+import 'package:openwalla/widgets/ssh_console_sheet.dart';
 
 class OpenwrtFeatureGate extends ConsumerStatefulWidget {
   final OpenwrtFeature feature;

@@ -4,9 +4,9 @@
 # Maintains /tmp/openwalla-devices.sqlite as the app's local device inventory.
 # MAC address is the primary key so renamed devices, quarantine state, usage
 # totals, and static IP metadata can stay attached to the same client over time.
-# Device discovery is gathered from DHCP leases, ARP, ip neigh, and wireless
-# station data. nlbwmon totals are copied into total_down/total_up when nlbw is
-# present. Quarantined devices are detected from Openwalla firewall rule names.
+# Device discovery is gathered from IPv4 DHCP leases, ARP, IPv4 neighbors, and
+# wireless station data. When openwalla.quarantine.enabled is set, newly seen
+# IPv4 devices are quarantined during this same collection pass.
 # Existing hostnames in the DB are preserved, so app-side device renames are not
 # overwritten by DHCP/wireless names.
 # Run /usr/bin/openwalla-devices-collector --once to trigger an immediate scan
@@ -18,12 +18,15 @@ PATH="/usr/sbin:/usr/bin:/sbin:/bin"
 export PATH
 
 DEFAULT_DB="/tmp/openwalla-devices.sqlite"
-DEFAULT_POLL_SECONDS="60"
+DEFAULT_POLL_SECONDS="15"
 DEFAULT_OFFLINE_AFTER_SECONDS="90"
 DEFAULT_LAN_NETWORK="lan"
 DEFAULT_LAN_DEVICE="br-lan"
 DEFAULT_RULE_PREFIX="openwalla_quarantine_"
+DEFAULT_STATE_FILE="/tmp/openwalla-quarantine-known.txt"
+DEFAULT_NOTIFICATIONS_DB="/tmp/openwalla-notifications.sqlite"
 LOG_FILE="/tmp/openwalla-devices-collector.log"
+LOCK_DIR="/tmp/openwalla-devices-collector.lock"
 
 DB_PATH="$DEFAULT_DB"
 POLL_SECONDS="$DEFAULT_POLL_SECONDS"
@@ -31,6 +34,9 @@ OFFLINE_AFTER_SECONDS="$DEFAULT_OFFLINE_AFTER_SECONDS"
 LAN_NETWORK="$DEFAULT_LAN_NETWORK"
 LAN_DEVICE="$DEFAULT_LAN_DEVICE"
 RULE_PREFIX="$DEFAULT_RULE_PREFIX"
+STATE_FILE="$DEFAULT_STATE_FILE"
+NOTIFICATIONS_DB="$DEFAULT_NOTIFICATIONS_DB"
+QUARANTINE_ENABLED="0"
 SQLITE_BIN=""
 
 log() {
@@ -66,6 +72,17 @@ uci_get() {
 	uci -q get "$1" 2>/dev/null || true
 }
 
+is_enabled_flag() {
+	case "$1" in
+	1|on|true|yes|enabled) return 0 ;;
+	*) return 1 ;;
+	esac
+}
+
+sanitize_name() {
+	printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr ' ' '_' | sed 's/[^a-z0-9_.-]//g' | cut -c1-24
+}
+
 find_sqlite_bin() {
 	if command -v sqlite3 >/dev/null 2>&1; then
 		SQLITE_BIN="$(command -v sqlite3)"
@@ -93,6 +110,49 @@ sql_exec() {
 	return 0
 }
 
+is_ipv4() {
+	printf '%s\n' "$1" | awk -F. '
+		NF != 4 { exit 1 }
+		{
+			for (i = 1; i <= 4; i++) {
+				if ($i !~ /^[0-9]+$/ || $i < 0 || $i > 255) exit 1
+			}
+		}
+	'
+}
+
+is_hidden_mac() {
+	local mac esc_mac hidden
+	mac="$1"
+	esc_mac="$(sql_escape "$mac")"
+	hidden="$("$SQLITE_BIN" "$DB_PATH" "SELECT hidden FROM devices WHERE lower(mac)='$esc_mac' LIMIT 1;" 2>/dev/null || true)"
+	[ "$hidden" = "1" ]
+}
+
+collect_router_macs() {
+	local address_file mac
+	for address_file in /sys/class/net/*/address; do
+		[ -r "$address_file" ] || continue
+		mac="$(tr '[:upper:]' '[:lower:]' <"$address_file" 2>/dev/null || true)"
+		case "$mac" in
+		[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f])
+			[ "$mac" = "00:00:00:00:00:00" ] || echo "$mac"
+			;;
+		esac
+	done | sort -u
+}
+
+is_router_mac() {
+	local candidate own_mac
+	candidate="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+	while IFS= read -r own_mac; do
+		[ "$candidate" = "$own_mac" ] && return 0
+	done <<EOF
+$(collect_router_macs)
+EOF
+	return 1
+}
+
 load_config() {
 	local value
 
@@ -112,6 +172,18 @@ load_config() {
 	value="$(sanitize_text "$value")"
 	[ -n "$value" ] && RULE_PREFIX="$value"
 
+	value="$(uci_get openwalla.quarantine.enabled)"
+	value="$(sanitize_text "$value")"
+	[ -n "$value" ] && QUARANTINE_ENABLED="$value"
+
+	value="$(uci_get openwalla.quarantine.state_file)"
+	value="$(sanitize_text "$value")"
+	[ -n "$value" ] && STATE_FILE="$value"
+
+	value="$(uci_get openwalla.notifications.db_path)"
+	value="$(sanitize_text "$value")"
+	[ -n "$value" ] && NOTIFICATIONS_DB="$value"
+
 	value="$(uci_get openwalla.quarantine.lan_network)"
 	value="$(sanitize_text "$value")"
 	[ -n "$value" ] && LAN_NETWORK="$value"
@@ -130,7 +202,7 @@ load_config() {
 
 	POLL_SECONDS="$(sanitize_int "$POLL_SECONDS" "$DEFAULT_POLL_SECONDS")"
 	OFFLINE_AFTER_SECONDS="$(sanitize_int "$OFFLINE_AFTER_SECONDS" "$DEFAULT_OFFLINE_AFTER_SECONDS")"
-	[ "$POLL_SECONDS" -lt 10 ] && POLL_SECONDS=60
+	[ "$POLL_SECONDS" -lt 10 ] && POLL_SECONDS="$DEFAULT_POLL_SECONDS"
 	[ "$OFFLINE_AFTER_SECONDS" -lt "$POLL_SECONDS" ] && OFFLINE_AFTER_SECONDS=$((POLL_SECONDS * 5))
 }
 
@@ -186,7 +258,7 @@ collect_arp() {
 }
 
 collect_ip_neigh() {
-	ip neigh show dev "$LAN_DEVICE" 2>/dev/null | awk '{
+	ip -4 neigh show dev "$LAN_DEVICE" 2>/dev/null | awk '{
 		ip=$1
 		mac=""
 		active=0
@@ -284,8 +356,122 @@ collect_quarantined() {
 	' | sort -u
 }
 
+ensure_state_file() {
+	local dir
+	dir="$(dirname "$STATE_FILE")"
+	mkdir -p "$dir" 2>/dev/null || true
+	[ -f "$STATE_FILE" ] || : >"$STATE_FILE"
+}
+
+is_known_mac() {
+	grep -qx "$1" "$STATE_FILE" 2>/dev/null
+}
+
+remember_mac() {
+	ensure_state_file
+	is_known_mac "$1" || printf '%s\n' "$1" >>"$STATE_FILE"
+}
+
+rule_name_for() {
+	local mac safe
+	mac="$1"
+	safe="$(sanitize_name "${2:-}")"
+	[ -n "$safe" ] && [ "$safe" != "*" ] || safe="$(printf '%s' "$mac" | tr -d ':')"
+	printf '%s%s' "$RULE_PREFIX" "$safe"
+}
+
+rule_exists_by_name() {
+	uci -q show firewall 2>/dev/null | grep -Fq "name='$1'"
+}
+
+add_quarantine_rule() {
+	local name="$1" mac="$2" destination="$3" sid
+	sid="$(uci add firewall rule 2>/dev/null || true)"
+	[ -n "$sid" ] || return 1
+	uci set firewall."$sid".name="$name"
+	uci set firewall."$sid".src="lan"
+	uci set firewall."$sid".dest="$destination"
+	uci set firewall."$sid".src_mac="$mac"
+	uci set firewall."$sid".proto="all"
+	uci set firewall."$sid".target="REJECT"
+	uci set firewall."$sid".family="ipv4"
+	uci set firewall."$sid".enabled="1"
+}
+
+remove_quarantine_rules_for_mac() {
+	local mac="$1" section name source changed pass
+	changed=0
+	for pass in 1 2 3 4; do
+		for section in $(uci -q show firewall 2>/dev/null | sed -n 's/^firewall\.\([^.=]*\)=rule$/\1/p'); do
+			name="$(uci_get firewall."$section".name)"
+			source="$(uci_get firewall."$section".src_mac | tr '[:upper:]' '[:lower:]')"
+			case "$name" in
+			"${RULE_PREFIX}"*)
+				if [ "$source" = "$mac" ]; then
+					uci -q delete firewall."$section" >/dev/null 2>&1 || true
+					changed=1
+				fi
+				;;
+			esac
+		done
+	done
+	[ "$changed" = "1" ]
+}
+
+write_quarantine_notification() {
+	local message esc_message
+	message="$1"
+	esc_message="$(sql_escape "$message")"
+	mkdir -p "$(dirname "$NOTIFICATIONS_DB")" 2>/dev/null || true
+	"$SQLITE_BIN" "$NOTIFICATIONS_DB" "CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER)), app TEXT NOT NULL DEFAULT '', msg TEXT NOT NULL DEFAULT '', archived INTEGER NOT NULL DEFAULT 0, \"delete\" INTEGER NOT NULL DEFAULT 0); INSERT INTO notifications (app, msg, archived, \"delete\") VALUES ('device-quarantine', '$esc_message', 0, 0);" >/dev/null 2>&1 || true
+}
+
+quarantine_new_device() {
+	local mac="$1" ip="$2" host="$3" base lan wan esc_mac esc_ip esc_host
+	base="$(rule_name_for "$mac" "$host")"
+	lan="${base}_lan"
+	wan="${base}_wan"
+	rule_exists_by_name "$lan" || add_quarantine_rule "$lan" "$mac" "lan" || true
+	rule_exists_by_name "$wan" || add_quarantine_rule "$wan" "$mac" "wan" || true
+	esc_mac="$(sql_escape "$mac")"
+	esc_ip="$(sql_escape "$ip")"
+	esc_host="$(sql_escape "$host")"
+	sql_exec "INSERT INTO devices (mac, ip, hostname, quarantined, last_seen, status) VALUES ('$esc_mac', '$esc_ip', '$esc_host', 1, CAST(strftime('%s','now') AS INTEGER), 'blocked') ON CONFLICT(mac) DO UPDATE SET ip=excluded.ip, hostname=CASE WHEN devices.hostname='' AND excluded.hostname!='' THEN excluded.hostname ELSE devices.hostname END, quarantined=1, last_seen=excluded.last_seen, status='blocked';" || true
+	write_quarantine_notification "New device quarantined mac=$mac ip=$ip host=${host:-unknown}"
+	log "quarantined new IPv4 device mac=$mac ip=$ip host=${host:-unknown}"
+}
+
+process_new_device() {
+	local mac="$1" ip="$2" host="$3"
+	is_known_mac "$mac" && return 1
+	remember_mac "$mac"
+	if is_enabled_flag "$QUARANTINE_ENABLED" && [ -n "$ip" ] && is_ipv4 "$ip"; then
+		quarantine_new_device "$mac" "$ip" "$host"
+		return 0
+	fi
+	return 1
+}
+
+cleanup_excluded_devices() {
+	local mac esc_mac changed
+	changed=0
+	while IFS= read -r mac; do
+		[ -n "$mac" ] || continue
+		if remove_quarantine_rules_for_mac "$mac"; then changed=1; fi
+		esc_mac="$(sql_escape "$mac")"
+		sql_exec "DELETE FROM devices WHERE lower(mac)='$esc_mac';" || true
+	done <<EOF
+$(collect_router_macs)
+$($SQLITE_BIN "$DB_PATH" "SELECT lower(mac) FROM devices WHERE instr(ip, ':') > 0;" 2>/dev/null || true)
+EOF
+	if [ "$changed" = "1" ]; then
+		uci commit firewall
+		/etc/init.d/firewall reload >/dev/null 2>&1 || true
+	fi
+}
+
 collect_once() {
-	local now cutoff candidates totals quarantined sql mac ip host active_now rx tx is_quarantined esc_mac esc_ip esc_host
+	local now cutoff candidates totals quarantined sql mac ip host active_now rx tx is_quarantined esc_mac esc_ip esc_host changed fresh_state
 	now="$(date +%s)"
 	cutoff=$((now - OFFLINE_AFTER_SECONDS))
 	candidates="/tmp/.openwalla-devices-candidates.$$"
@@ -294,10 +480,33 @@ collect_once() {
 
 	collect_candidates >"$candidates"
 	collect_totals >"$totals"
+	cleanup_excluded_devices
+
+	fresh_state=0
+	[ -f "$STATE_FILE" ] || fresh_state=1
+	ensure_state_file
+	changed=0
+	while IFS='|' read -r mac ip host active_now; do
+		[ -n "$mac" ] && [ -n "$ip" ] && is_ipv4 "$ip" || continue
+		if [ "$fresh_state" = "1" ]; then
+			remember_mac "$mac"
+		elif process_new_device "$mac" "$ip" "$host"; then
+			changed=1
+		fi
+	done <"$candidates"
+	if [ "$changed" = "1" ]; then
+		uci commit firewall
+		/etc/init.d/firewall reload >/dev/null 2>&1 || /etc/init.d/firewall restart >/dev/null 2>&1 || true
+	fi
 	collect_quarantined >"$quarantined"
 
 	while IFS='|' read -r mac ip host active_now; do
 		[ -n "$mac" ] || continue
+		is_router_mac "$mac" && continue
+		is_hidden_mac "$mac" && continue
+		if [ -n "$ip" ] && ! is_ipv4 "$ip"; then
+			continue
+		fi
 		rx="$(awk -F'|' -v m="$mac" '$1 == m { print $2; found=1; exit } END { if (!found) print 0 }' "$totals")"
 		tx="$(awk -F'|' -v m="$mac" '$1 == m { print $3; found=1; exit } END { if (!found) print 0 }' "$totals")"
 		case "$rx" in '' | *[!0-9]*) rx=0 ;; esac
@@ -331,11 +540,68 @@ collect_once() {
 	rm -f "$candidates" "$totals" "$quarantined"
 }
 
+handle_event() {
+	local mac ip host changed fresh_state
+	mac="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
+	ip="${2:-}"
+	host="${3:-}"
+	case "$mac" in
+	[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]) ;;
+	*) return 0 ;;
+	esac
+	[ -n "$ip" ] && is_ipv4 "$ip" || return 0
+	is_router_mac "$mac" && return 0
+	is_hidden_mac "$mac" && return 0
+
+	fresh_state=0
+	[ -f "$STATE_FILE" ] || fresh_state=1
+	if [ "$fresh_state" = "1" ]; then
+		collect_candidates | while IFS='|' read -r candidate candidate_ip candidate_host candidate_active; do
+			[ -n "$candidate_ip" ] && is_ipv4 "$candidate_ip" && remember_mac "$candidate"
+		done
+		remember_mac "$mac"
+		return 0
+	fi
+	if process_new_device "$mac" "$ip" "$host"; then
+		uci commit firewall
+		/etc/init.d/firewall reload >/dev/null 2>&1 || /etc/init.d/firewall restart >/dev/null 2>&1 || true
+	fi
+}
+
+hide_device() {
+	local mac esc_mac changed
+	mac="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
+	case "$mac" in
+	[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]) ;;
+	*) return 1 ;;
+	esac
+	changed=0
+	if remove_quarantine_rules_for_mac "$mac"; then changed=1; fi
+	esc_mac="$(sql_escape "$mac")"
+	sql_exec "INSERT INTO devices (mac, hidden, quarantined, status) VALUES ('$esc_mac', 1, 0, 'offline') ON CONFLICT(mac) DO UPDATE SET hidden=1, quarantined=0, scheduled_block=0, schedule_until='', status='offline';" || return 1
+	remember_mac "$mac"
+	if [ "$changed" = "1" ]; then
+		uci commit firewall
+		/etc/init.d/firewall reload >/dev/null 2>&1 || true
+	fi
+}
+
+run_locked() {
+	if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+		log "collector already running; event deferred"
+		return 0
+	fi
+	"$@"
+	local result=$?
+	rmdir "$LOCK_DIR" 2>/dev/null || true
+	return "$result"
+}
+
 run_daemon() {
 	log "starting devices collector db=$DB_PATH poll=${POLL_SECONDS}s offline_after=${OFFLINE_AFTER_SECONDS}s"
 	while true; do
 		load_config
-		collect_once || log "collector iteration failed"
+		run_locked collect_once || log "collector iteration failed"
 		sleep "$POLL_SECONDS"
 	done
 }
@@ -354,14 +620,22 @@ case "${1:---daemon}" in
 	;;
 --once)
 	ensure_db_file
-	collect_once
+	run_locked collect_once
+	;;
+--event)
+	ensure_db_file
+	run_locked handle_event "${2:-}" "${3:-}" "${4:-}"
+	;;
+--hide)
+	ensure_db_file
+	run_locked hide_device "${2:-}"
 	;;
 --daemon)
 	ensure_db_file
 	run_daemon
 	;;
 *)
-	echo "Usage: $0 [--init-db|--once|--daemon]"
+	echo "Usage: $0 [--init-db|--once|--daemon|--event MAC IPv4 [HOSTNAME]|--hide MAC]"
 	exit 2
 	;;
 esac

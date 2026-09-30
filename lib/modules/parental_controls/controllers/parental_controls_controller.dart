@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'package:flutter/material.dart';
-import 'package:luci_mobile/state/app_state.dart';
-import 'package:luci_mobile/utils/self_device_guard.dart';
+import 'package:openwalla/state/app_state.dart';
+import 'package:openwalla/utils/self_device_guard.dart';
 import '../models/parental_profile.dart';
 import '../models/parental_controls_store.dart';
 

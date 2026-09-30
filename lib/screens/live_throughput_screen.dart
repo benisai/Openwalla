@@ -4,10 +4,11 @@ import 'dart:math' as math;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/models/client.dart';
-import 'package:luci_mobile/state/app_state.dart';
-import 'package:luci_mobile/widgets/luci_app_bar.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/models/client.dart';
+import 'package:openwalla/screens/router_dashboard_settings_screen.dart';
+import 'package:openwalla/state/app_state.dart';
+import 'package:openwalla/widgets/luci_app_bar.dart';
 
 class LiveThroughputScreen extends ConsumerStatefulWidget {
   const LiveThroughputScreen({super.key});
@@ -85,6 +86,22 @@ class _LiveThroughputScreenState extends ConsumerState<LiveThroughputScreen> {
     _refreshTimer = Timer.periodic(_refreshInterval, (_) {
       if (!_paused) unawaited(_sample());
     });
+  }
+
+  Future<void> _openMonitoringSettings() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => const RouterDashboardSettingsScreen(
+          title: 'Live Throughput Monitoring',
+          showDashboardCards: false,
+          showShortcutPanel: false,
+          showWirelessInterfaces: false,
+          showWiredInterfaces: false,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    _startTimer();
   }
 
   Future<void> _sample() async {
@@ -245,12 +262,23 @@ class _LiveThroughputScreenState extends ConsumerState<LiveThroughputScreen> {
         title: 'Live Throughput',
         showBack: true,
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: OutlinedButton(
-              onPressed: () => setState(() => _paused = !_paused),
-              child: Text(_paused ? 'Resume' : 'Pause'),
+          IconButton(
+            tooltip: _paused
+                ? 'Resume live throughput'
+                : 'Pause live throughput',
+            onPressed: () {
+              final resume = _paused;
+              setState(() => _paused = !_paused);
+              if (resume) unawaited(_sample());
+            },
+            icon: Icon(
+              _paused ? Icons.play_arrow_rounded : Icons.pause_rounded,
             ),
+          ),
+          IconButton(
+            tooltip: 'Live throughput settings',
+            onPressed: _openMonitoringSettings,
+            icon: const Icon(Icons.settings_rounded),
           ),
         ],
       ),

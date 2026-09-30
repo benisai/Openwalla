@@ -3,13 +3,13 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/models/system_resource_metrics.dart';
-import 'package:luci_mobile/screens/cpu_processes_screen.dart';
-import 'package:luci_mobile/screens/memory_processes_screen.dart';
-import 'package:luci_mobile/screens/system_logs_screen.dart';
-import 'package:luci_mobile/state/app_state.dart';
-import 'package:luci_mobile/widgets/luci_app_bar.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/models/system_resource_metrics.dart';
+import 'package:openwalla/screens/cpu_processes_screen.dart';
+import 'package:openwalla/screens/memory_processes_screen.dart';
+import 'package:openwalla/screens/system_logs_screen.dart';
+import 'package:openwalla/state/app_state.dart';
+import 'package:openwalla/widgets/luci_app_bar.dart';
 
 class SystemResourcesScreen extends ConsumerStatefulWidget {
   const SystemResourcesScreen({super.key});
@@ -47,12 +47,71 @@ class _SystemResourcesScreenState extends ConsumerState<SystemResourcesScreen> {
 
   void _startRefreshTimer() {
     _refreshTimer?.cancel();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+    final refreshSeconds = ref
+        .read(appStateProvider)
+        .dashboardPreferences
+        .systemResourcesRefreshSeconds;
+    _refreshTimer = Timer.periodic(Duration(seconds: refreshSeconds), (
+      _,
+    ) async {
       if (!mounted) return;
       await ref.read(appStateProvider).fetchDashboardData();
       if (!mounted) return;
       setState(_appendCurrentSample);
     });
+  }
+
+  Future<void> _openSettings() async {
+    final appState = ref.read(appStateProvider);
+    var refreshSeconds =
+        appState.dashboardPreferences.systemResourcesRefreshSeconds;
+    final selected = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('System Resource Settings'),
+          content: DropdownButtonFormField<int>(
+            initialValue: refreshSeconds,
+            decoration: const InputDecoration(
+              labelText: 'Refresh interval',
+              prefixIcon: Icon(Icons.timer_outlined),
+            ),
+            items: const [5, 10, 15, 30]
+                .map(
+                  (seconds) => DropdownMenuItem<int>(
+                    value: seconds,
+                    child: Text('$seconds seconds'),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) {
+              if (value != null) {
+                setDialogState(() => refreshSeconds = value);
+              }
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(refreshSeconds),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    await appState.saveDashboardPreferences(
+      appState.dashboardPreferences.copyWith(
+        systemResourcesRefreshSeconds: selected,
+      ),
+    );
+    if (!mounted) return;
+    _startRefreshTimer();
+    setState(() {});
   }
 
   Future<void> _loadStorage() async {
@@ -136,9 +195,21 @@ class _SystemResourcesScreenState extends ConsumerState<SystemResourcesScreen> {
     final usedMem = metrics.usedMemoryBytes;
     final memoryPercent = metrics.memoryUsagePercent;
     final cpuPercent = metrics.cpuUsagePercent;
+    final refreshSeconds =
+        appState.dashboardPreferences.systemResourcesRefreshSeconds;
 
     return Scaffold(
-      appBar: const LuciAppBar(title: 'System Resources', showBack: true),
+      appBar: LuciAppBar(
+        title: 'System Resources',
+        showBack: true,
+        actions: [
+          IconButton(
+            tooltip: 'System resource settings',
+            onPressed: _openSettings,
+            icon: const Icon(Icons.settings_rounded),
+          ),
+        ],
+      ),
       body: SafeArea(
         top: false,
         child: RefreshIndicator(
@@ -153,7 +224,7 @@ class _SystemResourcesScreenState extends ConsumerState<SystemResourcesScreen> {
                 icon: Icons.speed_rounded,
                 title: 'CPU Usage',
                 value: '${cpuPercent.round()}%',
-                subtitle: '5 second samples',
+                subtitle: '$refreshSeconds second samples',
                 color: const Color(0xFF22C55E),
                 samples: _cpuHistory,
                 onTap: () => Navigator.of(context).push(

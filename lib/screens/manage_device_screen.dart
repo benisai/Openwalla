@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:luci_mobile/design/luci_design_system.dart';
-import 'package:luci_mobile/screens/backup_restore_screen.dart';
-import 'package:luci_mobile/screens/package_manager_screen.dart';
-import 'package:luci_mobile/screens/reset_router_screen.dart';
-import 'package:luci_mobile/screens/router_components_screen.dart';
-import 'package:luci_mobile/screens/router_setup_screen.dart';
-import 'package:luci_mobile/screens/ssh_terminal_screen.dart';
-import 'package:luci_mobile/widgets/luci_app_bar.dart';
+import 'package:openwalla/design/luci_design_system.dart';
+import 'package:openwalla/screens/backup_restore_screen.dart';
+import 'package:openwalla/screens/package_manager_screen.dart';
+import 'package:openwalla/screens/reset_router_screen.dart';
+import 'package:openwalla/screens/router_components_screen.dart';
+import 'package:openwalla/screens/router_setup_screen.dart';
+import 'package:openwalla/screens/ssh_terminal_screen.dart';
+import 'package:openwalla/widgets/luci_app_bar.dart';
 
 class ManageDeviceScreen extends StatelessWidget {
   const ManageDeviceScreen({super.key});

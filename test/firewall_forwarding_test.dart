@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:luci_mobile/state/app_state.dart';
+import 'package:openwalla/state/app_state.dart';
 
 void main() {
   test('parses global firewall defaults', () {

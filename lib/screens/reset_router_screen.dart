@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/screens/reboot_countdown_screen.dart';
-import 'package:luci_mobile/widgets/luci_app_bar.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/screens/reboot_countdown_screen.dart';
+import 'package:openwalla/widgets/luci_app_bar.dart';
 
 class ResetRouterScreen extends ConsumerStatefulWidget {
   const ResetRouterScreen({super.key});

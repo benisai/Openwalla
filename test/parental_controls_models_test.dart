@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:luci_mobile/modules/parental_controls/models/parental_controls_store.dart';
-import 'package:luci_mobile/modules/parental_controls/models/parental_profile.dart';
+import 'package:openwalla/modules/parental_controls/models/parental_controls_store.dart';
+import 'package:openwalla/modules/parental_controls/models/parental_profile.dart';
 
 void main() {
   final store = ParentalControlsStore.instance;

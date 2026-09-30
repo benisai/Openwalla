@@ -4,23 +4,23 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:luci_mobile/services/secure_storage_service.dart';
-import 'package:luci_mobile/services/router_service.dart';
-import 'package:luci_mobile/services/ssh_service.dart';
-import 'package:luci_mobile/services/throughput_service.dart';
-import 'package:luci_mobile/models/client.dart';
-import 'package:luci_mobile/models/ddns_info.dart';
-import 'package:luci_mobile/models/router.dart' as model;
-import 'package:luci_mobile/models/wifi_scan_result.dart';
-import 'package:luci_mobile/models/dashboard_preferences.dart';
-import 'package:luci_mobile/modules/parental_controls/models/parental_profile.dart';
-import 'package:luci_mobile/services/interfaces/auth_service_interface.dart';
-import 'package:luci_mobile/services/interfaces/api_service_interface.dart';
-import 'package:luci_mobile/services/api_service.dart';
-import 'package:luci_mobile/services/service_factory.dart';
-import 'package:luci_mobile/config/app_config.dart';
-import 'package:luci_mobile/utils/http_client_manager.dart';
-import 'package:luci_mobile/utils/logger.dart';
+import 'package:openwalla/services/secure_storage_service.dart';
+import 'package:openwalla/services/router_service.dart';
+import 'package:openwalla/services/ssh_service.dart';
+import 'package:openwalla/services/throughput_service.dart';
+import 'package:openwalla/models/client.dart';
+import 'package:openwalla/models/ddns_info.dart';
+import 'package:openwalla/models/router.dart' as model;
+import 'package:openwalla/models/wifi_scan_result.dart';
+import 'package:openwalla/models/dashboard_preferences.dart';
+import 'package:openwalla/modules/parental_controls/models/parental_profile.dart';
+import 'package:openwalla/services/interfaces/auth_service_interface.dart';
+import 'package:openwalla/services/interfaces/api_service_interface.dart';
+import 'package:openwalla/services/api_service.dart';
+import 'package:openwalla/services/service_factory.dart';
+import 'package:openwalla/config/app_config.dart';
+import 'package:openwalla/utils/http_client_manager.dart';
+import 'package:openwalla/utils/logger.dart';
 
 typedef _WirelessConnection = ({
   String band,
@@ -1597,6 +1597,43 @@ class ProcessCpuUsage {
 
 enum OpenwallaFlowProvider { none, netify, conntrack }
 
+class FlowStatsSettings {
+  final bool enabled;
+  final int pollSeconds;
+
+  const FlowStatsSettings({required this.enabled, required this.pollSeconds});
+}
+
+class FlowStatsDeviceUsage {
+  final String device;
+  final int downloadedBytes;
+  final int uploadedBytes;
+
+  const FlowStatsDeviceUsage({
+    required this.device,
+    required this.downloadedBytes,
+    required this.uploadedBytes,
+  });
+}
+
+class FlowStatsUsageSummary {
+  final int downloadedBytes;
+  final int uploadedBytes;
+  final List<FlowStatsDeviceUsage> devices;
+
+  const FlowStatsUsageSummary({
+    required this.downloadedBytes,
+    required this.uploadedBytes,
+    required this.devices,
+  });
+
+  static const empty = FlowStatsUsageSummary(
+    downloadedBytes: 0,
+    uploadedBytes: 0,
+    devices: [],
+  );
+}
+
 class OpenwallaFlowSummary {
   final OpenwallaFlowProvider provider;
   final int count;
@@ -1972,11 +2009,6 @@ class AppState extends ChangeNotifier {
       label: 'Detailed Flow Collector',
       category: 'Openwalla',
     ),
-    (
-      name: 'openwalla-device-quarantine',
-      label: 'Device Quarantine',
-      category: 'Openwalla',
-    ),
     (name: 'openwalla-state-sync', label: 'State Sync', category: 'Openwalla'),
     (name: 'netifyd', label: 'Netify', category: 'Router'),
     (name: 'vnstat', label: 'vnStat', category: 'Router'),
@@ -2021,7 +2053,8 @@ class AppState extends ChangeNotifier {
   static const String _themeModeKey = 'themeMode';
   OpenwallaThemeAccent _themeAccent = OpenwallaThemeAccent.blue;
   static const String _themeAccentKey = 'themeAccent';
-  static const String _welcomeSetupSeenKey = 'openwalla_welcome_setup_seen';
+  static const String _legacyWelcomeSetupSeenKey =
+      'openwalla_welcome_setup_seen';
 
   // Clients view mode (selected router only by default for fast page loads)
   bool _clientsAggregateAllRouters = false;
@@ -2057,13 +2090,25 @@ class AppState extends ChangeNotifier {
 
   Future<bool> shouldShowWelcomeSetup() async {
     if (_reviewerModeEnabled) return false;
-    return await _secureStorageService.readValue(_welcomeSetupSeenKey) !=
+    final routerId = _routerService?.selectedRouter?.id;
+    if (routerId == null || routerId.isEmpty) return false;
+    return await _secureStorageService.readValue(
+          _welcomeSetupSeenKey(routerId),
+        ) !=
         'true';
   }
 
   Future<void> markWelcomeSetupSeen() async {
-    await _secureStorageService.writeValue(_welcomeSetupSeenKey, 'true');
+    final routerId = _routerService?.selectedRouter?.id;
+    if (routerId == null || routerId.isEmpty) return;
+    await _secureStorageService.writeValue(
+      _welcomeSetupSeenKey(routerId),
+      'true',
+    );
   }
+
+  String _welcomeSetupSeenKey(String routerId) =>
+      '$_legacyWelcomeSetupSeenKey:$routerId';
 
   String exportRouterProfiles() =>
       _routerService?.exportRoutersAsJson() ?? '{"version":1,"profiles":[]}';
@@ -2103,9 +2148,26 @@ class AppState extends ChangeNotifier {
     await _loadThemeMode();
     await _loadThemeAccent();
     await loadRouters(); // Load routers on app start (sets selectedRouter)
+    await _migrateWelcomeSetupSeenIfNeeded();
     await _migrateGlobalDashboardPreferencesIfNeeded(); // Proactively migrate legacy prefs
     await _loadClientsViewMode();
     await loadDashboardPreferences(); // Load prefs scoped to selected router
+  }
+
+  Future<void> _migrateWelcomeSetupSeenIfNeeded() async {
+    final legacyValue = await _secureStorageService.readValue(
+      _legacyWelcomeSetupSeenKey,
+    );
+    if (legacyValue != 'true') return;
+
+    for (final router in _routerService?.routers ?? const <model.Router>[]) {
+      final scopedKey = _welcomeSetupSeenKey(router.id);
+      final existing = await _secureStorageService.readValue(scopedKey);
+      if (existing == null) {
+        await _secureStorageService.writeValue(scopedKey, 'true');
+      }
+    }
+    await _secureStorageService.deleteValue(_legacyWelcomeSetupSeenKey);
   }
 
   /// One-time migration: if a global 'dashboard_preferences' exists,
@@ -2437,6 +2499,43 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  Future<void> setNetworkInterfaceOperationalState(
+    String interfaceName, {
+    required bool enabled,
+    BuildContext? context,
+  }) async {
+    if (_reviewerModeEnabled) return;
+    final quotedName = _shellQuote(interfaceName.trim());
+    final operation = enabled ? 'ifup "\$IFACE"' : 'ifdown "\$IFACE"';
+    final output = await runRouterSetupCommand(
+      'IFACE=$quotedName; '
+      '(sleep 1; $operation) >/dev/null 2>&1 & '
+      'echo OPENWALLA_INTERFACE_ACTION_SCHEDULED',
+      context: context,
+    );
+    if (!output.contains('OPENWALLA_INTERFACE_ACTION_SCHEDULED')) {
+      throw StateError('The router did not confirm the interface action.');
+    }
+  }
+
+  Future<void> restartNetworkInterface(
+    String interfaceName, {
+    BuildContext? context,
+  }) async {
+    if (_reviewerModeEnabled) return;
+    final quotedName = _shellQuote(interfaceName.trim());
+    final output = await runRouterSetupCommand(
+      'IFACE=$quotedName; '
+      '(sleep 1; ifdown "\$IFACE" >/dev/null 2>&1 || true; '
+      'sleep 2; ifup "\$IFACE") >/dev/null 2>&1 & '
+      'echo OPENWALLA_INTERFACE_RESTART_SCHEDULED',
+      context: context,
+    );
+    if (!output.contains('OPENWALLA_INTERFACE_RESTART_SCHEDULED')) {
+      throw StateError('The router did not confirm the interface restart.');
+    }
+  }
+
   Future<String> runRouterSetupCommandViaSsh(
     String command, {
     void Function(String chunk)? onOutput,
@@ -2627,6 +2726,166 @@ class AppState extends ChangeNotifier {
     return false;
   }
 
+  Future<bool> isNetifyFlowEnabled({BuildContext? context}) async {
+    if (_reviewerModeEnabled) return true;
+    if (!await hasNetifySupport(context: context)) return false;
+
+    try {
+      final values = await _fetchOpenwallaUciValues();
+      final collector = values?['collector'];
+      if (collector is! Map) return false;
+      final enabled = collector['enabled']?.toString().trim().toLowerCase();
+      return !{'0', 'false', 'off', 'disabled'}.contains(enabled);
+    } catch (e, stack) {
+      Logger.debug('Optional Netify enabled check failed: $e');
+      Logger.debug('Optional Netify enabled check stack: $stack');
+      return false;
+    }
+  }
+
+  Future<bool> hasSimpleFlowSupport({BuildContext? context}) async {
+    if (_reviewerModeEnabled) return true;
+    if (await _sqliteTableExists(
+      dbExpression: _connectionFlowsDbExpression(),
+      tableName: 'connection_flows',
+      context: context,
+    )) {
+      return true;
+    }
+    return _routerCommandSucceeds(
+      '[ -x /usr/bin/openwalla-connection-flow-collector ] || '
+      '[ -x /etc/init.d/openwalla-connection-flows-collector ]',
+    );
+  }
+
+  Future<FlowStatsSettings> fetchFlowStatsSettings({
+    BuildContext? context,
+  }) async {
+    if (_reviewerModeEnabled) {
+      return const FlowStatsSettings(enabled: false, pollSeconds: 5);
+    }
+    try {
+      final values = await _fetchOpenwallaUciValues(context: context);
+      final section = values is Map ? values['flow_stats'] : null;
+      return FlowStatsSettings(
+        enabled: section is Map && section['enabled']?.toString() == '1',
+        pollSeconds:
+            (int.tryParse(
+                      section is Map ? section['poll']?.toString() ?? '' : '',
+                    ) ??
+                    5)
+                .clamp(2, 10),
+      );
+    } catch (e, stack) {
+      Logger.warning('Failed to fetch flow stats settings: $e');
+      Logger.debug('Flow stats settings stack: $stack');
+      return const FlowStatsSettings(enabled: false, pollSeconds: 5);
+    }
+  }
+
+  Future<void> saveFlowStatsSettings(
+    FlowStatsSettings settings, {
+    BuildContext? context,
+  }) async {
+    if (_reviewerModeEnabled) return;
+    final router = _routerService?.selectedRouter;
+    final sysauth = _authService?.sysauth;
+    if (router == null || sysauth == null || _apiService == null) {
+      throw Exception('Router is not connected');
+    }
+
+    final expectedEnabled = settings.enabled ? '1' : '0';
+    final expectedPoll = settings.pollSeconds.clamp(2, 10).toString();
+    final saveOutput = await runRouterSetupCommand(
+      "uci -q get openwalla.flow_stats >/dev/null 2>&1 || "
+      "uci set openwalla.flow_stats=flow_stats; "
+      "uci set openwalla.flow_stats.enabled='$expectedEnabled' && "
+      "uci set openwalla.flow_stats.db_path='/tmp/openwalla-netify-flow-stats.sqlite' && "
+      "uci set openwalla.flow_stats.poll='$expectedPoll' && "
+      "uci set openwalla.flow_stats.bucket_seconds='300' && "
+      "uci set openwalla.flow_stats.retention_seconds='2592000' && "
+      "uci commit openwalla && "
+      "[ \"\$(uci -q get openwalla.flow_stats.enabled)\" = '$expectedEnabled' ] && "
+      "[ \"\$(uci -q get openwalla.flow_stats.poll)\" = '$expectedPoll' ] && "
+      "echo FLOW_STATS_SAVED",
+      context: context,
+    );
+    if (!saveOutput.contains('FLOW_STATS_SAVED')) {
+      throw StateError('Router could not save the flow usage settings');
+    }
+
+    final saved = await fetchFlowStatsSettings();
+    if (saved.enabled != settings.enabled ||
+        saved.pollSeconds != int.parse(expectedPoll)) {
+      throw StateError('Flow usage settings could not be verified');
+    }
+
+    await runRouterSetupCommand(
+      'if [ -x /etc/init.d/openwalla-netify-collector ]; then '
+      '/etc/init.d/openwalla-netify-collector restart >/dev/null 2>&1 || '
+      '/etc/init.d/openwalla-netify-collector start >/dev/null 2>&1; '
+      'fi',
+    );
+  }
+
+  Future<FlowStatsUsageSummary> fetchFlowStatsUsage({
+    BuildContext? context,
+  }) async {
+    if (_reviewerModeEnabled) {
+      return const FlowStatsUsageSummary(
+        downloadedBytes: 734003200,
+        uploadedBytes: 125829120,
+        devices: [
+          FlowStatsDeviceUsage(
+            device: '52:54:00:12:34:56',
+            downloadedBytes: 524288000,
+            uploadedBytes: 83886080,
+          ),
+          FlowStatsDeviceUsage(
+            device: '8c:85:90:ab:cd:ef',
+            downloadedBytes: 209715200,
+            uploadedBytes: 41943040,
+          ),
+        ],
+      );
+    }
+    try {
+      final output = await _sqliteQueryOutput(
+        dbExpression: _netifyFlowStatsDbExpression(),
+        sql:
+            "SELECT mac,COALESCE(SUM(rx_bytes),0),COALESCE(SUM(tx_bytes),0) FROM flow_stats_totals GROUP BY mac ORDER BY SUM(rx_bytes + tx_bytes) DESC;",
+        context: context,
+      );
+      var downloaded = 0;
+      var uploaded = 0;
+      final devices = <FlowStatsDeviceUsage>[];
+      for (final line in output.split('\n')) {
+        final fields = line.trim().split('|');
+        if (fields.length < 3 || fields.first.isEmpty) continue;
+        final rx = int.tryParse(fields[1]) ?? 0;
+        final tx = int.tryParse(fields[2]) ?? 0;
+        downloaded += rx;
+        uploaded += tx;
+        devices.add(
+          FlowStatsDeviceUsage(
+            device: fields[0],
+            downloadedBytes: rx,
+            uploadedBytes: tx,
+          ),
+        );
+      }
+      return FlowStatsUsageSummary(
+        downloadedBytes: downloaded,
+        uploadedBytes: uploaded,
+        devices: devices,
+      );
+    } catch (e, stack) {
+      Logger.warning('Failed to fetch flow stats usage: $e');
+      Logger.debug('Flow stats usage stack: $stack');
+      return FlowStatsUsageSummary.empty;
+    }
+  }
+
   Future<OpenwrtFeatureStatus> getOpenwrtFeatureStatus(
     OpenwrtFeature feature, {
     bool forceRefresh = false,
@@ -2749,7 +3008,7 @@ class AppState extends ChangeNotifier {
       OpenwrtFeature.mwan3 =>
         r'([ -x /etc/init.d/mwan3 ] && command -v mwan3 >/dev/null 2>&1 && [ -f /etc/config/mwan3 ]) && echo OK',
       OpenwrtFeature.quarantine =>
-        r'([ -x /usr/bin/openwalla-device-quarantine ] && [ -x /etc/init.d/openwalla-device-quarantine ] && uci -q get openwalla.quarantine >/dev/null 2>&1) && echo OK',
+        r'([ -x /usr/bin/openwalla-devices-collector ] && [ -x /etc/init.d/openwalla-devices-collector ] && uci -q get openwalla.quarantine >/dev/null 2>&1) && echo OK',
     };
   }
 
@@ -2793,7 +3052,7 @@ class AppState extends ChangeNotifier {
       'on',
       'enabled',
     }.contains(enabledValue);
-    final interval = int.tryParse(section['interval']?.toString() ?? '') ?? 15;
+    const interval = 15;
     final router = _routerService?.selectedRouter;
     final sysauth = _authService?.sysauth;
     var running = false;
@@ -2805,7 +3064,7 @@ class AppState extends ChangeNotifier {
           router.useHttps,
           object: 'service',
           method: 'list',
-          params: {'name': 'openwalla-device-quarantine'},
+          params: {'name': 'openwalla-devices-collector'},
         );
         running = routerServiceResponseIsRunning(result);
       } catch (error) {
@@ -2833,7 +3092,7 @@ class AppState extends ChangeNotifier {
         intervalSeconds: intervalSeconds.clamp(10, 3600),
       );
     }
-    final interval = intervalSeconds.clamp(10, 3600);
+    const interval = 15;
     final expectedEnabled = enabled ? '1' : '0';
     final router = _routerService?.selectedRouter;
     final sysauth = _authService?.sysauth;
@@ -2862,12 +3121,26 @@ class AppState extends ChangeNotifier {
       throw StateError('Router could not commit the quarantine setting');
     }
 
-    final serviceCommand = enabled
-        ? '/etc/init.d/openwalla-device-quarantine enable 2>/dev/null || true; '
-              '/etc/init.d/openwalla-device-quarantine restart 2>/dev/null || '
-              '/etc/init.d/openwalla-device-quarantine start 2>/dev/null || true'
-        : '/etc/init.d/openwalla-device-quarantine stop 2>/dev/null || true';
-    await runRouterSetupCommand('$serviceCommand; sleep 1; true');
+    await _apiService!.uciSet(
+      router.ipAddress,
+      sysauth,
+      router.useHttps,
+      config: 'openwalla',
+      section: 'devices',
+      values: {'poll_seconds': '15', 'enabled': '1'},
+    );
+    await _apiService!.uciCommit(
+      router.ipAddress,
+      sysauth,
+      router.useHttps,
+      config: 'openwalla',
+    );
+    await runRouterSetupCommand(
+      '/etc/init.d/openwalla-devices-collector enable 2>/dev/null || true; '
+      '/etc/init.d/openwalla-devices-collector restart 2>/dev/null || '
+      '/etc/init.d/openwalla-devices-collector start 2>/dev/null || true; '
+      'sleep 1; true',
+    );
     final state = await _readQuarantineServiceState();
     if (state.enabled != enabled) {
       throw StateError(
@@ -2881,7 +3154,6 @@ class AppState extends ChangeNotifier {
   Future<void> runQuarantineDiscovery({BuildContext? context}) async {
     if (_reviewerModeEnabled) return;
     await runRouterSetupCommand(
-      '/usr/bin/openwalla-device-quarantine --once && '
       '/usr/bin/openwalla-devices-collector --once 2>/dev/null || true',
       context: context,
     );
@@ -2892,7 +3164,7 @@ class AppState extends ChangeNotifier {
     Client client, {
     BuildContext? context,
   }) async {
-    await setClientInternetBlocked(client, false);
+    queueClientInternetUnblock(client);
     notifyListeners();
   }
 
@@ -3347,30 +3619,57 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> removeRouter(String id) async {
+    await _removeRouterAndPurgeState(id);
+  }
+
+  Future<void> removeSavedRouterProfile(String id) async {
+    await _removeRouterAndPurgeState(id);
+  }
+
+  Future<void> _removeRouterAndPurgeState(String id) async {
     if (_routerService == null) return;
 
-    // Get the router before removing to clear its certificates
     final router = _routerService!.routers.firstWhere(
       (r) => r.id == id,
       orElse: () => throw Exception('Router not found'),
     );
+    final wasSelected = _routerService!.selectedRouter?.id == id;
 
-    // Clear certificates for this specific router
+    await _secureStorageService.deleteRouterScopedValues(router.id);
     await _httpClientManager.clearCertificatesForHost(router.ipAddress);
+    _httpClientManager.disposeClient(router.ipAddress, router.useHttps);
+
+    if (_cachedPublicIpRouterId == router.id) {
+      _cachedPublicIp = null;
+      _cachedPublicIpRouterId = null;
+      _cachedPublicIpAt = null;
+    }
+
+    if (_statisticsPreloadRouterId == router.id ||
+        _statisticsPreloadFutureRouterId == router.id ||
+        _statisticsPreloadData?.routerId == router.id) {
+      clearStatisticsPreload();
+    }
+
+    if (wasSelected) {
+      _cancelThroughputTimer();
+      _dashboardData = null;
+      _dashboardError = null;
+      _clients = const [];
+      _isClientsLoading = false;
+      _parentalPausedMacs.clear();
+      _dashboardPreferences = DashboardPreferences();
+    }
 
     final needsSwitch = await _routerService!.removeRouter(id);
     if (needsSwitch && _routerService!.routers.isNotEmpty) {
-      await selectRouter(_routerService!.routers.first.id);
+      await selectRouter(_routerService!.selectedRouter!.id);
     } else if (_routerService!.selectedRouter == null) {
-      _dashboardData = null;
-      notifyListeners();
-    } else {
-      notifyListeners();
+      await _authService?.logout();
+      _errorMessage = null;
+      _isLoading = false;
+      _isDashboardLoading = false;
     }
-  }
-
-  Future<void> removeSavedRouterProfile(String id) async {
-    await _routerService?.removeRouter(id);
     notifyListeners();
   }
 
@@ -4599,6 +4898,10 @@ done | sort -t "|" -k1,1nr | head -n ''' +
     return r'$(uci -q get openwalla.collector.db_path 2>/dev/null || echo /tmp/openwalla-netify.sqlite)';
   }
 
+  String _netifyFlowStatsDbExpression() {
+    return r'$(uci -q get openwalla.flow_stats.db_path 2>/dev/null || echo /tmp/openwalla-netify-flow-stats.sqlite)';
+  }
+
   String _notificationsDbExpression() {
     return r'$(uci -q get openwalla.notifications.db_path 2>/dev/null || echo /tmp/openwalla-notifications.sqlite)';
   }
@@ -5301,7 +5604,12 @@ done | sort -t "|" -k1,1nr | head -n ''' +
     }
   }
 
-  String _netifyRawWhereClause(String? protocolFilter, {int? hoursBack}) {
+  String _netifyRawWhereClause(
+    String? protocolFilter, {
+    String? deviceMac,
+    String? searchQuery,
+    int? hoursBack,
+  }) {
     final conditions = <String>[];
     final safeHours = hoursBack?.clamp(1, 168).toInt();
     if (safeHours != null) {
@@ -5310,46 +5618,70 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       );
     }
 
+    switch (protocolFilter?.trim().toUpperCase()) {
+      case 'HTTP':
+        conditions.add(
+          "(UPPER(detected_protocol_name) = 'HTTP' OR dest_port = 80)",
+        );
+      case 'HTTPS':
+        conditions.add(
+          "(UPPER(detected_protocol_name) IN ('HTTP/S','HTTPS','TLS') OR dest_port = 443)",
+        );
+      case 'DNS':
+        conditions.add(
+          "(UPPER(detected_protocol_name) = 'DNS' OR dest_port = 53)",
+        );
+    }
+
+    final normalizedMac = _normalizeMacAddress(deviceMac ?? '');
+    if (normalizedMac.isNotEmpty) {
+      final escapedMac = normalizedMac.toLowerCase().replaceAll("'", "''");
+      conditions.add("LOWER(local_mac) = '$escapedMac'");
+    }
+
+    final search = searchQuery?.trim().toLowerCase() ?? '';
+    if (search.isNotEmpty) {
+      final escapedSearch = search.replaceAll("'", "''");
+      conditions.add(
+        "(LOWER(fqdn) LIKE '%$escapedSearch%' OR "
+        "LOWER(client_sni) LIKE '%$escapedSearch%' OR "
+        "LOWER(dns_host_name) LIKE '%$escapedSearch%' OR "
+        "LOWER(host_server_name) LIKE '%$escapedSearch%' OR "
+        "LOWER(dest_ip) LIKE '%$escapedSearch%' OR "
+        "LOWER(detected_app_name) LIKE '%$escapedSearch%')",
+      );
+    }
+
     return conditions.isEmpty ? '' : 'WHERE ${conditions.join(' AND ')}';
-  }
-
-  bool _matchesNetifyProtocol(NetifyFlow flow, String? protocolFilter) {
-    final normalized = protocolFilter?.trim().toUpperCase();
-    if (normalized == null || normalized.isEmpty) return true;
-
-    final protocol = flow.protocol.trim().toUpperCase();
-    final port = flow.destinationPort.trim();
-    return switch (normalized) {
-      'HTTP' => protocol == 'HTTP' || port == '80',
-      'HTTPS' => protocol == 'HTTP/S' || protocol == 'HTTPS' || port == '443',
-      'DNS' => protocol == 'DNS' || port == '53',
-      _ => true,
-    };
   }
 
   Future<int> fetchNetifyFlowCount({
     String? protocolFilter,
+    String? deviceMac,
+    String? searchQuery,
     int? hoursBack,
     BuildContext? context,
   }) async {
-    if (_reviewerModeEnabled) return 315188;
+    if (_reviewerModeEnabled) {
+      final flows = await fetchNetifyFlows(
+        limit: 1000,
+        protocolFilter: protocolFilter,
+        deviceMac: deviceMac,
+        searchQuery: searchQuery,
+        hoursBack: hoursBack,
+      );
+      return flows.length;
+    }
 
     final router = _routerService?.selectedRouter;
     final sysauth = _authService?.sysauth;
     if (router == null || sysauth == null || _apiService == null) return 0;
 
     try {
-      if (protocolFilter != null && protocolFilter.trim().isNotEmpty) {
-        return await _fetchFilteredNetifyFlowCount(
-          protocolFilter: protocolFilter,
-          hoursBack: hoursBack,
-          context: context,
-        );
-      }
       final output = await _sqliteQueryOutput(
         dbExpression: _netifyDbExpression(),
         sql:
-            'SELECT COUNT(*) FROM flow_raw ${_netifyRawWhereClause(null, hoursBack: hoursBack)};',
+            'SELECT COUNT(*) FROM flow_raw ${_netifyRawWhereClause(protocolFilter, deviceMac: deviceMac, searchQuery: searchQuery, hoursBack: hoursBack)};',
         context: context,
       );
       return _parseSqliteCount(output);
@@ -5384,6 +5716,8 @@ done | sort -t "|" -k1,1nr | head -n ''' +
   Future<OpenwallaFlowSummary> fetchOpenwallaFlowSummary({
     String? protocolFilter,
     int? hoursBack,
+    String? deviceMac,
+    String? searchQuery,
     OpenwallaFlowProvider? provider,
     BuildContext? context,
   }) async {
@@ -5402,6 +5736,8 @@ done | sort -t "|" -k1,1nr | head -n ''' +
           provider: selectedProvider,
           count: await fetchNetifyFlowCount(
             protocolFilter: protocolFilter,
+            deviceMac: deviceMac,
+            searchQuery: searchQuery,
             hoursBack: hoursBack,
           ),
         );
@@ -7353,10 +7689,11 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         'if [ "\$ENC" != "none" ] && [ "\$ENC" != "owe" ]; then uci set wireless.\$STA.key="\$KEY"; fi; '
         'if [ -n "\$BSSID" ]; then uci set wireless.\$STA.bssid="\$BSSID"; fi; '
         'uci commit wireless; '
-        'wifi reload >/dev/null 2>&1 || /sbin/wifi reload >/dev/null 2>&1 || true; '
-        '/etc/init.d/network reload >/dev/null 2>&1 || true; '
+        '(wifi reload >/dev/null 2>&1 || /sbin/wifi reload >/dev/null 2>&1) || { echo "Could not reload Wi-Fi"; exit 1; }; '
+        '/etc/init.d/network reload >/dev/null 2>&1 || { echo "Could not reload the network"; exit 1; }; '
         '/etc/init.d/firewall reload >/dev/null 2>&1 || true; '
-        'echo "Connected \$SSID as \$NET"';
+        'ifup "\$NET" >/dev/null 2>&1 || true; '
+        'echo "OPENWALLA_REPEATER_CONFIGURED \$SSID \$NET"';
 
     final result = await _apiService!.call(
       router.ipAddress,
@@ -7371,9 +7708,22 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       context: context,
       receiveTimeout: const Duration(seconds: 60),
     );
+    if (!_rpcCallSucceeded(result)) {
+      final message = _commandOutput(result).trim();
+      throw StateError(
+        message.isEmpty
+            ? 'Router setup is required before configuring a repeater.'
+            : message,
+      );
+    }
     final data = _extractRpcData(result);
-    if (data is Map && data['code'] != null && data['code'].toString() != '0') {
-      throw StateError(_commandOutput(data));
+    final output = _commandOutput(data).trim();
+    if (!output.contains('OPENWALLA_REPEATER_CONFIGURED')) {
+      throw StateError(
+        output.isEmpty
+            ? 'The router did not confirm the repeater configuration.'
+            : output,
+      );
     }
     await fetchDashboardData();
   }
@@ -7669,6 +8019,8 @@ done | sort -t "|" -k1,1nr | head -n ''' +
     int limit = 50,
     int offset = 0,
     String? protocolFilter,
+    String? deviceMac,
+    String? searchQuery,
     int? hoursBack,
     BuildContext? context,
   }) async {
@@ -7718,33 +8070,43 @@ done | sort -t "|" -k1,1nr | head -n ''' +
               };
             }).toList();
       final safeHours = hoursBack?.clamp(1, 168).toInt();
-      if (safeHours == null) return filteredByProtocol;
+      final normalizedMac = _normalizeMacAddress(deviceMac ?? '');
+      final filteredByDevice = normalizedMac.isEmpty
+          ? filteredByProtocol
+          : filteredByProtocol
+                .where(
+                  (flow) =>
+                      _normalizeMacAddress(flow.deviceMac) == normalizedMac,
+                )
+                .toList();
+      final normalizedSearch = searchQuery?.trim().toLowerCase() ?? '';
+      final filteredBySearch = normalizedSearch.isEmpty
+          ? filteredByDevice
+          : filteredByDevice.where((flow) {
+              return [
+                flow.destination,
+                flow.destinationIp,
+                flow.application,
+              ].any((value) => value.toLowerCase().contains(normalizedSearch));
+            }).toList();
+      if (safeHours == null) return filteredBySearch;
       final cutoff = now.subtract(Duration(hours: safeHours));
-      return filteredByProtocol
+      return filteredBySearch
           .where((flow) => !flow.timestamp.isBefore(cutoff))
           .toList();
     }
 
-    final safeLimit = limit.clamp(1, 1000).toInt();
+    final safeLimit = limit.clamp(1, 250).toInt();
     final safeOffset = offset < 0 ? 0 : offset;
-    if (protocolFilter != null && protocolFilter.trim().isNotEmpty) {
-      return await _fetchFilteredNetifyRawFlows(
-        limit: safeLimit,
-        offset: safeOffset,
-        protocolFilter: protocolFilter,
-        hoursBack: hoursBack,
-        context: context,
-      );
-    }
-
-    final netifyFlows = await _fetchNetifyRawFlows(
+    return await _fetchNetifyRawFlows(
       limit: safeLimit,
       offset: safeOffset,
-      protocolFilter: null,
+      protocolFilter: protocolFilter,
+      deviceMac: deviceMac,
+      searchQuery: searchQuery,
       hoursBack: hoursBack,
       context: context,
     );
-    return netifyFlows;
   }
 
   Future<List<NetifyFlow>> fetchConnectionFlows({
@@ -7932,79 +8294,12 @@ done | sort -t "|" -k1,1nr | head -n ''' +
     }
   }
 
-  Future<int> _fetchFilteredNetifyFlowCount({
-    required String protocolFilter,
-    int? hoursBack,
-    BuildContext? context,
-  }) async {
-    var rawOffset = 0;
-    var count = 0;
-    const batchSize = 1000;
-    const maxScannedRows = 50000;
-
-    while (rawOffset < maxScannedRows) {
-      final batch = await _fetchNetifyRawFlows(
-        limit: batchSize,
-        offset: rawOffset,
-        protocolFilter: null,
-        hoursBack: hoursBack,
-        context: context,
-      );
-      if (batch.isEmpty) break;
-      count += batch
-          .where((flow) => _matchesNetifyProtocol(flow, protocolFilter))
-          .length;
-      if (batch.length < batchSize) break;
-      rawOffset += batch.length;
-    }
-
-    return count;
-  }
-
-  Future<List<NetifyFlow>> _fetchFilteredNetifyRawFlows({
-    required int limit,
-    required int offset,
-    required String protocolFilter,
-    int? hoursBack,
-    BuildContext? context,
-  }) async {
-    var rawOffset = 0;
-    var skippedMatches = 0;
-    final matches = <NetifyFlow>[];
-    const batchSize = 1000;
-    const maxScannedRows = 50000;
-
-    while (rawOffset < maxScannedRows && matches.length < limit) {
-      final batch = await _fetchNetifyRawFlows(
-        limit: batchSize,
-        offset: rawOffset,
-        protocolFilter: null,
-        hoursBack: hoursBack,
-        context: context,
-      );
-      if (batch.isEmpty) break;
-
-      for (final flow in batch) {
-        if (!_matchesNetifyProtocol(flow, protocolFilter)) continue;
-        if (skippedMatches < offset) {
-          skippedMatches++;
-          continue;
-        }
-        matches.add(flow);
-        if (matches.length >= limit) break;
-      }
-
-      if (batch.length < batchSize) break;
-      rawOffset += batch.length;
-    }
-
-    return matches;
-  }
-
   Future<List<NetifyFlow>> _fetchNetifyRawFlows({
     required int limit,
     required int offset,
     String? protocolFilter,
+    String? deviceMac,
+    String? searchQuery,
     int? hoursBack,
     BuildContext? context,
   }) async {
@@ -8018,7 +8313,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       final output = await _sqliteQueryOutput(
         dbExpression: _netifyDbExpression(),
         sql:
-            'SELECT json FROM flow_raw ${_netifyRawWhereClause(protocolFilter, hoursBack: hoursBack)} ORDER BY id DESC LIMIT $limit OFFSET $offset;',
+            'SELECT json FROM flow_raw ${_netifyRawWhereClause(protocolFilter, deviceMac: deviceMac, searchQuery: searchQuery, hoursBack: hoursBack)} ORDER BY id DESC LIMIT $limit OFFSET $offset;',
         context: context,
       );
       return output
@@ -12530,6 +12825,77 @@ uci commit dhcp
     notifyListeners();
   }
 
+  void queueClientInternetUnblock(Client client) {
+    if (_reviewerModeEnabled) {
+      notifyListeners();
+      return;
+    }
+
+    final router = _routerService?.selectedRouter;
+    final sysauth = _authService?.sysauth;
+    if (router == null || sysauth == null || _apiService == null) {
+      Logger.warning('Background device unblock skipped: no router connection');
+      return;
+    }
+
+    final normalizedMac = _normalizeMacAddress(client.macAddress);
+    if (!RegExp(r'^([0-9A-F]{2}:){5}[0-9A-F]{2}$').hasMatch(normalizedMac)) {
+      Logger.warning('Background device unblock skipped: invalid MAC');
+      return;
+    }
+
+    unawaited(
+      _queueClientInternetUnblock(
+        router: router,
+        sysauth: sysauth,
+        mac: normalizedMac,
+      ).catchError((Object error, StackTrace stack) {
+        Logger.warning('Background device unblock could not be queued: $error');
+        Logger.debug('Background device unblock stack: $stack');
+      }),
+    );
+    notifyListeners();
+  }
+
+  Future<void> _queueClientInternetUnblock({
+    required model.Router router,
+    required String sysauth,
+    required String mac,
+  }) async {
+    final escapedMac = mac.toLowerCase().replaceAll("'", "''");
+    final dbSql =
+        "UPDATE devices SET quarantined=0, status='online', last_seen=strftime('%s','now') WHERE lower(mac)='$escapedMac';";
+    final releaseScript =
+        '''
+mac=${_shellQuote(mac.toLowerCase())}
+for pass in 1 2 3 4; do
+  for section in \$(uci -q show firewall 2>/dev/null | sed -n 's/^firewall\\.\\([^.=]*\\)=rule\$/\\1/p'); do
+    name=\$(uci -q get firewall."\$section".name 2>/dev/null || true)
+    src_mac=\$(uci -q get firewall."\$section".src_mac 2>/dev/null | tr '[:upper:]' '[:lower:]')
+    case "\$name" in
+      openwalla_quarantine_*) [ "\$src_mac" = "\$mac" ] && uci -q delete firewall."\$section" ;;
+    esac
+  done
+done
+uci commit firewall >/dev/null 2>&1 || true
+${_sqliteCommand(_devicesDbExpression(), dbSql)} >/dev/null 2>&1 || true
+for socket in /var/run/hostapd/* /var/run/hostapd-*/*; do
+  [ -S "\$socket" ] || continue
+  dir="\${socket%/*}"
+  iface="\${socket##*/}"
+  /usr/sbin/hostapd_cli -p "\$dir" -i "\$iface" deny_acl REMOVE "\$mac" >/dev/null 2>&1 || true
+done
+/etc/init.d/firewall reload >/dev/null 2>&1 || /etc/init.d/firewall restart >/dev/null 2>&1 || true
+''';
+    await _apiService!.systemExec(
+      router.ipAddress,
+      sysauth,
+      router.useHttps,
+      command:
+          '( sleep 1; $releaseScript ) >/dev/null 2>&1 & echo OPENWALLA_UNBLOCK_QUEUED',
+    );
+  }
+
   Future<void> _setWirelessClientDenied({
     required model.Router router,
     required String sysauth,
@@ -12966,16 +13332,28 @@ exit 0
       hostname: cleanName,
       deviceIcon: deviceIcon.trim(),
     );
-    await _apiService!.call(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      object: 'file',
-      method: 'exec',
-      params: {
-        'command': '/bin/sh',
-        'params': ['-c', dbCommand],
-      },
+    unawaited(
+      _apiService!
+          .call(
+            router.ipAddress,
+            sysauth,
+            router.useHttps,
+            object: 'file',
+            method: 'exec',
+            params: {
+              'command': '/bin/sh',
+              'params': ['-c', dbCommand],
+            },
+          )
+          .catchError((Object e, StackTrace stack) {
+            Logger.debug(
+              'Background device identity database update failed: $e',
+            );
+            Logger.debug(
+              'Background device identity database update stack: $stack',
+            );
+            return <String, dynamic>{};
+          }),
     );
     unawaited(
       _apiService!
@@ -13093,6 +13471,45 @@ exit 0
             }),
       );
     }
+    notifyListeners();
+  }
+
+  Future<void> hideOpenwallaDeviceRecord(Client client) async {
+    if (_reviewerModeEnabled) {
+      notifyListeners();
+      return;
+    }
+
+    final router = _routerService?.selectedRouter;
+    final sysauth = _authService?.sysauth;
+    if (router == null || sysauth == null || _apiService == null) {
+      throw StateError('No selected router connection is available');
+    }
+
+    final normalizedMac = _normalizeMacAddress(client.macAddress);
+    if (!RegExp(r'^([0-9A-F]{2}:){5}[0-9A-F]{2}$').hasMatch(normalizedMac)) {
+      throw ArgumentError('A valid device MAC address is required');
+    }
+
+    final escapedMac = normalizedMac.toLowerCase().replaceAll("'", "''");
+    final sql =
+        "UPDATE devices SET hidden=1, quarantined=0, scheduled_block=0, schedule_until='', status='offline' WHERE lower(mac)='$escapedMac';";
+    final command =
+        '${_sqliteCommand(_devicesDbExpression(), sql)}; '
+        'if [ -x /usr/bin/openwalla-devices-collector ]; then '
+        '/usr/bin/openwalla-devices-collector --hide ${_shellQuote(normalizedMac)}; '
+        'fi';
+    await _apiService!.call(
+      router.ipAddress,
+      sysauth,
+      router.useHttps,
+      object: 'file',
+      method: 'exec',
+      params: {
+        'command': '/bin/sh',
+        'params': ['-c', command],
+      },
+    );
     notifyListeners();
   }
 

@@ -1,6 +1,6 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:convert';
-import 'package:luci_mobile/models/router.dart';
+import 'package:openwalla/models/router.dart';
 import '../utils/logger.dart';
 
 class SecureStorageService {
@@ -88,6 +88,23 @@ class SecureStorageService {
       await _storage.delete(key: key);
     } catch (e, stack) {
       Logger.exception('Failed to delete value for key: $key', e, stack);
+      rethrow;
+    }
+  }
+
+  Future<void> deleteRouterScopedValues(String routerId) async {
+    try {
+      final values = await _storage.readAll();
+      final suffix = ':$routerId';
+      for (final key in values.keys.where((key) => key.endsWith(suffix))) {
+        await _storage.delete(key: key);
+      }
+    } catch (e, stack) {
+      Logger.exception(
+        'Failed to delete secure storage values for router: $routerId',
+        e,
+        stack,
+      );
       rethrow;
     }
   }

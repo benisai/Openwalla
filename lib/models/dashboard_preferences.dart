@@ -25,6 +25,7 @@ class DashboardPreferences {
   final int shortcutPanelVisibleCount;
   final List<String> shortcutOrder;
   final int liveThroughputRefreshSeconds;
+  final int systemResourcesRefreshSeconds;
   final DashboardFlowMode flowMode;
 
   DashboardPreferences({
@@ -52,6 +53,7 @@ class DashboardPreferences {
     this.shortcutPanelVisibleCount = 6,
     List<String>? shortcutOrder,
     this.liveThroughputRefreshSeconds = 3,
+    this.systemResourcesRefreshSeconds = 5,
     this.flowMode = DashboardFlowMode.detailed,
   }) : enabledWirelessInterfaces = enabledWirelessInterfaces ?? {},
        enabledWiredInterfaces = enabledWiredInterfaces ?? {},
@@ -100,6 +102,7 @@ class DashboardPreferences {
     int? shortcutPanelVisibleCount,
     List<String>? shortcutOrder,
     int? liveThroughputRefreshSeconds,
+    int? systemResourcesRefreshSeconds,
     DashboardFlowMode? flowMode,
   }) {
     return DashboardPreferences(
@@ -142,6 +145,8 @@ class DashboardPreferences {
       shortcutOrder: shortcutOrder ?? this.shortcutOrder,
       liveThroughputRefreshSeconds:
           liveThroughputRefreshSeconds ?? this.liveThroughputRefreshSeconds,
+      systemResourcesRefreshSeconds:
+          systemResourcesRefreshSeconds ?? this.systemResourcesRefreshSeconds,
       flowMode: flowMode ?? this.flowMode,
     );
   }
@@ -172,6 +177,7 @@ class DashboardPreferences {
     'shortcutPanelVisibleCount': shortcutPanelVisibleCount,
     'shortcutOrder': shortcutOrder,
     'liveThroughputRefreshSeconds': liveThroughputRefreshSeconds,
+    'systemResourcesRefreshSeconds': systemResourcesRefreshSeconds,
     'flowMode': flowMode.name,
   };
 
@@ -213,6 +219,9 @@ class DashboardPreferences {
       liveThroughputRefreshSeconds: _parseLiveThroughputRefreshSeconds(
         json['liveThroughputRefreshSeconds'],
       ),
+      systemResourcesRefreshSeconds: _parseSystemResourcesRefreshSeconds(
+        json['systemResourcesRefreshSeconds'],
+      ),
       flowMode: DashboardFlowMode.values.firstWhere(
         (mode) => mode.name == json['flowMode']?.toString(),
         orElse: () => DashboardFlowMode.detailed,
@@ -228,6 +237,11 @@ class DashboardPreferences {
   static int _parseLiveThroughputRefreshSeconds(dynamic value) {
     final parsed = value is int ? value : int.tryParse(value?.toString() ?? '');
     return const {2, 3, 5, 10}.contains(parsed) ? parsed! : 3;
+  }
+
+  static int _parseSystemResourcesRefreshSeconds(dynamic value) {
+    final parsed = value is int ? value : int.tryParse(value?.toString() ?? '');
+    return const {5, 10, 15, 30}.contains(parsed) ? parsed! : 5;
   }
 
   static List<String> _parseShortcutOrder(dynamic value) {

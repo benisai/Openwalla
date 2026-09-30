@@ -2,16 +2,16 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/screens/about_screen.dart';
-import 'package:luci_mobile/screens/login_screen.dart';
-import 'package:luci_mobile/screens/manage_device_screen.dart';
-import 'package:luci_mobile/screens/reboot_countdown_screen.dart';
-import 'package:luci_mobile/screens/settings_screen.dart';
-import 'package:luci_mobile/widgets/luci_app_bar.dart';
-import 'package:luci_mobile/design/luci_design_system.dart';
-import 'package:luci_mobile/utils/http_client_manager.dart';
-import 'package:luci_mobile/state/app_state.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/screens/about_screen.dart';
+import 'package:openwalla/screens/login_screen.dart';
+import 'package:openwalla/screens/manage_device_screen.dart';
+import 'package:openwalla/screens/reboot_countdown_screen.dart';
+import 'package:openwalla/screens/settings_screen.dart';
+import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/design/luci_design_system.dart';
+import 'package:openwalla/utils/http_client_manager.dart';
+import 'package:openwalla/state/app_state.dart';
 
 class _MoreScreenSection extends StatelessWidget {
   final List<Widget> tiles;
@@ -225,7 +225,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                 );
               },
             ),
-            const LuciSectionHeader('Application'),
+            const LuciSectionHeader('Openwalla'),
             _MoreScreenSection(
               tiles: [
                 _buildMoreTile(

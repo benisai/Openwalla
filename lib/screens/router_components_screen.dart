@@ -2,9 +2,20 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/widgets/luci_app_bar.dart';
-import 'package:luci_mobile/widgets/ssh_console_sheet.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/ssh_console_sheet.dart';
+
+const _routerComponentsRawBase =
+    'https://raw.githubusercontent.com/benisai/openwalla-apk/main/openwrt-setup';
+
+String buildRouterComponentsCommand(String action) => [
+  'export OPENWALLA_RAW_BASE=$_routerComponentsRawBase',
+  'SCRIPT=/tmp/openwalla-components.sh',
+  'if command -v wget >/dev/null 2>&1; then wget -qO "\$SCRIPT" "\$OPENWALLA_RAW_BASE/openwalla-components.sh"; else curl -fsSL "\$OPENWALLA_RAW_BASE/openwalla-components.sh" -o "\$SCRIPT"; fi',
+  'chmod 0755 "\$SCRIPT"',
+  'sh "\$SCRIPT" $action',
+].join(' && ');
 
 class RouterComponentsScreen extends ConsumerStatefulWidget {
   const RouterComponentsScreen({super.key});
@@ -16,11 +27,7 @@ class RouterComponentsScreen extends ConsumerStatefulWidget {
 
 class _RouterComponentsScreenState
     extends ConsumerState<RouterComponentsScreen> {
-  static const _availableVersion = '2026.09.25.9';
-  static const _rawBase =
-      'https://raw.githubusercontent.com/benisai/openwalla-apk/main/openwrt-setup';
-
-  _ComponentStatus? _status;
+  RouterComponentStatus? _status;
   String? _error;
   bool _checking = true;
   bool _updating = false;
@@ -30,14 +37,6 @@ class _RouterComponentsScreenState
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _check());
   }
-
-  String _command(String action) => [
-    'export OPENWALLA_RAW_BASE=$_rawBase',
-    'SCRIPT=/tmp/openwalla-components.sh',
-    'if command -v wget >/dev/null 2>&1; then wget -qO "\$SCRIPT" "\$OPENWALLA_RAW_BASE/openwalla-components.sh"; else curl -fsSL "\$OPENWALLA_RAW_BASE/openwalla-components.sh" -o "\$SCRIPT"; fi',
-    'chmod 0755 "\$SCRIPT"',
-    'sh "\$SCRIPT" $action',
-  ].join(' && ');
 
   Future<void> _check() async {
     if (mounted) {
@@ -49,9 +48,9 @@ class _RouterComponentsScreenState
     try {
       final output = await ref
           .read(appStateProvider)
-          .runRouterSetupCommandViaSsh(_command('status'));
+          .runRouterSetupCommandViaSsh(buildRouterComponentsCommand('status'));
       if (!mounted) return;
-      setState(() => _status = _ComponentStatus.parse(output));
+      setState(() => _status = RouterComponentStatus.parse(output));
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = error.toString().replaceFirst('Bad state: ', ''));
@@ -81,7 +80,7 @@ class _RouterComponentsScreenState
       final output = await ref
           .read(appStateProvider)
           .runRouterSetupCommandViaSsh(
-            _command('update'),
+            buildRouterComponentsCommand('update'),
             onOutput: (chunk) {
               buffer.write(chunk);
               console.setOutput(buffer.toString().trimRight());
@@ -91,7 +90,7 @@ class _RouterComponentsScreenState
       console.complete();
       if (!mounted) return;
       setState(() {
-        _status = _ComponentStatus.parse(output);
+        _status = RouterComponentStatus.parse(output);
         _error = null;
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -112,7 +111,7 @@ class _RouterComponentsScreenState
     final colors = Theme.of(context).colorScheme;
     final status = _status;
     final hasComponents = status != null && status.managedCount > 0;
-    final current = hasComponents && status.outdatedFiles.isEmpty;
+    final current = status?.isCurrent ?? false;
     final heading = !hasComponents
         ? 'No Managed Components Found'
         : current
@@ -166,7 +165,7 @@ class _RouterComponentsScreenState
                                         ?.copyWith(fontWeight: FontWeight.w900),
                                   ),
                                   Text(
-                                    'Installed ${status?.installedVersion ?? 'Unknown'}  •  Available $_availableVersion',
+                                    'Installed ${status?.installedVersion ?? 'Unknown'}  •  Available ${status?.availableVersion ?? 'Unknown'}',
                                     style: Theme.of(context).textTheme.bodySmall
                                         ?.copyWith(
                                           color: colors.onSurfaceVariant,
@@ -271,18 +270,27 @@ class _StatusRow extends StatelessWidget {
   }
 }
 
-class _ComponentStatus {
+class RouterComponentStatus {
+  final String availableVersion;
   final String installedVersion;
   final int managedCount;
   final List<String> outdatedFiles;
 
-  const _ComponentStatus({
+  const RouterComponentStatus({
+    required this.availableVersion,
     required this.installedVersion,
     required this.managedCount,
     required this.outdatedFiles,
   });
 
-  factory _ComponentStatus.parse(String output) {
+  bool get isCurrent =>
+      managedCount > 0 &&
+      outdatedFiles.isEmpty &&
+      availableVersion != 'Unknown' &&
+      installedVersion == availableVersion;
+
+  factory RouterComponentStatus.parse(String output) {
+    var availableVersion = 'Unknown';
     var installedVersion = 'Unknown';
     var managedCount = 0;
     final outdated = <String>[];
@@ -290,6 +298,8 @@ class _ComponentStatus {
       final fields = line.trim().split('|');
       if (fields.length < 2) continue;
       switch (fields.first) {
+        case 'AVAILABLE_VERSION':
+          availableVersion = fields[1];
         case 'INSTALLED_VERSION':
           installedVersion = fields[1];
         case 'OUTDATED':
@@ -304,7 +314,8 @@ class _ComponentStatus {
           }
       }
     }
-    return _ComponentStatus(
+    return RouterComponentStatus(
+      availableVersion: availableVersion,
       installedVersion: installedVersion,
       managedCount: managedCount,
       outdatedFiles: outdated,

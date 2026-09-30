@@ -2,9 +2,9 @@ import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:luci_mobile/models/dashboard_preferences.dart';
-import 'package:luci_mobile/models/router.dart';
-import 'package:luci_mobile/services/router_service.dart';
+import 'package:openwalla/models/dashboard_preferences.dart';
+import 'package:openwalla/models/router.dart';
+import 'package:openwalla/services/router_service.dart';
 
 void main() {
   test('existing dashboard preferences gain new VPN shortcuts', () {

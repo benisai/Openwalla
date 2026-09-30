@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/widgets/luci_app_bar.dart';
-import 'package:luci_mobile/design/luci_design_system.dart';
-import 'package:luci_mobile/screens/router_dashboard_settings_screen.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/design/luci_design_system.dart';
+import 'package:openwalla/screens/router_dashboard_settings_screen.dart';
 
 class DashboardSettingsListScreen extends ConsumerWidget {
   const DashboardSettingsListScreen({super.key});
@@ -22,7 +22,11 @@ class DashboardSettingsListScreen extends ConsumerWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.router_outlined, size: 56, color: Theme.of(context).colorScheme.outline),
+                    Icon(
+                      Icons.router_outlined,
+                      size: 56,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
                     SizedBox(height: LuciSpacing.md),
                     Text(
                       'No Routers Added',
@@ -83,16 +87,16 @@ class DashboardSettingsListScreen extends ConsumerWidget {
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => RouterDashboardSettingsScreen(
-                            routerId: r.id,
-                          ),
+                          builder: (_) =>
+                              RouterDashboardSettingsScreen(routerId: r.id),
                         ),
                       );
                     },
                   ),
                 );
               },
-              separatorBuilder: (context, index) => SizedBox(height: LuciSpacing.sm),
+              separatorBuilder: (context, index) =>
+                  SizedBox(height: LuciSpacing.sm),
               itemCount: routers.length,
             ),
     );

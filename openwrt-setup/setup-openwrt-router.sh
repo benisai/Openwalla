@@ -16,8 +16,9 @@ have_cmd() {
 OPENWALLA_GITHUB_REPO="${OPENWALLA_GITHUB_REPO:-benisai/openwalla-apk}"
 OPENWALLA_GITHUB_REF="${OPENWALLA_GITHUB_REF:-main}"
 OPENWALLA_RAW_BASE="${OPENWALLA_RAW_BASE:-https://raw.githubusercontent.com/$OPENWALLA_GITHUB_REPO/$OPENWALLA_GITHUB_REF/openwrt-setup}"
+OPENWALLA_VERSION_URL="${OPENWALLA_VERSION_URL:-${OPENWALLA_RAW_BASE%/openwrt-setup}/pub_script_version.yaml}"
 OPENWALLA_ROOT="${OPENWALLA_ROOT:-/root/openwalla}"
-OPENWALLA_COMPONENT_VERSION="2026.09.25.9"
+OPENWALLA_COMPONENT_VERSION="unknown"
 STANDALONE_DIR="$OPENWALLA_ROOT/standalone"
 STANDALONE_LIB_DIR="$STANDALONE_DIR/lib"
 
@@ -210,7 +211,6 @@ append_all_features() {
 	append_stack_features
 	append_feature adblock
 	append_feature pbr
-	append_feature netify
 	append_feature banip
 	append_feature qos
 	append_feature tor
@@ -224,10 +224,6 @@ append_feature_arg() {
 		;;
 	monitoring|monitors)
 		append_monitoring_features
-		;;
-	flows)
-		append_feature conntrack
-		append_feature netify
 		;;
 	all|everything|profile3)
 		append_all_features
@@ -287,7 +283,6 @@ append_profile_features() {
 		append_stack_features
 		append_feature adblock
 		append_feature pbr
-		append_feature netify
 		;;
 	*)
 		echo "Invalid profile: $1"
@@ -308,6 +303,15 @@ download_file() {
 	fi
 	echo "Neither wget nor curl is available; cannot download $url"
 	return 1
+}
+
+load_component_version() {
+	version_file="/tmp/openwalla-pub-script-version.$$"
+	if download_file "$OPENWALLA_VERSION_URL" "$version_file"; then
+		OPENWALLA_COMPONENT_VERSION="$(awk -F ': *' '$1 == "version" { print $2; exit }' "$version_file")"
+	fi
+	rm -f "$version_file"
+	[ -n "$OPENWALLA_COMPONENT_VERSION" ] || OPENWALLA_COMPONENT_VERSION="unknown"
 }
 
 download_standalone_runtime() {
@@ -494,14 +498,14 @@ uninstall_feature() {
 		stop_disable_service openwalla-netify-collector
 		rm -f /usr/bin/openwalla-netify-collector /etc/init.d/openwalla-netify-collector
 		clear_openwalla_section collector
+		clear_openwalla_section flow_stats
 		uci -q delete openwalla.features.netify >/dev/null 2>&1 || true
 		remove_pkg_if_installed netifyd
 		;;
 	quarantine)
-		stop_disable_service openwalla-device-quarantine
-		rm -f /usr/bin/openwalla-device-quarantine /etc/init.d/openwalla-device-quarantine \
-			/etc/hotplug.d/dhcp/95-openwalla-quarantine /etc/hotplug.d/neigh/95-openwalla-quarantine
-		clear_openwalla_section quarantine
+		rm -f /etc/hotplug.d/dhcp/95-openwalla-quarantine /etc/hotplug.d/neigh/95-openwalla-quarantine
+		uci -q set openwalla.quarantine.enabled='0' >/dev/null 2>&1 || true
+		uci -q delete openwalla.features.quarantine >/dev/null 2>&1 || true
 		;;
 	state-sync)
 		stop_disable_service openwalla-state-sync
@@ -695,6 +699,7 @@ if [ "$ACTION" = "uninstall" ]; then
 fi
 
 update_package_feeds_once
+load_component_version
 download_standalone_runtime
 run_installers
 

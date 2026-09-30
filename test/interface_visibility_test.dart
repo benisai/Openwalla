@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:luci_mobile/screens/interfaces_screen.dart';
+import 'package:openwalla/screens/interfaces_screen.dart';
 
 void main() {
   group('wired interface visibility', () {

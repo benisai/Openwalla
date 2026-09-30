@@ -3,18 +3,18 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/screens/manage_routers_screen.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/screens/manage_routers_screen.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher_string.dart';
-import 'package:luci_mobile/config/app_config.dart';
-import 'package:luci_mobile/models/router.dart' as model;
-import 'package:luci_mobile/services/secure_storage_service.dart';
-import 'package:luci_mobile/services/ssh_service.dart';
-import 'package:luci_mobile/state/app_state.dart';
-import 'package:luci_mobile/utils/gateway_utils.dart';
-import 'package:luci_mobile/utils/url_parser.dart';
-import 'package:luci_mobile/widgets/ssh_console_sheet.dart';
+import 'package:openwalla/config/app_config.dart';
+import 'package:openwalla/models/router.dart' as model;
+import 'package:openwalla/services/secure_storage_service.dart';
+import 'package:openwalla/services/ssh_service.dart';
+import 'package:openwalla/state/app_state.dart';
+import 'package:openwalla/utils/gateway_utils.dart';
+import 'package:openwalla/utils/url_parser.dart';
+import 'package:openwalla/widgets/ssh_console_sheet.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});

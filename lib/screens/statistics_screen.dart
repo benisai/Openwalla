@@ -4,14 +4,14 @@ import 'dart:math';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/screens/monthly_usage_screen.dart';
-import 'package:luci_mobile/screens/router_setup_screen.dart';
-import 'package:luci_mobile/screens/usage_settings_screen.dart';
-import 'package:luci_mobile/state/app_state.dart';
-import 'package:luci_mobile/widgets/luci_app_bar.dart';
-import 'package:luci_mobile/widgets/luci_refresh_components.dart';
-import 'package:luci_mobile/widgets/ssh_console_sheet.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/screens/monthly_usage_screen.dart';
+import 'package:openwalla/screens/router_setup_screen.dart';
+import 'package:openwalla/screens/usage_settings_screen.dart';
+import 'package:openwalla/state/app_state.dart';
+import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_refresh_components.dart';
+import 'package:openwalla/widgets/ssh_console_sheet.dart';
 
 enum _StatsUsageRange { minute, hour, day, week }
 

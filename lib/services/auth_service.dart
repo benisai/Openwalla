@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:luci_mobile/services/interfaces/api_service_interface.dart';
-import 'package:luci_mobile/services/api_service.dart';
-import 'package:luci_mobile/services/secure_storage_service.dart';
-import 'package:luci_mobile/services/interfaces/auth_service_interface.dart';
-import 'package:luci_mobile/utils/logger.dart';
+import 'package:openwalla/services/interfaces/api_service_interface.dart';
+import 'package:openwalla/services/api_service.dart';
+import 'package:openwalla/services/secure_storage_service.dart';
+import 'package:openwalla/services/interfaces/auth_service_interface.dart';
+import 'package:openwalla/utils/logger.dart';
 
 class RealAuthService implements IAuthService {
   final SecureStorageService _secureStorageService = SecureStorageService();

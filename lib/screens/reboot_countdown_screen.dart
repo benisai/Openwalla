@@ -3,9 +3,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/design/luci_design_system.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/screens/login_screen.dart';
+import 'package:openwalla/design/luci_design_system.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/screens/login_screen.dart';
 
 class RebootCountdownDialog extends ConsumerStatefulWidget {
   const RebootCountdownDialog({

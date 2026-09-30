@@ -1,11 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/screens/router_setup_screen.dart';
-import 'package:luci_mobile/screens/routes_screen.dart';
-import 'package:luci_mobile/state/app_state.dart';
-import 'package:luci_mobile/widgets/luci_app_bar.dart';
-import 'package:luci_mobile/widgets/luci_toast.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/screens/router_setup_screen.dart';
+import 'package:openwalla/screens/routes_screen.dart';
+import 'package:openwalla/state/app_state.dart';
+import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 
 enum _FlowTimeRange {
   oneHour('Last Hour', 1),
@@ -26,7 +28,10 @@ enum _FlowDomainScope { exact, root }
 enum _FlowIpScope { device, network }
 
 class FlowsScreen extends ConsumerStatefulWidget {
-  const FlowsScreen({super.key});
+  final String? deviceMac;
+  final String? deviceName;
+
+  const FlowsScreen({super.key, this.deviceMac, this.deviceName});
 
   @override
   ConsumerState<FlowsScreen> createState() => _FlowsScreenState();
@@ -45,15 +50,10 @@ class _FlowItem {
   final String vendor;
   final String destinationIp;
   final String destinationPort;
-  final String destinationService;
   final String region;
   final String timestamp;
   final String direction;
   final String outboundInterface;
-  final String flowCount;
-  final String duration;
-  final String downloaded;
-  final String uploaded;
   final String status;
   final String transfer;
 
@@ -70,15 +70,10 @@ class _FlowItem {
     required this.vendor,
     required this.destinationIp,
     required this.destinationPort,
-    required this.destinationService,
     required this.region,
     required this.timestamp,
     required this.direction,
     required this.outboundInterface,
-    required this.flowCount,
-    required this.duration,
-    required this.downloaded,
-    required this.uploaded,
     required this.status,
     required this.transfer,
   });
@@ -90,13 +85,10 @@ class _FlowItem {
   }) {
     final time = _formatClock(flow.timestamp.toLocal());
     final timestamp = _formatDateTime(flow.timestamp.toLocal());
-    final protocol = flow.protocol == 'N/A' ? 'TCP' : flow.protocol;
     final destinationPort = flow.destinationPort == '0'
-        ? protocol
-        : '$protocol ${flow.destinationPort}';
-    final devicePort = flow.localPort.isEmpty
-        ? protocol
-        : '$protocol ${flow.localPort}';
+        ? '-'
+        : flow.destinationPort;
+    final devicePort = flow.localPort.isEmpty ? '-' : flow.localPort;
     final deviceName =
         hostnameByMac[flow.deviceMac] ??
         hostnameByIp[flow.localIp] ??
@@ -115,15 +107,10 @@ class _FlowItem {
       vendor: '-',
       destinationIp: flow.destinationIp,
       destinationPort: destinationPort,
-      destinationService: flow.protocol,
       region: flow.region.isEmpty ? flow.countryCode : flow.region,
       timestamp: timestamp,
       direction: flow.direction,
       outboundInterface: flow.interfaceName,
-      flowCount: '1',
-      duration: '-',
-      downloaded: _formatBytes(flow.downloadedBytes),
-      uploaded: _formatBytes(flow.uploadedBytes),
       status: 'Active',
       transfer: _formatBytes(flow.totalBytes),
     );
@@ -168,7 +155,8 @@ class _FlowItem {
 class _FlowsScreenState extends ConsumerState<FlowsScreen> {
   static const Color _cyan = Color(0xFF18AEEA);
   static const Color _red = Color(0xFFFF4D4F);
-  static const int _pageSize = 1000;
+  static const int _pageSize = 250;
+  static const int _maxLoadedFlows = 2000;
 
   bool _isLoading = true;
   bool _isLoadingMore = false;
@@ -178,6 +166,9 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
   String? _selectedProtocolFilter;
   _FlowTimeRange _selectedTimeRange = _FlowTimeRange.twentyFourHours;
   int _flowCount = 0;
+  int _loadGeneration = 0;
+  Timer? _searchDebounce;
+  final TextEditingController _searchController = TextEditingController();
   List<_FlowItem> _flows = const [];
   (Map<String, String>, Map<String, String>) _cachedHostnames = (
     const {},
@@ -194,6 +185,8 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
     _scrollController
       ..removeListener(_handleScroll)
       ..dispose();
@@ -216,6 +209,7 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
 
   Future<void> _loadFlows() async {
     if (!mounted) return;
+    final generation = ++_loadGeneration;
     setState(() {
       _isLoading = true;
       _isLoadingMore = false;
@@ -245,15 +239,19 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
         provider: OpenwallaFlowProvider.netify,
         protocolFilter: _selectedProtocolFilter,
         hoursBack: _selectedTimeRange.hours,
+        deviceMac: widget.deviceMac,
+        searchQuery: _searchController.text,
       );
       final flowsFuture = appState.fetchNetifyFlows(
         limit: _pageSize,
         protocolFilter: _selectedProtocolFilter,
         hoursBack: _selectedTimeRange.hours,
+        deviceMac: widget.deviceMac,
+        searchQuery: _searchController.text,
       );
       final hostnames = await hostnamesFuture;
       final flows = await flowsFuture;
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _cachedHostnames = hostnames;
         _flows = _mapFlowItems(flows, hostnames);
@@ -263,11 +261,13 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
       });
 
       final summary = await summaryFuture;
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _flowCount = summary.count;
-        _hasMoreFlows = _flows.length < summary.count;
+        _hasMoreFlows =
+            _flows.length < summary.count && _flows.length < _maxLoadedFlows;
       });
+      unawaited(_loadFlowBatches(generation));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -277,30 +277,51 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
     }
   }
 
-  Future<void> _loadMoreFlows() async {
+  Future<void> _loadFlowBatches(int generation) async {
+    while (mounted &&
+        generation == _loadGeneration &&
+        _hasMoreFlows &&
+        _flows.length < _maxLoadedFlows) {
+      await _loadMoreFlows(generation: generation);
+    }
+  }
+
+  Future<void> _loadMoreFlows({int? generation}) async {
     if (!mounted || _isLoading || _isLoadingMore || !_hasMoreFlows) {
       return;
     }
+
+    final activeGeneration = generation ?? _loadGeneration;
+    if (activeGeneration != _loadGeneration) return;
 
     setState(() => _isLoadingMore = true);
 
     try {
       final appState = ref.read(appStateProvider);
+      final requestLimit = (_maxLoadedFlows - _flows.length).clamp(
+        1,
+        _pageSize,
+      );
       final flows = await appState.fetchNetifyFlows(
-        limit: _pageSize,
+        limit: requestLimit,
         offset: _flows.length,
         protocolFilter: _selectedProtocolFilter,
         hoursBack: _selectedTimeRange.hours,
+        deviceMac: widget.deviceMac,
+        searchQuery: _searchController.text,
       );
-      if (!mounted) return;
+      if (!mounted || activeGeneration != _loadGeneration) return;
       final items = _mapFlowItems(flows, _cachedHostnames);
       setState(() {
         _flows = [..._flows, ...items];
-        _hasMoreFlows = flows.length == _pageSize && _flows.length < _flowCount;
+        _hasMoreFlows =
+            flows.length == requestLimit &&
+            _flows.length < _flowCount &&
+            _flows.length < _maxLoadedFlows;
         _isLoadingMore = false;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || activeGeneration != _loadGeneration) return;
       setState(() {
         _hasMoreFlows = false;
         _isLoadingMore = false;
@@ -367,6 +388,18 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
     _loadFlows();
   }
 
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), _loadFlows);
+  }
+
+  void _clearSearch() {
+    if (_searchController.text.isEmpty) return;
+    _searchDebounce?.cancel();
+    _searchController.clear();
+    _loadFlows();
+  }
+
   String _formatCount(int value) {
     final text = value.toString();
     final buffer = StringBuffer();
@@ -393,10 +426,171 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
     );
   }
 
+  Future<void> _configureFlowStats() async {
+    final appState = ref.read(appStateProvider);
+    final settings = await appState.fetchFlowStatsSettings(context: context);
+    if (!mounted) return;
+    var enabled = settings.enabled;
+    var pollSeconds = settings.pollSeconds;
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Flow Settings'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Usage statistics'),
+                subtitle: const Text('Higher router CPU usage'),
+                value: enabled,
+                onChanged: (value) => setDialogState(() => enabled = value),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Expanded(child: Text('Polling interval')),
+                  Text('$pollSeconds seconds'),
+                ],
+              ),
+              Slider(
+                min: 2,
+                max: 10,
+                divisions: 8,
+                value: pollSeconds.toDouble(),
+                onChanged: enabled
+                    ? (value) => setDialogState(
+                        () => pollSeconds = value.round().clamp(2, 10),
+                      )
+                    : null,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (saved != true || !mounted) return;
+    try {
+      await appState.saveFlowStatsSettings(
+        FlowStatsSettings(enabled: enabled, pollSeconds: pollSeconds),
+        context: context,
+      );
+      if (!mounted) return;
+      context.showToastSuccess(
+        enabled ? 'Flow usage enabled' : 'Flow usage disabled',
+      );
+    } catch (error) {
+      if (!mounted) return;
+      context.showToastError('Could not update flow usage');
+    }
+  }
+
+  Future<void> _showFlowUsage() async {
+    final usage = await ref
+        .read(appStateProvider)
+        .fetchFlowStatsUsage(context: context);
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.72,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+                child: Text(
+                  'Flow Usage',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _FlowUsageMetric(
+                        label: 'Downloaded',
+                        value: _FlowItem._formatBytes(usage.downloadedBytes),
+                        icon: Icons.arrow_downward_rounded,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _FlowUsageMetric(
+                        label: 'Uploaded',
+                        value: _FlowItem._formatBytes(usage.uploadedBytes),
+                        icon: Icons.arrow_upward_rounded,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              const Divider(height: 1),
+              Expanded(
+                child: usage.devices.isEmpty
+                    ? const Center(child: Text('No flow usage collected yet.'))
+                    : ListView.separated(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        itemCount: usage.devices.length,
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final device = usage.devices[index];
+                          return ListTile(
+                            leading: const Icon(Icons.devices_rounded),
+                            title: Text(device.device),
+                            subtitle: Text(
+                              '${_FlowItem._formatBytes(device.downloadedBytes)} down  •  ${_FlowItem._formatBytes(device.uploadedBytes)} up',
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const LuciAppBar(title: 'Network Flows', showBack: true),
+      appBar: LuciAppBar(
+        title: widget.deviceMac == null ? 'Network Flows' : 'Device Flows',
+        showBack: true,
+        actions: widget.deviceMac == null
+            ? [
+                IconButton(
+                  tooltip: 'Flow usage',
+                  onPressed: _showFlowUsage,
+                  icon: const Icon(Icons.bar_chart_rounded),
+                ),
+                IconButton(
+                  tooltip: 'Flow settings',
+                  onPressed: _configureFlowStats,
+                  icon: const Icon(Icons.settings_rounded),
+                ),
+              ]
+            : null,
+      ),
       body: SafeArea(
         top: false,
         child: RefreshIndicator(
@@ -470,6 +664,19 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (widget.deviceMac != null) ...[
+          Text(
+            widget.deviceName?.trim().isNotEmpty == true
+                ? widget.deviceName!.trim()
+                : widget.deviceMac!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 12),
+        ],
         Row(
           children: [
             PopupMenuButton<_FlowTimeRange>(
@@ -503,9 +710,34 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
             ),
           ],
         ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _searchController,
+          onChanged: _onSearchChanged,
+          textInputAction: TextInputAction.search,
+          onSubmitted: (_) {
+            _searchDebounce?.cancel();
+            _loadFlows();
+          },
+          decoration: InputDecoration(
+            hintText: 'Search hostname or domain',
+            prefixIcon: const Icon(Icons.search_rounded),
+            suffixIcon: ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _searchController,
+              builder: (context, value, child) {
+                if (value.text.isEmpty) return const SizedBox.shrink();
+                return IconButton(
+                  tooltip: 'Clear search',
+                  onPressed: _clearSearch,
+                  icon: const Icon(Icons.close_rounded),
+                );
+              },
+            ),
+          ),
+        ),
         const SizedBox(height: 20),
         Text(
-          'All Flows',
+          widget.deviceMac == null ? 'All Flows' : 'Device Flows',
           style: Theme.of(context).textTheme.titleSmall?.copyWith(
             color: colorScheme.onSurfaceVariant,
             fontWeight: FontWeight.w800,
@@ -550,7 +782,9 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 18),
         child: Text(
-          'End of flows',
+          _flowCount > _maxLoadedFlows
+              ? 'Showing latest $_maxLoadedFlows flows'
+              : 'End of flows',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
             color: colorScheme.onSurfaceVariant,
@@ -560,6 +794,45 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
       );
     }
     return const SizedBox.shrink();
+  }
+}
+
+class _FlowUsageMetric extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+
+  const _FlowUsageMetric({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        border: Border.all(color: colors.outlineVariant),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: colors.primary),
+          const SizedBox(height: 10),
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -859,21 +1132,12 @@ class _FlowDetailsDialog extends ConsumerWidget {
                     _DetailSection(
                       title: 'Destination',
                       rows: [
-                        _DetailRow(
-                          label: 'Name',
-                          value: flow.destination,
-                          showChevron: true,
-                        ),
+                        _DetailRow(label: 'Name', value: flow.destination),
                         _DetailRow(
                           label: 'IP Address',
                           value: flow.destinationIp,
-                          showChevron: true,
                         ),
-                        _DetailRow(
-                          label: 'Port',
-                          value: flow.destinationPort,
-                          helper: flow.destinationService,
-                        ),
+                        _DetailRow(label: 'Port', value: flow.destinationPort),
                       ],
                     ),
                     const SizedBox(height: 18),
@@ -886,10 +1150,6 @@ class _FlowDetailsDialog extends ConsumerWidget {
                           label: 'Outbound Interface',
                           value: flow.outboundInterface,
                         ),
-                        _DetailRow(label: 'Flow Count', value: flow.flowCount),
-                        _DetailRow(label: 'Duration', value: flow.duration),
-                        _DetailRow(label: 'Downloaded', value: flow.downloaded),
-                        _DetailRow(label: 'Uploaded', value: flow.uploaded),
                       ],
                     ),
                   ],
@@ -1423,16 +1683,12 @@ class _DetailRow extends StatelessWidget {
   final String value;
   final IconData? icon;
   final Color? iconColor;
-  final String? helper;
-  final bool showChevron;
 
   const _DetailRow({
     required this.label,
     required this.value,
     this.icon,
     this.iconColor,
-    this.helper,
-    this.showChevron = false,
   });
 
   @override
@@ -1479,30 +1735,8 @@ class _DetailRow extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (showChevron) ...[
-                const SizedBox(width: 6),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ],
             ],
           ),
-          if (helper != null) ...[
-            const SizedBox(height: 10),
-            Container(
-              width: double.infinity,
-              color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-              child: Text(
-                helper!,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ],
         ],
       ),
     );

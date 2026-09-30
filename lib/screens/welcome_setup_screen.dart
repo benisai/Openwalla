@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/models/dashboard_preferences.dart';
-import 'package:luci_mobile/widgets/ssh_console_sheet.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/models/dashboard_preferences.dart';
+import 'package:openwalla/widgets/ssh_console_sheet.dart';
 
 class WelcomeSetupScreen extends ConsumerStatefulWidget {
   const WelcomeSetupScreen({super.key});

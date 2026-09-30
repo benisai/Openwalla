@@ -2,14 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/screens/network_performance_settings_screen.dart';
-import 'package:luci_mobile/screens/recent_events_screen.dart';
-import 'package:luci_mobile/screens/router_setup_screen.dart';
-import 'package:luci_mobile/state/app_state.dart';
-import 'package:luci_mobile/widgets/luci_app_bar.dart';
-import 'package:luci_mobile/widgets/luci_toast.dart';
-import 'package:luci_mobile/widgets/ssh_console_sheet.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/screens/network_performance_settings_screen.dart';
+import 'package:openwalla/screens/recent_events_screen.dart';
+import 'package:openwalla/screens/router_setup_screen.dart';
+import 'package:openwalla/state/app_state.dart';
+import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
+import 'package:openwalla/widgets/ssh_console_sheet.dart';
 
 class NetworkPerformanceScreen extends ConsumerStatefulWidget {
   const NetworkPerformanceScreen({super.key});

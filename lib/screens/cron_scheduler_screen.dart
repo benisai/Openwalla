@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/models/cron_job.dart';
-import 'package:luci_mobile/widgets/luci_app_bar.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/models/cron_job.dart';
+import 'package:openwalla/widgets/luci_app_bar.dart';
 
 class CronSchedulerScreen extends ConsumerStatefulWidget {
   const CronSchedulerScreen({super.key});

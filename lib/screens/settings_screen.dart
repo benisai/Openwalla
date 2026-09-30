@@ -2,27 +2,20 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:luci_mobile/main.dart';
-import 'package:luci_mobile/state/app_state.dart';
-import 'package:luci_mobile/widgets/luci_app_bar.dart';
-import 'package:luci_mobile/widgets/luci_toast.dart';
-import 'package:luci_mobile/screens/router_dashboard_settings_screen.dart';
+import 'package:openwalla/main.dart';
+import 'package:openwalla/state/app_state.dart';
+import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
+import 'package:openwalla/screens/router_dashboard_settings_screen.dart';
 
-class SettingsScreen extends ConsumerWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
-  Widget _buildSectionTitle(BuildContext context, String title) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-      child: Text(
-        title,
-        style: Theme.of(
-          context,
-        ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-      ),
-    );
-  }
+  @override
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
+}
 
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget _buildSettingsCard({
     required BuildContext context,
     required IconData icon,
@@ -97,7 +90,7 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: const LuciAppBar(title: 'Settings', showBack: true),
       body: ListView(
@@ -109,7 +102,6 @@ class SettingsScreen extends ConsumerWidget {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildSectionTitle(context, 'Theme'),
                   _buildSettingsCard(
                     context: context,
                     icon: Icons.palette_outlined,
@@ -121,8 +113,6 @@ class SettingsScreen extends ConsumerWidget {
                       const _ThemeSettingsScreen(),
                     ),
                   ),
-                  const Divider(height: 32),
-                  _buildSectionTitle(context, 'Dashboard'),
                   _buildSettingsCard(
                     context: context,
                     icon: Icons.dashboard_customize,
@@ -133,42 +123,6 @@ class SettingsScreen extends ConsumerWidget {
                       const RouterDashboardSettingsScreen(
                         title: 'Dashboard Settings',
                         showThroughput: false,
-                        showShortcutPanel: false,
-                        showWirelessInterfaces: false,
-                        showWiredInterfaces: false,
-                      ),
-                    ),
-                  ),
-                  _buildSettingsCard(
-                    context: context,
-                    icon: Icons.apps_rounded,
-                    title: 'Shortcut Panel',
-                    subtitle: 'Choose shortcut density and visible shortcuts',
-                    onTap: () => _openSettingsPage(
-                      context,
-                      const RouterDashboardSettingsScreen(
-                        title: 'Shortcut Panel',
-                        showThroughput: false,
-                        showDashboardCards: false,
-                        showWirelessInterfaces: false,
-                        showWiredInterfaces: false,
-                      ),
-                    ),
-                  ),
-                  const Divider(height: 32),
-                  _buildSectionTitle(context, 'Monitoring'),
-                  _buildSettingsCard(
-                    context: context,
-                    icon: Icons.speed_rounded,
-                    title: 'Live Throughput Monitoring',
-                    subtitle:
-                        'Choose which interfaces feed the Live Traffic dashboard card',
-                    onTap: () => _openSettingsPage(
-                      context,
-                      const RouterDashboardSettingsScreen(
-                        title: 'Live Throughput Monitoring',
-                        showDashboardCards: false,
-                        showShortcutPanel: false,
                         showWirelessInterfaces: false,
                         showWiredInterfaces: false,
                       ),
