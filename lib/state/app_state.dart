@@ -21,6 +21,7 @@ import 'package:openwalla/services/service_factory.dart';
 import 'package:openwalla/config/app_config.dart';
 import 'package:openwalla/utils/http_client_manager.dart';
 import 'package:openwalla/utils/logger.dart';
+import 'package:openwalla/utils/rpc_result.dart';
 
 typedef _WirelessConnection = ({
   String band,
@@ -2530,11 +2531,8 @@ class AppState extends ChangeNotifier {
         },
         context: context,
       );
-      final payload = result is List && result.length > 1 ? result[1] : result;
-      final passwordResult = payload is Map ? payload['result'] : null;
-      if (passwordResult != true &&
-          passwordResult != 1 &&
-          passwordResult != '1') {
+      Logger.debug('Router password RPC response: $result');
+      if (!rpcBooleanResultSucceeded(result)) {
         throw StateError('The router did not confirm the password change.');
       }
     }
