@@ -7,6 +7,7 @@ import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
 import 'package:openwalla/widgets/luci_toast.dart';
 import 'package:openwalla/screens/router_dashboard_settings_screen.dart';
+import 'package:openwalla/screens/router_password_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -126,6 +127,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         showWirelessInterfaces: false,
                         showWiredInterfaces: false,
                       ),
+                    ),
+                  ),
+                  _buildSettingsCard(
+                    context: context,
+                    icon: Icons.password_rounded,
+                    title: 'Router Password',
+                    subtitle: 'Set or change the OpenWrt root password',
+                    onTap: () => _openSettingsPage(
+                      context,
+                      const RouterPasswordScreen(),
                     ),
                   ),
                   if (appState.reviewerModeEnabled) ...[

@@ -2499,6 +2499,37 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  Future<bool> changeRouterPassword(
+    String newPassword, {
+    BuildContext? context,
+  }) async {
+    final router = _routerService?.selectedRouter;
+    if (router == null) {
+      throw StateError('No selected router connection is available');
+    }
+    if (newPassword.length < 8) {
+      throw ArgumentError('Router password must be at least 8 characters.');
+    }
+
+    if (!_reviewerModeEnabled) {
+      final quotedPassword = _shellQuote(newPassword);
+      final output = await runRouterSetupCommand(
+        'NEW_PASSWORD=$quotedPassword; '
+        'if printf "%s\\n%s\\n" "\$NEW_PASSWORD" "\$NEW_PASSWORD" | '
+        'passwd root >/dev/null 2>&1; then '
+        'echo OPENWALLA_PASSWORD_UPDATED; '
+        'else exit 1; fi',
+        context: context,
+      );
+      if (!output.contains('OPENWALLA_PASSWORD_UPDATED')) {
+        throw StateError('The router did not confirm the password change.');
+      }
+    }
+
+    await updateRouter(router.copyWith(password: newPassword));
+    return refreshRouterAuthenticationAfterSetup();
+  }
+
   Future<void> setNetworkInterfaceOperationalState(
     String interfaceName, {
     required bool enabled,
