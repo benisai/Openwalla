@@ -27,18 +27,11 @@ class ManageDeviceScreen extends StatelessWidget {
           _DeviceManagementCard(
             children: [
               _DeviceManagementTile(
-                icon: Icons.backup_rounded,
+                icon: Icons.construction_rounded,
                 color: colors.primary,
-                title: 'Backup & Restore',
-                subtitle: 'Openwalla state and router configuration',
-                onTap: () => _open(context, const BackupRestoreScreen()),
-              ),
-              _DeviceManagementTile(
-                icon: Icons.terminal_rounded,
-                color: colors.primary,
-                title: 'SSH Terminal',
-                subtitle: 'Open a shell with saved router credentials',
-                onTap: () => _open(context, const SshTerminalScreen()),
+                title: 'Router Setup',
+                subtitle: 'Install Openwalla features and packages',
+                onTap: () => _open(context, const RouterSetupScreen()),
               ),
               _DeviceManagementTile(
                 icon: Icons.password_rounded,
@@ -55,18 +48,25 @@ class ManageDeviceScreen extends StatelessWidget {
                 onTap: () => _open(context, const PackageManagerScreen()),
               ),
               _DeviceManagementTile(
-                icon: Icons.construction_rounded,
-                color: colors.primary,
-                title: 'Router Setup',
-                subtitle: 'Install Openwalla features and packages',
-                onTap: () => _open(context, const RouterSetupScreen()),
-              ),
-              _DeviceManagementTile(
                 icon: Icons.system_update_alt_rounded,
                 color: colors.primary,
                 title: 'Router Components',
                 subtitle: 'Verify and update installed helper files',
                 onTap: () => _open(context, const RouterComponentsScreen()),
+              ),
+              _DeviceManagementTile(
+                icon: Icons.terminal_rounded,
+                color: colors.primary,
+                title: 'SSH Terminal',
+                subtitle: 'Open a shell with saved router credentials',
+                onTap: () => _open(context, const SshTerminalScreen()),
+              ),
+              _DeviceManagementTile(
+                icon: Icons.backup_rounded,
+                color: colors.primary,
+                title: 'Backup & Restore',
+                subtitle: 'Openwalla state and router configuration',
+                onTap: () => _open(context, const BackupRestoreScreen()),
               ),
               _DeviceManagementTile(
                 icon: Icons.settings_backup_restore_rounded,
