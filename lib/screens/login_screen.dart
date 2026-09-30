@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -389,7 +390,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   Future<void> _showLoginHelp() async {
     final parsed = UrlParser.parse(_ipController.text.trim());
-    final request = await showModalBottomSheet<_LuciSshInstallRequest>(
+    final request = await showModalBottomSheet<_LoginSshRequest>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -405,25 +406,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       ),
     );
     if (request == null || !mounted) return;
-    await _installLuciViaSsh(request);
+    await _runLoginSshAction(request);
   }
 
-  Future<void> _installLuciViaSsh(_LuciSshInstallRequest request) async {
+  Future<void> _runLoginSshAction(_LoginSshRequest request) async {
+    final installingAcl = request.action == _LoginSshAction.installAcl;
     final console = SshConsoleController(
       initialOutput:
           'Connecting to ${request.username}@${request.host}:${request.port}...\n'
-          'Installing LuCI and RPC support...\n\n',
+          '${installingAcl ? 'Installing the bundled Openwalla RPC ACL' : 'Installing LuCI and RPC support'}...\n\n',
       running: true,
     );
     unawaited(
       showSshConsoleSheet(
         context: context,
         controller: console,
-        title: 'LuCI SSH Installer',
+        title: installingAcl ? 'Openwalla ACL Installer' : 'LuCI SSH Installer',
       ).whenComplete(console.dispose),
     );
 
-    const command = r'''
+    final command = installingAcl
+        ? await _buildLocalAclInstallCommand()
+        : r'''
 set -e
 echo "[openwalla-luci] Detecting package manager..."
 if command -v apk >/dev/null 2>&1; then
@@ -467,7 +471,7 @@ echo "[openwalla-luci] Install complete. Return to Openwalla and connect again."
       } else {
         console.setOutput(
           result.output.trim().isEmpty
-              ? 'LuCI installation completed. Return to Openwalla and connect again.'
+              ? '${installingAcl ? 'Openwalla RPC ACL installation' : 'LuCI installation'} completed. Return to Openwalla and connect again.'
               : result.output.trimRight(),
         );
       }
@@ -478,6 +482,23 @@ echo "[openwalla-luci] Install complete. Return to Openwalla and connect again."
     } finally {
       console.complete();
     }
+  }
+
+  Future<String> _buildLocalAclInstallCommand() async {
+    final acl = await rootBundle.loadString('openwrt-setup/rpcd-acl.json');
+    final encoded = base64Encode(utf8.encode(acl));
+    return '''
+set -e
+echo "[openwalla-acl] Installing bundled RPC permissions..."
+mkdir -p /usr/share/rpcd/acl.d
+printf '%s' '$encoded' | base64 -d > /usr/share/rpcd/acl.d/openwalla.json
+chmod 0644 /usr/share/rpcd/acl.d/openwalla.json
+test -s /usr/share/rpcd/acl.d/openwalla.json
+if [ -x /etc/init.d/rpcd ]; then
+  /etc/init.d/rpcd restart
+fi
+echo "[openwalla-acl] Install complete. Return to Openwalla and connect again."
+''';
   }
 
   InputDecoration _loginInputDecoration({
@@ -1152,17 +1173,21 @@ echo "[openwalla-luci] Install complete. Return to Openwalla and connect again."
   }
 }
 
-class _LuciSshInstallRequest {
+enum _LoginSshAction { installLuci, installAcl }
+
+class _LoginSshRequest {
   final String host;
   final int port;
   final String username;
   final String password;
+  final _LoginSshAction action;
 
-  const _LuciSshInstallRequest({
+  const _LoginSshRequest({
     required this.host,
     required this.port,
     required this.username,
     required this.password,
+    required this.action,
   });
 }
 
@@ -1189,7 +1214,7 @@ class _LoginHelpSheetState extends State<_LoginHelpSheet> {
   late final TextEditingController _portController;
   late final TextEditingController _usernameController;
   late final TextEditingController _passwordController;
-  bool _showInstaller = false;
+  _LoginSshAction? _sshAction;
   bool _showPassword = false;
 
   @override
@@ -1222,14 +1247,65 @@ class _LoginHelpSheetState extends State<_LoginHelpSheet> {
     return null;
   }
 
-  void _install() {
+  void _install(_LoginSshAction action) {
     if (!_formKey.currentState!.validate()) return;
     Navigator.of(context).pop(
-      _LuciSshInstallRequest(
+      _LoginSshRequest(
         host: _hostController.text.trim(),
         port: int.parse(_portController.text.trim()),
         username: _usernameController.text.trim(),
         password: _passwordController.text,
+        action: action,
+      ),
+    );
+  }
+
+  Widget _buildSshActionTile({
+    required _LoginSshAction action,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    final colors = Theme.of(context).colorScheme;
+    final selected = _sshAction == action;
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => setState(() => _sshAction = selected ? null : action),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: selected
+              ? colors.primary.withValues(alpha: 0.12)
+              : colors.surfaceContainerHighest.withValues(alpha: 0.34),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selected
+                ? colors.primary.withValues(alpha: 0.55)
+                : Colors.transparent,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: colors.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(subtitle),
+                ],
+              ),
+            ),
+            Icon(
+              selected ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1294,13 +1370,13 @@ class _LoginHelpSheetState extends State<_LoginHelpSheet> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Missing LuCI support?',
+                        'Router connection tools',
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.w900),
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Some newer GL.iNet routers do not include LuCI and LuCI RPC support. Openwalla needs these router packages to connect and manage settings.',
+                        'Openwalla needs LuCI RPC support and its access-control file to manage your router. Use SSH to prepare a fresh OpenWrt router.',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: colors.onSurfaceVariant,
                           height: 1.4,
@@ -1316,48 +1392,22 @@ class _LoginHelpSheetState extends State<_LoginHelpSheet> {
                   label: const Text('Open Openwalla on GitHub'),
                 ),
                 const SizedBox(height: 18),
-                InkWell(
-                  borderRadius: BorderRadius.circular(8),
-                  onTap: () => setState(() => _showInstaller = !_showInstaller),
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: colors.surfaceContainerHighest.withValues(
-                        alpha: 0.34,
-                      ),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.terminal_rounded, color: colors.primary),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Install LuCI via SSH',
-                                style: TextStyle(fontWeight: FontWeight.w900),
-                              ),
-                              SizedBox(height: 2),
-                              Text(
-                                'Use root SSH access to add required packages',
-                              ),
-                            ],
-                          ),
-                        ),
-                        Icon(
-                          _showInstaller
-                              ? Icons.expand_less_rounded
-                              : Icons.expand_more_rounded,
-                        ),
-                      ],
-                    ),
-                  ),
+                _buildSshActionTile(
+                  action: _LoginSshAction.installLuci,
+                  icon: Icons.download_rounded,
+                  title: 'Install LuCI via SSH',
+                  subtitle: 'Download and install required router packages',
+                ),
+                const SizedBox(height: 10),
+                _buildSshActionTile(
+                  action: _LoginSshAction.installAcl,
+                  icon: Icons.policy_rounded,
+                  title: 'Copy RPC ACL via SSH',
+                  subtitle: 'Uses the bundled file and works without internet',
                 ),
                 AnimatedCrossFade(
                   duration: const Duration(milliseconds: 180),
-                  crossFadeState: _showInstaller
+                  crossFadeState: _sshAction != null
                       ? CrossFadeState.showSecond
                       : CrossFadeState.showFirst,
                   firstChild: const SizedBox.shrink(),
@@ -1413,6 +1463,8 @@ class _LoginHelpSheetState extends State<_LoginHelpSheet> {
                             obscureText: !_showPassword,
                             decoration: InputDecoration(
                               labelText: 'SSH Password',
+                              helperText:
+                                  'Leave blank if the fresh router has no password',
                               prefixIcon: const Icon(Icons.password_rounded),
                               suffixIcon: IconButton(
                                 tooltip: _showPassword
@@ -1428,17 +1480,29 @@ class _LoginHelpSheetState extends State<_LoginHelpSheet> {
                                 ),
                               ),
                             ),
-                            validator: _required,
                             textInputAction: TextInputAction.done,
-                            onFieldSubmitted: (_) => _install(),
+                            onFieldSubmitted: (_) {
+                              final action = _sshAction;
+                              if (action != null) _install(action);
+                            },
                           ),
                           const SizedBox(height: 16),
                           SizedBox(
                             width: double.infinity,
                             child: FilledButton.icon(
-                              onPressed: _install,
-                              icon: const Icon(Icons.download_rounded),
-                              label: const Text('Install Required Packages'),
+                              onPressed: _sshAction == null
+                                  ? null
+                                  : () => _install(_sshAction!),
+                              icon: Icon(
+                                _sshAction == _LoginSshAction.installAcl
+                                    ? Icons.content_copy_rounded
+                                    : Icons.download_rounded,
+                              ),
+                              label: Text(
+                                _sshAction == _LoginSshAction.installAcl
+                                    ? 'Copy and Apply RPC ACL'
+                                    : 'Install Required Packages',
+                              ),
                             ),
                           ),
                         ],
