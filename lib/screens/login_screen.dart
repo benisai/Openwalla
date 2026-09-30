@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -426,7 +425,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     );
 
     final command = installingAcl
-        ? await _buildLocalAclInstallCommand()
+        ? _localAclInstallCommand
         : r'''
 set -e
 echo "[openwalla-luci] Detecting package manager..."
@@ -450,6 +449,9 @@ for service in rpcd uhttpd; do
 done
 echo "[openwalla-luci] Install complete. Return to Openwalla and connect again."
 ''';
+    final commandInput = installingAcl
+        ? await rootBundle.loadString('openwrt-setup/rpcd-acl.json')
+        : null;
 
     final output = StringBuffer();
     try {
@@ -459,6 +461,7 @@ echo "[openwalla-luci] Install complete. Return to Openwalla and connect again."
         username: request.username,
         password: request.password,
         command: command,
+        stdin: commandInput,
         onOutput: (chunk) {
           output.write(chunk);
           console.setOutput(output.toString());
@@ -484,14 +487,11 @@ echo "[openwalla-luci] Install complete. Return to Openwalla and connect again."
     }
   }
 
-  Future<String> _buildLocalAclInstallCommand() async {
-    final acl = await rootBundle.loadString('openwrt-setup/rpcd-acl.json');
-    final encoded = base64Encode(utf8.encode(acl));
-    return '''
+  static const _localAclInstallCommand = r'''
 set -e
 echo "[openwalla-acl] Installing bundled RPC permissions..."
 mkdir -p /usr/share/rpcd/acl.d
-printf '%s' '$encoded' | base64 -d > /usr/share/rpcd/acl.d/openwalla.json
+cat > /usr/share/rpcd/acl.d/openwalla.json
 chmod 0644 /usr/share/rpcd/acl.d/openwalla.json
 test -s /usr/share/rpcd/acl.d/openwalla.json
 if [ -x /etc/init.d/rpcd ]; then
@@ -499,7 +499,6 @@ if [ -x /etc/init.d/rpcd ]; then
 fi
 echo "[openwalla-acl] Install complete. Return to Openwalla and connect again."
 ''';
-  }
 
   InputDecoration _loginInputDecoration({
     required BuildContext context,

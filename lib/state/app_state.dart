@@ -2505,7 +2505,6 @@ class AppState extends ChangeNotifier {
     BuildContext? context,
   }) async {
     final router = _routerService?.selectedRouter;
-    final sysauth = _authService?.sysauth;
     if (router == null) {
       throw StateError('No selected router connection is available');
     }
@@ -2514,26 +2513,57 @@ class AppState extends ChangeNotifier {
     }
 
     if (!_reviewerModeEnabled) {
-      if (sysauth == null || _apiService == null) {
-        throw StateError('No authenticated router session is available');
+      var changed = false;
+      Object? sshError;
+
+      try {
+        final sshResult = await SshService().runCommand(
+          host: router.ipAddress,
+          username: router.username.trim().isEmpty ? 'root' : router.username,
+          password: router.password,
+          command: '/bin/passwd root',
+          stdin: '$newPassword\n$newPassword\n',
+        );
+        changed = sshResult.exitCode == 0;
+        if (!changed) {
+          sshError = StateError(
+            'passwd exited with code ${sshResult.exitCode ?? 'unknown'}',
+          );
+        }
+      } catch (error) {
+        sshError = error;
       }
-      final result = await _apiService!.call(
-        router.ipAddress,
-        sysauth,
-        router.useHttps,
-        object: 'luci',
-        method: 'setPassword',
-        params: {
-          'username': 'root',
-          'password': newPassword,
-          'oldpassword': '',
-          'rpcd': false,
-        },
-        context: context,
-      );
-      Logger.debug('Router password RPC response: $result');
-      if (!rpcBooleanResultSucceeded(result)) {
-        throw StateError('The router did not confirm the password change.');
+
+      if (!changed) {
+        final sysauth = _authService?.sysauth;
+        if (sysauth == null || _apiService == null) {
+          Logger.debug('Router password SSH update failed: $sshError');
+          throw StateError(
+            'SSH could not update the password and no authenticated LuCI session is available.',
+          );
+        }
+        final result = await _apiService!.call(
+          router.ipAddress,
+          sysauth,
+          router.useHttps,
+          object: 'luci',
+          method: 'setPassword',
+          params: {
+            'username': 'root',
+            'password': newPassword,
+            'oldpassword': '',
+            'rpcd': false,
+          },
+        );
+        Logger.debug('Router password RPC response: $result');
+        changed = rpcBooleanResultSucceeded(result);
+      }
+
+      if (!changed) {
+        Logger.debug('Router password SSH update failed: $sshError');
+        throw StateError(
+          'The router rejected both the SSH and LuCI password changes.',
+        );
       }
     }
 

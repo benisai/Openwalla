@@ -46,6 +46,7 @@ class SshService {
     required String username,
     required String password,
     required String command,
+    String? stdin,
     int port = 22,
     Duration timeout = const Duration(seconds: 18),
     void Function(String chunk)? onOutput,
@@ -81,6 +82,11 @@ class SshService {
           .bind(session.stderr)
           .listen(append)
           .asFuture<void>();
+
+      if (stdin != null) {
+        session.stdin.add(Uint8List.fromList(utf8.encode(stdin)));
+        await session.stdin.close();
+      }
 
       await Future.wait([stdoutDone, stderrDone], eagerError: true);
       await session.done;
