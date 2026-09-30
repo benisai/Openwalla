@@ -4,6 +4,7 @@ import 'package:openwalla/screens/backup_restore_screen.dart';
 import 'package:openwalla/screens/package_manager_screen.dart';
 import 'package:openwalla/screens/reset_router_screen.dart';
 import 'package:openwalla/screens/router_components_screen.dart';
+import 'package:openwalla/screens/router_password_screen.dart';
 import 'package:openwalla/screens/router_setup_screen.dart';
 import 'package:openwalla/screens/ssh_terminal_screen.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
@@ -38,6 +39,13 @@ class ManageDeviceScreen extends StatelessWidget {
                 title: 'SSH Terminal',
                 subtitle: 'Open a shell with saved router credentials',
                 onTap: () => _open(context, const SshTerminalScreen()),
+              ),
+              _DeviceManagementTile(
+                icon: Icons.password_rounded,
+                color: colors.primary,
+                title: 'Router Password',
+                subtitle: 'Set or change the OpenWrt root password',
+                onTap: () => _open(context, const RouterPasswordScreen()),
               ),
               _DeviceManagementTile(
                 icon: Icons.inventory_2_rounded,
