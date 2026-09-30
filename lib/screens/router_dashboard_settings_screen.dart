@@ -906,14 +906,14 @@ class _RouterDashboardSettingsScreenState
                 },
                 itemBuilder: (context, index) {
                   final id = _preferences.shortcutOrder[index];
-                  return ListTile(
+                  return ReorderableDelayedDragStartListener(
                     key: ValueKey('shortcut-order-$id'),
-                    dense: true,
-                    leading: Icon(_shortcutIcon(id), size: 20),
-                    title: Text(_shortcutLabel(id)),
-                    trailing: ReorderableDragStartListener(
-                      index: index,
-                      child: Icon(
+                    index: index,
+                    child: ListTile(
+                      dense: true,
+                      leading: Icon(_shortcutIcon(id), size: 20),
+                      title: Text(_shortcutLabel(id)),
+                      trailing: Icon(
                         Icons.drag_handle_rounded,
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
