@@ -2,6 +2,26 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:openwalla/state/app_state.dart';
 
 void main() {
+  test('package manager probe prefers its first APK marker', () {
+    const output = '''
+__MANAGER__|apk
+busybox-1.36.1-r2
+''';
+
+    expect(parseRouterPackageManagerProbe(output), RouterPackageManager.apk);
+  });
+
+  test('package manager probe accepts OPKG fallback', () {
+    expect(
+      parseRouterPackageManagerProbe('__MANAGER__|opkg'),
+      RouterPackageManager.opkg,
+    );
+    expect(
+      parseRouterPackageManagerProbe('__MANAGER__|none'),
+      RouterPackageManager.none,
+    );
+  });
+
   test('parses and deduplicates APK command and database formats', () {
     const output = '''
 __MANAGER__|apk

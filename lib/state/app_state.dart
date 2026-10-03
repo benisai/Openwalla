@@ -152,6 +152,19 @@ class OpenwallaQuarantineSnapshot {
 
 enum RouterPackageManager { opkg, apk, none }
 
+RouterPackageManager parseRouterPackageManagerProbe(String output) {
+  for (final rawLine in output.split('\n')) {
+    final line = rawLine.trim();
+    if (!line.startsWith('__MANAGER__|')) continue;
+    return switch (line.substring('__MANAGER__|'.length)) {
+      'apk' => RouterPackageManager.apk,
+      'opkg' => RouterPackageManager.opkg,
+      _ => RouterPackageManager.none,
+    };
+  }
+  return RouterPackageManager.none;
+}
+
 class RouterPackage {
   final String name;
   final String version;
@@ -3345,7 +3358,7 @@ class AppState extends ChangeNotifier {
   }) async {
     if (_reviewerModeEnabled) {
       return const RouterPackageSnapshot(
-        manager: RouterPackageManager.opkg,
+        manager: RouterPackageManager.apk,
         packages: [
           RouterPackage(name: 'base-files', version: '1563-r1'),
           RouterPackage(name: 'luci-base', version: 'git-26.210.44122'),
@@ -3353,29 +3366,19 @@ class AppState extends ChangeNotifier {
         ],
       );
     }
-    final output = await runRouterSetupCommand(
-      "if command -v apk >/dev/null 2>&1 && { [ -d /etc/apk ] || [ -f /lib/apk/db/installed ]; }; then "
-      "echo '__MANAGER__|apk'; apk info -v 2>/dev/null || true; "
-      "apk list --installed 2>/dev/null || true; "
-      "[ ! -r /lib/apk/db/installed ] || cat /lib/apk/db/installed; "
-      "elif command -v opkg >/dev/null 2>&1; then echo '__MANAGER__|opkg'; "
-      "opkg list-installed 2>/dev/null || true; "
-      "if [ -r /usr/lib/opkg/status ]; then cat /usr/lib/opkg/status; "
-      "elif [ -r /var/lib/opkg/status ]; then cat /var/lib/opkg/status; fi; "
+    final output = await runRouterSetupCommandViaSsh(
+      "if command -v apk >/dev/null 2>&1 && apk --version >/dev/null 2>&1; then "
+      "echo '__MANAGER__|apk'; "
+      "apk info -v 2>/dev/null || apk list --installed 2>/dev/null || "
+      "{ [ -r /lib/apk/db/installed ] && cat /lib/apk/db/installed; }; "
+      "elif command -v opkg >/dev/null 2>&1 && opkg --version >/dev/null 2>&1; then "
+      "echo '__MANAGER__|opkg'; "
+      "opkg list-installed 2>/dev/null || "
+      "{ [ -r /usr/lib/opkg/status ] && cat /usr/lib/opkg/status; } || "
+      "{ [ -r /var/lib/opkg/status ] && cat /var/lib/opkg/status; }; "
       "else echo '__MANAGER__|none'; fi",
-      context: context,
     );
-    var manager = RouterPackageManager.none;
-    for (final rawLine in output.split('\n')) {
-      final line = rawLine.trim();
-      if (line.startsWith('__MANAGER__|')) {
-        manager = switch (line.substring('__MANAGER__|'.length)) {
-          'apk' => RouterPackageManager.apk,
-          'opkg' => RouterPackageManager.opkg,
-          _ => RouterPackageManager.none,
-        };
-      }
-    }
+    final manager = parseRouterPackageManagerProbe(output);
     final packages = parseInstalledRouterPackages(output, manager);
     return RouterPackageSnapshot(manager: manager, packages: packages);
   }
@@ -3391,19 +3394,27 @@ class AppState extends ChangeNotifier {
         !RegExp(r'^[A-Za-z0-9][A-Za-z0-9+_.@-]*$').hasMatch(cleanName)) {
       throw StateError('Enter a valid package name');
     }
-    final command = switch ((manager, action)) {
-      (RouterPackageManager.opkg, 'update') => 'opkg update',
-      (RouterPackageManager.opkg, 'install') =>
-        'opkg install ${_shellQuote(cleanName)}',
-      (RouterPackageManager.opkg, 'remove') =>
-        'opkg remove ${_shellQuote(cleanName)}',
-      (RouterPackageManager.apk, 'update') => 'apk update',
-      (RouterPackageManager.apk, 'install') =>
-        'apk add ${_shellQuote(cleanName)}',
-      (RouterPackageManager.apk, 'remove') =>
-        'apk del ${_shellQuote(cleanName)}',
+    if (manager == RouterPackageManager.none) {
+      throw StateError('No supported package manager was detected');
+    }
+    final apkAction = switch (action) {
+      'update' => 'apk update',
+      'install' => 'apk add ${_shellQuote(cleanName)}',
+      'remove' => 'apk del ${_shellQuote(cleanName)}',
       _ => throw StateError('Unsupported package manager action'),
     };
+    final opkgAction = switch (action) {
+      'update' => 'opkg update',
+      'install' => 'opkg install ${_shellQuote(cleanName)}',
+      'remove' => 'opkg remove ${_shellQuote(cleanName)}',
+      _ => throw StateError('Unsupported package manager action'),
+    };
+    final command =
+        'if command -v apk >/dev/null 2>&1 && apk --version >/dev/null 2>&1; then '
+        'echo "[openwalla-packages] Using APK"; $apkAction; '
+        'elif command -v opkg >/dev/null 2>&1 && opkg --version >/dev/null 2>&1; then '
+        'echo "[openwalla-packages] APK unavailable; using OPKG"; $opkgAction; '
+        'else echo "No working APK or OPKG package manager was found" >&2; exit 127; fi';
     return runRouterSetupCommandViaSsh(command, onOutput: onOutput);
   }
 
