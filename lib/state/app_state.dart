@@ -3010,6 +3010,7 @@ class AppState extends ChangeNotifier {
 
   Future<OpenwrtFeatureStatus> installOpenwrtFeature(
     OpenwrtFeature feature, {
+    String? installerFeature,
     BuildContext? context,
     void Function(String chunk)? onOutput,
   }) async {
@@ -3032,9 +3033,10 @@ class AppState extends ChangeNotifier {
       throw Exception('Saved router SSH credentials are missing');
     }
 
-    final installerFeature = _openwrtFeatureInstallerFeature(feature);
+    final selectedInstallerFeature =
+        installerFeature ?? _openwrtFeatureInstallerFeature(feature);
     final output = await installOpenwallaSetupFeatures(
-      [installerFeature],
+      [selectedInstallerFeature],
       postInstallCheck: _openwrtFeatureCheckCommand(feature),
       onOutput: onOutput,
     );
@@ -3075,7 +3077,7 @@ class AppState extends ChangeNotifier {
       OpenwrtFeature.tailscale => 'tailscale',
       OpenwrtFeature.mwan3 => 'mwan3',
       OpenwrtFeature.quarantine => 'quarantine',
-      OpenwrtFeature.geoBlocking => 'geoip',
+      OpenwrtFeature.geoBlocking => 'geoip-nftables',
     };
   }
 
@@ -3100,7 +3102,7 @@ class AppState extends ChangeNotifier {
       OpenwrtFeature.quarantine =>
         r'([ -x /usr/bin/openwalla-devices-collector ] && [ -x /etc/init.d/openwalla-devices-collector ] && uci -q get openwalla.quarantine >/dev/null 2>&1) && echo OK',
       OpenwrtFeature.geoBlocking =>
-        r'(command -v geoip-shell >/dev/null 2>&1 && command -v geoip-shell-run.sh >/dev/null 2>&1) && echo OK',
+        r'((apk info -e geoip-shell >/dev/null 2>&1 || apk info -e geoip-shell-iptables >/dev/null 2>&1) && command -v geoip-shell >/dev/null 2>&1) && echo OK',
     };
   }
 

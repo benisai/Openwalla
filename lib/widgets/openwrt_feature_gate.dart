@@ -8,12 +8,27 @@ import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/ssh_console_sheet.dart';
 import 'package:openwalla/widgets/hide_dashboard_shortcut_button.dart';
 
+class OpenwrtFeatureInstallOption {
+  final String feature;
+  final String label;
+  final String description;
+  final IconData icon;
+
+  const OpenwrtFeatureInstallOption({
+    required this.feature,
+    required this.label,
+    required this.description,
+    required this.icon,
+  });
+}
+
 class OpenwrtFeatureGate extends ConsumerStatefulWidget {
   final OpenwrtFeature feature;
   final String title;
   final String message;
   final String? warning;
   final String installLabel;
+  final List<OpenwrtFeatureInstallOption> installOptions;
   final WidgetBuilder builder;
 
   const OpenwrtFeatureGate({
@@ -23,6 +38,7 @@ class OpenwrtFeatureGate extends ConsumerStatefulWidget {
     required this.message,
     this.warning,
     required this.installLabel,
+    this.installOptions = const [],
     required this.builder,
   });
 
@@ -58,6 +74,30 @@ class _OpenwrtFeatureGateState extends ConsumerState<OpenwrtFeatureGate> {
   }
 
   Future<void> _install() async {
+    String? installerFeature;
+    if (widget.installOptions.isNotEmpty) {
+      installerFeature = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => SimpleDialog(
+          title: const Text('Choose firewall backend'),
+          children: widget.installOptions
+              .map(
+                (option) => SimpleDialogOption(
+                  onPressed: () =>
+                      Navigator.of(dialogContext).pop(option.feature),
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(option.icon),
+                    title: Text(option.label),
+                    subtitle: Text(option.description),
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+      );
+      if (installerFeature == null || !mounted) return;
+    }
     if (widget.warning != null) {
       final confirmed = await showDialog<bool>(
         context: context,
@@ -100,6 +140,7 @@ class _OpenwrtFeatureGateState extends ConsumerState<OpenwrtFeatureGate> {
           .read(appStateProvider)
           .installOpenwrtFeature(
             widget.feature,
+            installerFeature: installerFeature,
             context: context,
             onOutput: (chunk) {
               outputBuffer.write(chunk);

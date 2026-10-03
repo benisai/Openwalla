@@ -157,6 +157,22 @@ class _GeoBlockingScreenState extends ConsumerState<GeoBlockingScreen> {
                 warning:
                     'Country IP lists use router memory. Large countries may need substantially more RAM.',
                 installLabel: 'Install Geo-Blocking',
+                installOptions: const [
+                  OpenwrtFeatureInstallOption(
+                    feature: 'geoip-nftables',
+                    label: 'nftables',
+                    description:
+                        'geoip-shell_0.8.5-r1.apk for standard firewall4 OpenWrt.',
+                    icon: Icons.security_rounded,
+                  ),
+                  OpenwrtFeatureInstallOption(
+                    feature: 'geoip-iptables',
+                    label: 'iptables',
+                    description:
+                        'geoip-shell-iptables_0.8.5-r1.apk for legacy firewalls.',
+                    icon: Icons.shield_outlined,
+                  ),
+                ],
                 builder: (_) => _buildContent(),
               ),
             ],
