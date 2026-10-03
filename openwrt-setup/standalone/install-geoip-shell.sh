@@ -13,6 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
 GEOIP_VERSION="0.8.5"
 ARCHIVE="/tmp/geoip-shell-${GEOIP_VERSION}.tar.gz"
 SOURCE_DIR="/tmp/openwalla-geoip-shell-source"
+UPSTREAM_DIR="$SOURCE_DIR/geoip-shell-main"
 SOURCE_URL="$OPENWALLA_RAW_BASE/vendor/geoip-shell/geoip-shell-${GEOIP_VERSION}.tar.gz"
 
 log "Installing geoip-shell ${GEOIP_VERSION} from bundled GPL source"
@@ -27,15 +28,21 @@ fi
 
 rm -rf "$SOURCE_DIR"
 mkdir -p "$SOURCE_DIR"
-if ! tar -xzf "$ARCHIVE" --strip-components=1 -C "$SOURCE_DIR"; then
+if ! tar -xzf "$ARCHIVE" -C "$SOURCE_DIR"; then
 	echo "Unable to extract the geoip-shell source archive."
 	exit 1
 fi
-if [ ! -x "$SOURCE_DIR/geoip-shell-install.sh" ]; then
-	chmod 0755 "$SOURCE_DIR/geoip-shell-install.sh"
+if [ ! -f "$UPSTREAM_DIR/geoip-shell-install.sh" ]; then
+	echo "The geoip-shell source archive has an unexpected layout."
+	exit 1
 fi
+chmod 0755 "$UPSTREAM_DIR/geoip-shell-install.sh"
 
-sh "$SOURCE_DIR/geoip-shell-install.sh" -w nft -z
+if ! sh "$UPSTREAM_DIR/geoip-shell-install.sh" -w nft -z; then
+	echo "The upstream geoip-shell source installer failed."
+	rm -rf "$SOURCE_DIR" "$ARCHIVE"
+	exit 1
+fi
 rm -rf "$SOURCE_DIR" "$ARCHIVE"
 
 if ! command -v geoip-shell >/dev/null 2>&1; then

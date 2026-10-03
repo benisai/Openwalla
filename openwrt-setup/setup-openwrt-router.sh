@@ -374,7 +374,10 @@ resolve_installers() {
 run_installers() {
 	for installer in $INSTALLERS; do
 		log "Running $installer"
-		OPENWALLA_PACKAGE_FEEDS_UPDATED=1 sh "$STANDALONE_DIR/$installer"
+		if ! OPENWALLA_PACKAGE_FEEDS_UPDATED=1 sh "$STANDALONE_DIR/$installer"; then
+			echo "[openwalla-setup] Installer failed: $installer" >&2
+			exit 1
+		fi
 	done
 }
 
