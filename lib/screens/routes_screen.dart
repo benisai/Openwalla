@@ -237,6 +237,39 @@ class _RoutesScreenState extends ConsumerState<RoutesScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
             children: [
+              if (!_isLoading) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Static IPv4 Routes',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0,
+                            ),
+                      ),
+                    ),
+                    FilledButton.icon(
+                      onPressed: _showAddRouteSheet,
+                      icon: const Icon(Icons.add_rounded),
+                      label: const Text('Add'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                if (_error != null)
+                  _RouteEmptyCard(message: _error!, onRefresh: _loadRoutes)
+                else if (_routes.isEmpty)
+                  _RouteEmptyCard(
+                    message: 'No static routes found.',
+                    onRefresh: _loadRoutes,
+                  )
+                else
+                  ..._routes.map((route) => _RouteCard(route: route)),
+                const SizedBox(height: 22),
+              ],
               Row(
                 children: [
                   Expanded(
@@ -284,39 +317,6 @@ class _RoutesScreenState extends ConsumerState<RoutesScreen> {
                     onDelete: () => _deletePbrPolicy(policy),
                   ),
                 ),
-              if (!_isLoading) ...[
-                const SizedBox(height: 22),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Static IPv4 Routes',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 0,
-                            ),
-                      ),
-                    ),
-                    FilledButton.icon(
-                      onPressed: _showAddRouteSheet,
-                      icon: const Icon(Icons.add_rounded),
-                      label: const Text('Add'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                if (_error != null)
-                  _RouteEmptyCard(message: _error!, onRefresh: _loadRoutes)
-                else if (_routes.isEmpty)
-                  _RouteEmptyCard(
-                    message: 'No static routes found.',
-                    onRefresh: _loadRoutes,
-                  )
-                else
-                  ..._routes.map((route) => _RouteCard(route: route)),
-              ],
             ],
           ),
         ),
