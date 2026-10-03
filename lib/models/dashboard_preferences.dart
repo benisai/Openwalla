@@ -151,6 +151,26 @@ class DashboardPreferences {
     );
   }
 
+  DashboardPreferences copyWithShortcutVisibility(
+    String shortcutId, {
+    required bool visible,
+  }) {
+    return switch (shortcutId) {
+      'wifi' => copyWith(showWifiShortcut: visible),
+      'smart_queue' => copyWith(showSmartQueueShortcut: visible),
+      'adblock' => copyWith(showAdblockShortcut: visible),
+      'vpn' => copyWith(showVpnShortcut: visible),
+      'parental' => copyWith(showParentalShortcut: visible),
+      'scheduler' => copyWith(showSchedulerShortcut: visible),
+      'ddns' => copyWith(showDdnsShortcut: visible),
+      'tor' => copyWith(showTorShortcut: visible),
+      'tailscale' => copyWith(showTailscaleShortcut: visible),
+      'multi_wan' => copyWith(showMultiWanShortcut: visible),
+      'quarantine' => copyWith(showQuarantineShortcut: visible),
+      _ => this,
+    };
+  }
+
   Map<String, dynamic> toJson() => {
     'enabledWirelessInterfaces': enabledWirelessInterfaces.toList(),
     'enabledWiredInterfaces': enabledWiredInterfaces.toList(),

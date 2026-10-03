@@ -4,6 +4,7 @@ import 'package:openwalla/main.dart';
 import 'package:openwalla/models/client.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/hide_dashboard_shortcut_button.dart';
 
 class SchedulerScreen extends ConsumerStatefulWidget {
   const SchedulerScreen({super.key});
@@ -258,6 +259,7 @@ class _SchedulerScreenState extends ConsumerState<SchedulerScreen> {
                 title: 'Scheduler not ready',
                 message: _error!,
                 onRefresh: _load,
+                showHideShortcut: true,
               )
             else if (_schedules.isEmpty)
               _ScheduleEmptyCard(
@@ -448,12 +450,14 @@ class _ScheduleEmptyCard extends StatelessWidget {
   final String title;
   final String message;
   final Future<void> Function() onRefresh;
+  final bool showHideShortcut;
 
   const _ScheduleEmptyCard({
     required this.icon,
     required this.title,
     required this.message,
     required this.onRefresh,
+    this.showHideShortcut = false,
   });
 
   @override
@@ -484,6 +488,11 @@ class _ScheduleEmptyCard extends StatelessWidget {
               icon: const Icon(Icons.refresh_rounded),
               label: const Text('Check Again'),
             ),
+            if (showHideShortcut)
+              const HideDashboardShortcutButton(
+                shortcutId: 'scheduler',
+                shortcutLabel: 'Scheduler',
+              ),
           ],
         ),
       ),

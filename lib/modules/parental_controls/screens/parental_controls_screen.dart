@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/main.dart';
 import 'package:openwalla/widgets/luci_toast.dart';
 import 'package:openwalla/widgets/ssh_console_sheet.dart';
+import 'package:openwalla/widgets/hide_dashboard_shortcut_button.dart';
 import '../models/parental_profile.dart';
 import '../controllers/parental_controls_controller.dart';
 import '../widgets/add_edit_profile_dialog.dart';
@@ -609,6 +610,11 @@ class _ParentalSetupPanel extends StatelessWidget {
                 onPressed: installing ? null : onRetry,
                 icon: const Icon(Icons.refresh_rounded),
                 label: const Text('Check Again'),
+              ),
+              HideDashboardShortcutButton(
+                shortcutId: 'parental',
+                shortcutLabel: 'Parental Controls',
+                enabled: !installing,
               ),
             ],
           ),

@@ -5,6 +5,7 @@ import 'package:openwalla/main.dart';
 import 'package:openwalla/models/ddns_info.dart';
 import 'package:openwalla/screens/router_setup_screen.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/hide_dashboard_shortcut_button.dart';
 
 class DdnsScreen extends ConsumerStatefulWidget {
   const DdnsScreen({super.key});
@@ -222,6 +223,10 @@ class _DdnsScreenState extends ConsumerState<DdnsScreen> {
                       ),
                     );
                   },
+                  secondaryAction: const HideDashboardShortcutButton(
+                    shortcutId: 'ddns',
+                    shortcutLabel: 'DDNS',
+                  ),
                 ),
               _DdnsGlobalCard(overview: overview, onChanged: _toggleGlobal),
               const SizedBox(height: 14),
@@ -414,6 +419,7 @@ class _DdnsInfoCard extends StatelessWidget {
   final String message;
   final String actionLabel;
   final VoidCallback onAction;
+  final Widget? secondaryAction;
 
   const _DdnsInfoCard({
     required this.icon,
@@ -421,6 +427,7 @@ class _DdnsInfoCard extends StatelessWidget {
     required this.message,
     required this.actionLabel,
     required this.onAction,
+    this.secondaryAction,
   });
 
   @override
@@ -447,6 +454,10 @@ class _DdnsInfoCard extends StatelessWidget {
                 label: Text(actionLabel),
               ),
             ),
+            if (secondaryAction != null) ...[
+              const SizedBox(height: 8),
+              Center(child: secondaryAction!),
+            ],
           ],
         ),
       ),

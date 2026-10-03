@@ -6,6 +6,7 @@ import 'package:openwalla/main.dart';
 import 'package:openwalla/screens/router_setup_screen.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/ssh_console_sheet.dart';
+import 'package:openwalla/widgets/hide_dashboard_shortcut_button.dart';
 
 class OpenwrtFeatureGate extends ConsumerStatefulWidget {
   final OpenwrtFeature feature;
@@ -171,10 +172,32 @@ class _OpenwrtFeatureGateState extends ConsumerState<OpenwrtFeatureGate> {
           onInstall: _install,
           onRecheck: _recheck,
           onRouterSetup: _openRouterSetup,
+          shortcutId: _shortcutId(widget.feature),
+          shortcutLabel: _shortcutLabel(widget.feature),
         );
       },
     );
   }
+
+  String _shortcutId(OpenwrtFeature feature) => switch (feature) {
+    OpenwrtFeature.wireguard => 'vpn',
+    OpenwrtFeature.adblock => 'adblock',
+    OpenwrtFeature.sqm => 'smart_queue',
+    OpenwrtFeature.tor => 'tor',
+    OpenwrtFeature.tailscale => 'tailscale',
+    OpenwrtFeature.mwan3 => 'multi_wan',
+    OpenwrtFeature.quarantine => 'quarantine',
+  };
+
+  String _shortcutLabel(OpenwrtFeature feature) => switch (feature) {
+    OpenwrtFeature.wireguard => 'VPN',
+    OpenwrtFeature.adblock => 'AdBlock',
+    OpenwrtFeature.sqm => 'Smart Queue',
+    OpenwrtFeature.tor => 'Tor',
+    OpenwrtFeature.tailscale => 'Tailscale',
+    OpenwrtFeature.mwan3 => 'Multi-WAN',
+    OpenwrtFeature.quarantine => 'Quarantine',
+  };
 }
 
 class _FeatureInstallPrompt extends StatelessWidget {
@@ -186,6 +209,8 @@ class _FeatureInstallPrompt extends StatelessWidget {
   final VoidCallback onInstall;
   final VoidCallback onRecheck;
   final VoidCallback onRouterSetup;
+  final String shortcutId;
+  final String shortcutLabel;
 
   const _FeatureInstallPrompt({
     required this.title,
@@ -196,6 +221,8 @@ class _FeatureInstallPrompt extends StatelessWidget {
     required this.onInstall,
     required this.onRecheck,
     required this.onRouterSetup,
+    required this.shortcutId,
+    required this.shortcutLabel,
   });
 
   @override
@@ -307,6 +334,14 @@ class _FeatureInstallPrompt extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 8),
+            Center(
+              child: HideDashboardShortcutButton(
+                shortcutId: shortcutId,
+                shortcutLabel: shortcutLabel,
+                enabled: !isInstalling,
+              ),
             ),
           ],
         ),
