@@ -95,7 +95,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
   String get _setupCommand {
     final features = _selectedFeatures.join(' ');
     final preparation = [
-      kOpenwallaInternetPreflightCommand,
+      openwallaInternetPreflightShellBlock,
       'export OPENWALLA_RAW_BASE=$_rawSetupBase',
       'export OPENWALLA_ROOT=/tmp/openwalla-app-setup',
       'fetch() { if command -v wget >/dev/null 2>&1; then wget -qO "\$2" "\$1"; else curl -fsSL "\$1" -o "\$2"; fi; }',
@@ -122,7 +122,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
     final features = _uninstallFeatures.join(' ');
     if (features.trim().isEmpty) return '';
     return [
-      kOpenwallaInternetPreflightCommand,
+      openwallaInternetPreflightShellBlock,
       'export OPENWALLA_RAW_BASE=$_rawSetupBase',
       'export OPENWALLA_ROOT=/tmp/openwalla-app-setup',
       'fetch() { if command -v wget >/dev/null 2>&1; then wget -qO "\$2" "\$1"; else curl -fsSL "\$1" -o "\$2"; fi; }',

@@ -17,3 +17,6 @@ else
   exit 20
 fi
 ''';
+
+String get openwallaInternetPreflightShellBlock =>
+    '{\n${kOpenwallaInternetPreflightCommand.trim()}\n}';

@@ -17,4 +17,15 @@ void main() {
     );
     expect(kOpenwallaInternetPreflightCommand, contains('exit 20'));
   });
+
+  test('router setup preflight can be safely chained in ash', () {
+    final command = [
+      openwallaInternetPreflightShellBlock,
+      'echo next',
+    ].join(' && ');
+
+    expect(command, startsWith('{\n'));
+    expect(command, contains('\n} && echo next'));
+    expect(command, isNot(contains('\n &&')));
+  });
 }
