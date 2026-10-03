@@ -71,7 +71,7 @@ class _GeoBlockingScreenState extends ConsumerState<GeoBlockingScreen> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Update blocked countries?'),
         content: Text(
-          'Openwalla will block new inbound connections from $countries. Existing established connections remain allowed.',
+          'Openwalla will block inbound and outbound connections involving $countries. Existing established connections remain allowed.',
         ),
         actions: [
           TextButton(
@@ -146,7 +146,7 @@ class _GeoBlockingScreenState extends ConsumerState<GeoBlockingScreen> {
                 feature: OpenwrtFeature.geoBlocking,
                 title: 'Geo-Blocking is not installed',
                 message:
-                    'Install the bundled geoip-shell source to block inbound connections by country.',
+                    'Install the bundled geoip-shell source to block inbound and outbound connections by country.',
                 warning:
                     'Country IP lists use router memory. Large countries may need substantially more RAM.',
                 installLabel: 'Install Geo-Blocking',
@@ -200,7 +200,7 @@ class _GeoBlockingScreenState extends ConsumerState<GeoBlockingScreen> {
             title: Text(
               _enabled ? 'Protection enabled' : 'Protection disabled',
             ),
-            subtitle: const Text('Inbound country blacklist'),
+            subtitle: const Text('Inbound and outbound country blacklist'),
             value: _enabled,
             onChanged: _saving ? null : _setEnabled,
           ),

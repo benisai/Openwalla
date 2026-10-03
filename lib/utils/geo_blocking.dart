@@ -49,5 +49,5 @@ bool geoBlockingStatusIsEnabled(String value) {
       normalized.contains('mode: disable')) {
     return false;
   }
-  return normalized.contains('mode: blacklist');
+  return RegExp(r'mode:\s*blacklist').allMatches(normalized).length >= 2;
 }

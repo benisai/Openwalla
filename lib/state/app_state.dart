@@ -3106,7 +3106,12 @@ class AppState extends ChangeNotifier {
 
   Future<String> fetchGeoBlockingStatus() async {
     if (_reviewerModeEnabled) {
-      return 'Geo-blocking status: enabled\nInbound mode: blacklist\nCountries: CN RU';
+      return 'Inbound geoblocking:\n'
+          '  Mode: blacklist\n'
+          '  Country codes: CN RU\n'
+          'Outbound geoblocking:\n'
+          '  Mode: blacklist\n'
+          '  Country codes: CN RU';
     }
     return runRouterSetupCommandViaSsh(
       'NO_COLOR=1 geoip-shell status 2>&1 || true',
@@ -3118,7 +3123,9 @@ class AppState extends ChangeNotifier {
     void Function(String chunk)? onOutput,
   }) {
     return runRouterSetupCommandViaSsh(
-      'NO_COLOR=1 geoip-shell configure -m blacklist -c ${_shellQuote(countryCodes)} 2>&1',
+      'NO_COLOR=1 geoip-shell configure '
+      '-D inbound -m blacklist -c ${_shellQuote(countryCodes)} '
+      '-D outbound -m blacklist -c ${_shellQuote(countryCodes)} 2>&1',
       onOutput: onOutput,
     );
   }

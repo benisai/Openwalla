@@ -21,11 +21,20 @@ void main() {
     const status =
         '\u001b[34mInbound geoblocking:\u001b[0m\n'
         '  Mode: blacklist\n'
+        '  Country codes: us de\n'
+        'Outbound geoblocking:\n'
+        '  Mode: blacklist\n'
         '  Country codes: us de';
     expect(countryCodesFromGeoBlockingStatus(status), 'DE US');
     expect(geoBlockingStatusIsEnabled(status), isTrue);
     expect(
       geoBlockingStatusIsEnabled('$status\n*Geoblocking inactive*'),
+      isFalse,
+    );
+    expect(
+      geoBlockingStatusIsEnabled(
+        status.replaceFirst('Mode: blacklist', 'Mode: disable'),
+      ),
       isFalse,
     );
   });
