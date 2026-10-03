@@ -1,7 +1,25 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:openwalla/data/geo_countries.dart';
 import 'package:openwalla/utils/geo_blocking.dart';
 
 void main() {
+  test('bundled country picker data matches the accepted ISO code set', () {
+    expect(geoCountries, hasLength(249));
+    expect(geoCountries.map((country) => country.code).toSet(), hasLength(249));
+    expect(
+      geoCountries.every(
+        (country) =>
+            RegExp(r'^[A-Z]{2}$').hasMatch(country.code) &&
+            country.name.isNotEmpty,
+      ),
+      isTrue,
+    );
+    expect(
+      geoCountries.singleWhere((country) => country.code == 'US').name,
+      'United States',
+    );
+  });
+
   test('normalizes, sorts, and de-duplicates country codes', () {
     expect(normalizeGeoCountryCodes('us, de US;ca'), 'CA DE US');
   });

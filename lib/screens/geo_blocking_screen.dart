@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:openwalla/data/geo_countries.dart';
 import 'package:openwalla/main.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/utils/geo_blocking.dart';
@@ -14,19 +15,13 @@ class GeoBlockingScreen extends ConsumerStatefulWidget {
 }
 
 class _GeoBlockingScreenState extends ConsumerState<GeoBlockingScreen> {
-  final _countriesController = TextEditingController();
+  Set<String> _selectedCountryCodes = {};
   bool _started = false;
   bool _loading = true;
   bool _saving = false;
   bool _enabled = false;
   String _status = '';
   String? _error;
-
-  @override
-  void dispose() {
-    _countriesController.dispose();
-    super.dispose();
-  }
 
   Future<void> _load() async {
     setState(() {
@@ -41,8 +36,8 @@ class _GeoBlockingScreenState extends ConsumerState<GeoBlockingScreen> {
       setState(() {
         _status = cleanStatus;
         _enabled = geoBlockingStatusIsEnabled(cleanStatus);
-        if (countries != null && _countriesController.text.trim().isEmpty) {
-          _countriesController.text = countries;
+        if (countries != null && _selectedCountryCodes.isEmpty) {
+          _selectedCountryCodes = countries.split(' ').toSet();
         }
         _loading = false;
       });
@@ -58,7 +53,7 @@ class _GeoBlockingScreenState extends ConsumerState<GeoBlockingScreen> {
   Future<void> _configure() async {
     late final String countries;
     try {
-      countries = normalizeGeoCountryCodes(_countriesController.text);
+      countries = normalizeGeoCountryCodes(_selectedCountryCodes.join(' '));
     } on GeoBlockingInputException catch (error) {
       ScaffoldMessenger.of(
         context,
@@ -90,7 +85,7 @@ class _GeoBlockingScreenState extends ConsumerState<GeoBlockingScreen> {
     setState(() => _saving = true);
     try {
       await ref.read(appStateProvider).configureGeoBlockingCountries(countries);
-      _countriesController.text = countries;
+      _selectedCountryCodes = countries.split(' ').toSet();
       await _load();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -129,6 +124,18 @@ class _GeoBlockingScreenState extends ConsumerState<GeoBlockingScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<void> _chooseCountries() async {
+    final selected = await showModalBottomSheet<Set<String>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) =>
+          _GeoCountryPicker(initialSelection: _selectedCountryCodes),
+    );
+    if (selected == null || !mounted) return;
+    setState(() => _selectedCountryCodes = selected);
   }
 
   @override
@@ -218,20 +225,61 @@ class _GeoBlockingScreenState extends ConsumerState<GeoBlockingScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Enter two-letter country codes separated by spaces or commas.',
+                'Choose the countries to block in both directions.',
                 style: TextStyle(color: colors.onSurfaceVariant),
               ),
               const SizedBox(height: 14),
-              TextField(
-                controller: _countriesController,
-                enabled: !_saving,
-                textCapitalization: TextCapitalization.characters,
-                decoration: const InputDecoration(
-                  labelText: 'Country codes',
-                  hintText: 'CN, RU, KP',
-                  prefixIcon: Icon(Icons.flag_outlined),
+              InkWell(
+                onTap: _saving ? null : _chooseCountries,
+                borderRadius: BorderRadius.circular(8),
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Countries',
+                    prefixIcon: Icon(Icons.flag_outlined),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _selectedCountryCodes.isEmpty
+                              ? 'Select countries'
+                              : '${_selectedCountryCodes.length} selected',
+                        ),
+                      ),
+                      const Icon(Icons.arrow_drop_down_rounded),
+                    ],
+                  ),
                 ),
               ),
+              if (_selectedCountryCodes.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    ..._selectedCountries
+                        .take(8)
+                        .map(
+                          (country) => InputChip(
+                            label: Text('${country.name} (${country.code})'),
+                            onDeleted: _saving
+                                ? null
+                                : () => setState(
+                                    () => _selectedCountryCodes.remove(
+                                      country.code,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                    if (_selectedCountryCodes.length > 8)
+                      Chip(
+                        label: Text(
+                          '+${_selectedCountryCodes.length - 8} more',
+                        ),
+                      ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 14),
               FilledButton.icon(
                 onPressed: _saving ? null : _configure,
@@ -267,6 +315,144 @@ class _GeoBlockingScreenState extends ConsumerState<GeoBlockingScreen> {
           ),
         ],
       ],
+    );
+  }
+
+  List<GeoCountry> get _selectedCountries => geoCountries
+      .where((country) => _selectedCountryCodes.contains(country.code))
+      .toList();
+}
+
+class _GeoCountryPicker extends StatefulWidget {
+  final Set<String> initialSelection;
+
+  const _GeoCountryPicker({required this.initialSelection});
+
+  @override
+  State<_GeoCountryPicker> createState() => _GeoCountryPickerState();
+}
+
+class _GeoCountryPickerState extends State<_GeoCountryPicker> {
+  final _searchController = TextEditingController();
+  late Set<String> _selected;
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = {...widget.initialSelection};
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<GeoCountry> get _filteredCountries {
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return geoCountries;
+    return geoCountries
+        .where(
+          (country) =>
+              country.name.toLowerCase().contains(query) ||
+              country.code.toLowerCase().contains(query),
+        )
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final countries = _filteredCountries;
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.88,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 12, 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Blocked Countries',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _selected.isEmpty
+                      ? null
+                      : () => setState(_selected.clear),
+                  child: const Text('Clear'),
+                ),
+                IconButton(
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: TextField(
+              controller: _searchController,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: 'Search country or code',
+                prefixIcon: Icon(Icons.search_rounded),
+              ),
+              onChanged: (value) => setState(() => _query = value),
+            ),
+          ),
+          Expanded(
+            child: countries.isEmpty
+                ? const Center(child: Text('No countries found.'))
+                : ListView.builder(
+                    itemCount: countries.length,
+                    itemBuilder: (context, index) {
+                      final country = countries[index];
+                      final selected = _selected.contains(country.code);
+                      return CheckboxListTile(
+                        value: selected,
+                        title: Text(country.name),
+                        secondary: SizedBox(
+                          width: 36,
+                          child: Text(
+                            country.code,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        onChanged: (value) {
+                          setState(() {
+                            if (value == true) {
+                              _selected.add(country.code);
+                            } else {
+                              _selected.remove(country.code);
+                            }
+                          });
+                        },
+                      );
+                    },
+                  ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+            child: SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => Navigator.of(context).pop(_selected),
+                icon: const Icon(Icons.check_rounded),
+                label: Text(
+                  _selected.isEmpty ? 'Done' : 'Done (${_selected.length})',
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
