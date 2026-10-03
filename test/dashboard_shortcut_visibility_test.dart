@@ -15,6 +15,7 @@ void main() {
       'tailscale',
       'multi_wan',
       'quarantine',
+      'geo_blocking',
     ];
 
     for (final shortcutId in shortcutIds) {
@@ -34,5 +35,6 @@ void main() {
     expect(preferences.showTailscaleShortcut, isFalse);
     expect(preferences.showMultiWanShortcut, isFalse);
     expect(preferences.showQuarantineShortcut, isFalse);
+    expect(preferences.showGeoBlockingShortcut, isFalse);
   });
 }

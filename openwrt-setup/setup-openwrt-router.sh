@@ -81,6 +81,7 @@ Individual features:
   tor              Tor transparent proxy support
   tailscale        Tailscale mesh VPN and subnet routing support
   mwan3            Multi-WAN failover and load balancing support
+  geoip             Country blocking with geoip-shell
 
 Compatibility options:
   --profile=1         Same as stack
@@ -154,6 +155,7 @@ feature_to_installer() {
 	tor) echo "install-tor.sh" ;;
 	tailscale) echo "install-tailscale.sh" ;;
 	mwan3) echo "install-mwan3.sh" ;;
+	geoip) echo "install-geoip-shell.sh" ;;
 	*) return 1 ;;
 	esac
 }
@@ -184,6 +186,7 @@ canonical_feature() {
 	tor|onion) echo "tor" ;;
 	tailscale|tailnet|mesh-vpn) echo "tailscale" ;;
 	mwan3|multi-wan|multiwan) echo "mwan3" ;;
+	geoip|geo-blocking|geoblocking|country-blocking) echo "geoip" ;;
 	*) return 1 ;;
 	esac
 }
@@ -567,6 +570,11 @@ uninstall_feature() {
 		uci -q delete openwalla.features.mwan3 >/dev/null 2>&1 || true
 		remove_pkg_if_installed luci-app-mwan3
 		remove_pkg_if_installed mwan3
+		;;
+	geoip)
+		if command -v geoip-shell-uninstall.sh >/dev/null 2>&1; then
+			geoip-shell-uninstall.sh || true
+		fi
 		;;
 	tor)
 		[ -x /usr/bin/openwalla-tor ] && /usr/bin/openwalla-tor disable >/dev/null 2>&1 || true

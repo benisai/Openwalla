@@ -876,6 +876,20 @@ class _RouterDashboardSettingsScreenState
                   _onPreferenceChanged();
                 },
               ),
+              _buildCardVisibilitySwitch(
+                title: 'Geo-Blocking Shortcut',
+                subtitle: 'Show country blocking controls',
+                icon: Icons.public_off_rounded,
+                value: _preferences.showGeoBlockingShortcut,
+                onChanged: (value) {
+                  setState(() {
+                    _preferences = _preferences.copyWith(
+                      showGeoBlockingShortcut: value,
+                    );
+                  });
+                  _onPreferenceChanged();
+                },
+              ),
               const Divider(height: 1),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
@@ -945,6 +959,7 @@ class _RouterDashboardSettingsScreenState
       'tailscale' => 'Tailscale',
       'multi_wan' => 'Multi-WAN',
       'quarantine' => 'Quarantine',
+      'geo_blocking' => 'Geo-Blocking',
       _ => id,
     };
   }
@@ -966,6 +981,7 @@ class _RouterDashboardSettingsScreenState
       'tailscale' => Icons.device_hub_rounded,
       'multi_wan' => Icons.alt_route_rounded,
       'quarantine' => Icons.gpp_bad_rounded,
+      'geo_blocking' => Icons.public_off_rounded,
       _ => Icons.apps_rounded,
     };
   }

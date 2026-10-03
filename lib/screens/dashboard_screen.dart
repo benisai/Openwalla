@@ -15,6 +15,7 @@ import 'package:openwalla/screens/cron_scheduler_screen.dart';
 import 'package:openwalla/screens/dns_screen.dart';
 import 'package:openwalla/screens/ddns_screen.dart';
 import 'package:openwalla/screens/flows_screen.dart';
+import 'package:openwalla/screens/geo_blocking_screen.dart';
 import 'package:openwalla/screens/interfaces_screen.dart';
 import 'package:openwalla/screens/live_throughput_screen.dart';
 import 'package:openwalla/screens/multi_wan_screen.dart';
@@ -1365,6 +1366,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (context) => const QuarantineScreen(),
+                  ),
+                );
+              },
+            ),
+          if (preferences.showGeoBlockingShortcut)
+            _DashboardShortcutData(
+              id: 'geo_blocking',
+              label: 'Geo-Blocking',
+              icon: Icons.public_off_rounded,
+              color: _shortcutRose,
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const GeoBlockingScreen(),
                   ),
                 );
               },

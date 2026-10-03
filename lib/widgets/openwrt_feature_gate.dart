@@ -187,6 +187,7 @@ class _OpenwrtFeatureGateState extends ConsumerState<OpenwrtFeatureGate> {
     OpenwrtFeature.tailscale => 'tailscale',
     OpenwrtFeature.mwan3 => 'multi_wan',
     OpenwrtFeature.quarantine => 'quarantine',
+    OpenwrtFeature.geoBlocking => 'geo_blocking',
   };
 
   String _shortcutLabel(OpenwrtFeature feature) => switch (feature) {
@@ -197,6 +198,7 @@ class _OpenwrtFeatureGateState extends ConsumerState<OpenwrtFeatureGate> {
     OpenwrtFeature.tailscale => 'Tailscale',
     OpenwrtFeature.mwan3 => 'Multi-WAN',
     OpenwrtFeature.quarantine => 'Quarantine',
+    OpenwrtFeature.geoBlocking => 'Geo-Blocking',
   };
 }
 

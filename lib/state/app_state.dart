@@ -134,6 +134,7 @@ enum OpenwrtFeature {
   tailscale,
   mwan3,
   quarantine,
+  geoBlocking,
 }
 
 class OpenwallaQuarantineSnapshot {
@@ -3061,6 +3062,7 @@ class AppState extends ChangeNotifier {
       OpenwrtFeature.tailscale => 'Tailscale',
       OpenwrtFeature.mwan3 => 'Multi-WAN',
       OpenwrtFeature.quarantine => 'Device Quarantine',
+      OpenwrtFeature.geoBlocking => 'Geo-Blocking',
     };
   }
 
@@ -3073,6 +3075,7 @@ class AppState extends ChangeNotifier {
       OpenwrtFeature.tailscale => 'tailscale',
       OpenwrtFeature.mwan3 => 'mwan3',
       OpenwrtFeature.quarantine => 'quarantine',
+      OpenwrtFeature.geoBlocking => 'geoip',
     };
   }
 
@@ -3096,7 +3099,38 @@ class AppState extends ChangeNotifier {
         r'([ -x /etc/init.d/mwan3 ] && command -v mwan3 >/dev/null 2>&1 && [ -f /etc/config/mwan3 ]) && echo OK',
       OpenwrtFeature.quarantine =>
         r'([ -x /usr/bin/openwalla-devices-collector ] && [ -x /etc/init.d/openwalla-devices-collector ] && uci -q get openwalla.quarantine >/dev/null 2>&1) && echo OK',
+      OpenwrtFeature.geoBlocking =>
+        r'(command -v geoip-shell >/dev/null 2>&1 && command -v geoip-shell-run.sh >/dev/null 2>&1) && echo OK',
     };
+  }
+
+  Future<String> fetchGeoBlockingStatus() async {
+    if (_reviewerModeEnabled) {
+      return 'Geo-blocking status: enabled\nInbound mode: blacklist\nCountries: CN RU';
+    }
+    return runRouterSetupCommandViaSsh(
+      'NO_COLOR=1 geoip-shell status 2>&1 || true',
+    );
+  }
+
+  Future<String> configureGeoBlockingCountries(
+    String countryCodes, {
+    void Function(String chunk)? onOutput,
+  }) {
+    return runRouterSetupCommandViaSsh(
+      'NO_COLOR=1 geoip-shell configure -m blacklist -c ${_shellQuote(countryCodes)} 2>&1',
+      onOutput: onOutput,
+    );
+  }
+
+  Future<String> setGeoBlockingEnabled(
+    bool enabled, {
+    void Function(String chunk)? onOutput,
+  }) {
+    return runRouterSetupCommandViaSsh(
+      'NO_COLOR=1 geoip-shell ${enabled ? 'on' : 'off'} 2>&1',
+      onOutput: onOutput,
+    );
   }
 
   Future<OpenwallaQuarantineSnapshot> fetchQuarantineSnapshot({

@@ -21,6 +21,7 @@ class DashboardPreferences {
   final bool showTailscaleShortcut;
   final bool showMultiWanShortcut;
   final bool showQuarantineShortcut;
+  final bool showGeoBlockingShortcut;
   final bool showInactiveWirelessNetworks;
   final int shortcutPanelVisibleCount;
   final List<String> shortcutOrder;
@@ -49,6 +50,7 @@ class DashboardPreferences {
     this.showTailscaleShortcut = true,
     this.showMultiWanShortcut = true,
     this.showQuarantineShortcut = true,
+    this.showGeoBlockingShortcut = true,
     this.showInactiveWirelessNetworks = false,
     this.shortcutPanelVisibleCount = 6,
     List<String>? shortcutOrder,
@@ -75,6 +77,7 @@ class DashboardPreferences {
     'tailscale',
     'multi_wan',
     'quarantine',
+    'geo_blocking',
   ];
 
   DashboardPreferences copyWith({
@@ -98,6 +101,7 @@ class DashboardPreferences {
     bool? showTailscaleShortcut,
     bool? showMultiWanShortcut,
     bool? showQuarantineShortcut,
+    bool? showGeoBlockingShortcut,
     bool? showInactiveWirelessNetworks,
     int? shortcutPanelVisibleCount,
     List<String>? shortcutOrder,
@@ -138,6 +142,8 @@ class DashboardPreferences {
       showMultiWanShortcut: showMultiWanShortcut ?? this.showMultiWanShortcut,
       showQuarantineShortcut:
           showQuarantineShortcut ?? this.showQuarantineShortcut,
+      showGeoBlockingShortcut:
+          showGeoBlockingShortcut ?? this.showGeoBlockingShortcut,
       showInactiveWirelessNetworks:
           showInactiveWirelessNetworks ?? this.showInactiveWirelessNetworks,
       shortcutPanelVisibleCount:
@@ -167,6 +173,7 @@ class DashboardPreferences {
       'tailscale' => copyWith(showTailscaleShortcut: visible),
       'multi_wan' => copyWith(showMultiWanShortcut: visible),
       'quarantine' => copyWith(showQuarantineShortcut: visible),
+      'geo_blocking' => copyWith(showGeoBlockingShortcut: visible),
       _ => this,
     };
   }
@@ -193,6 +200,7 @@ class DashboardPreferences {
     'showTailscaleShortcut': showTailscaleShortcut,
     'showMultiWanShortcut': showMultiWanShortcut,
     'showQuarantineShortcut': showQuarantineShortcut,
+    'showGeoBlockingShortcut': showGeoBlockingShortcut,
     'showInactiveWirelessNetworks': showInactiveWirelessNetworks,
     'shortcutPanelVisibleCount': shortcutPanelVisibleCount,
     'shortcutOrder': shortcutOrder,
@@ -230,6 +238,7 @@ class DashboardPreferences {
       showTailscaleShortcut: json['showTailscaleShortcut'] ?? true,
       showMultiWanShortcut: json['showMultiWanShortcut'] ?? true,
       showQuarantineShortcut: json['showQuarantineShortcut'] ?? true,
+      showGeoBlockingShortcut: json['showGeoBlockingShortcut'] ?? true,
       showInactiveWirelessNetworks:
           json['showInactiveWirelessNetworks'] == true,
       shortcutPanelVisibleCount: _parseShortcutPanelVisibleCount(

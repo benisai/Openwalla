@@ -18,6 +18,8 @@ void main() {
     expect(preferences.shortcutOrder, contains('tailscale'));
     expect(preferences.showQuarantineShortcut, isTrue);
     expect(preferences.shortcutOrder, contains('quarantine'));
+    expect(preferences.showGeoBlockingShortcut, isTrue);
+    expect(preferences.shortcutOrder, contains('geo_blocking'));
   });
 
   TestWidgetsFlutterBinding.ensureInitialized();
