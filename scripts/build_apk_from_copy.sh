@@ -13,8 +13,8 @@ APK_TEST_ABI="${OPENWALLA_APK_TEST_ABI:-arm64-v8a}"
 APK_TEST_MAX_BYTES="${OPENWALLA_APK_TEST_MAX_BYTES:-99000000}"
 BUILD_MODE="release"
 UPLOAD_RELEASE=false
-COPY_APK_TEST=false
-SPLIT_PER_ABI=false
+COPY_APK_TEST=true
+SPLIT_PER_ABI=true
 GIT_APK_TEST=false
 PUBSPEC_VERSION="$(grep '^version:' "$PROJECT_ROOT/pubspec.yaml" | awk '{print $2}')"
 APP_VERSION="${PUBSPEC_VERSION%%+*}"
@@ -23,10 +23,11 @@ APK_TEST_COMMIT_MESSAGE="${OPENWALLA_APK_TEST_COMMIT_MESSAGE:-Update APK test bu
 
 usage() {
   echo "Usage: $0 [debug|profile|release] [--upload] [--apk-test] [--split-per-abi] [--apk-test-git] [--pixel-test]" >&2
+  echo "  By default, builds smaller ABI-specific APKs and copies the selected ABI into APK-TEST without Git actions." >&2
   echo "  --upload  Build split APKs, copy target ABI into APK-TEST/, then git add/commit/push it." >&2
-  echo "  --apk-test  Build split APKs and copy the configured test ABI into APK-TEST/." >&2
-  echo "  --split-per-abi  Build smaller ABI-specific APKs." >&2
-  echo "  --apk-test-git  After --apk-test, git add/commit/push copied APK test artifacts." >&2
+  echo "  --apk-test  Compatibility flag; APK-TEST copying is now enabled by default." >&2
+  echo "  --split-per-abi  Compatibility flag; ABI splitting is now enabled by default." >&2
+  echo "  --apk-test-git  Explicitly git add/commit/push copied APK test artifacts." >&2
   echo "  --pixel-test  Shortcut for: debug --split-per-abi --apk-test --apk-test-git." >&2
   echo "Set OPENWALLA_APK_TEST_ABI to choose which split APK goes into APK-TEST (default: arm64-v8a)." >&2
   echo "Set OPENWALLA_APK_TEST_VERSION to override the APK filename/commit suffix (default: v<pubspec version>)." >&2
