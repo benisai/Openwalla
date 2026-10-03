@@ -119,6 +119,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                       isInstalling: _isInstallingSupport,
                       onPressed: _installStatisticsSupport,
                       onRouterSetup: _openRouterSetup,
+                      onHideStatistics: _hideStatisticsTab,
                     );
                   }
                   return FutureBuilder<MonthlyUsageSettings>(
@@ -260,6 +261,37 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (context) => const RouterSetupScreen()));
+  }
+
+  Future<void> _hideStatisticsTab() async {
+    final shouldHide = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.visibility_off_rounded),
+        title: const Text('Hide Statistics Tab?'),
+        content: const Text(
+          'The Statistics tab will be removed from the bottom navigation. You can enable it again from Settings > Dashboard Settings > Statistics.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Hide Tab'),
+          ),
+        ],
+      ),
+    );
+    if (shouldHide != true || !mounted) return;
+
+    final appState = ref.read(appStateProvider);
+    await appState.saveDashboardPreferences(
+      appState.dashboardPreferences.copyWith(showStatisticsTab: false),
+    );
+    if (!mounted) return;
+    appState.requestTab(0);
   }
 
   Future<void> _installStatisticsSupport() async {
@@ -1349,6 +1381,7 @@ class _SetupRequiredCard extends StatelessWidget {
   final bool isInstalling;
   final VoidCallback onPressed;
   final VoidCallback onRouterSetup;
+  final VoidCallback onHideStatistics;
 
   const _SetupRequiredCard({
     required this.title,
@@ -1357,6 +1390,7 @@ class _SetupRequiredCard extends StatelessWidget {
     required this.isInstalling,
     required this.onPressed,
     required this.onRouterSetup,
+    required this.onHideStatistics,
   });
 
   @override
@@ -1416,6 +1450,12 @@ class _SetupRequiredCard extends StatelessWidget {
               onPressed: isInstalling ? null : onRouterSetup,
               icon: const Icon(Icons.router_rounded),
               label: const Text('Router Setup'),
+            ),
+            const SizedBox(height: 10),
+            TextButton.icon(
+              onPressed: isInstalling ? null : onHideStatistics,
+              icon: const Icon(Icons.visibility_off_rounded),
+              label: const Text('Hide Statistics Tab'),
             ),
           ],
         ),
