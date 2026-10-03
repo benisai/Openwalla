@@ -22,6 +22,7 @@ import 'package:openwalla/config/app_config.dart';
 import 'package:openwalla/utils/http_client_manager.dart';
 import 'package:openwalla/utils/logger.dart';
 import 'package:openwalla/utils/rpc_result.dart';
+import 'package:openwalla/utils/router_setup_commands.dart';
 
 typedef _WirelessConnection = ({
   String band,
@@ -2655,6 +2656,7 @@ class AppState extends ChangeNotifier {
   }) {
     final featureArgs = features.where((feature) => feature.trim().isNotEmpty);
     final commandParts = [
+      kOpenwallaInternetPreflightCommand,
       'export OPENWALLA_RAW_BASE=https://raw.githubusercontent.com/benisai/openwalla-apk/main/openwrt-setup',
       'export OPENWALLA_ROOT=/tmp/openwalla-app-setup',
       'fetch() { if command -v wget >/dev/null 2>&1; then wget -qO "\$2" "\$1"; else curl -fsSL "\$1" -o "\$2"; fi; }',

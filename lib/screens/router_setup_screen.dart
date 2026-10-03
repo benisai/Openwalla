@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/main.dart';
 import 'package:openwalla/models/dashboard_preferences.dart';
+import 'package:openwalla/utils/router_setup_commands.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
 import 'package:openwalla/widgets/ssh_console_sheet.dart';
 
@@ -94,6 +95,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
   String get _setupCommand {
     final features = _selectedFeatures.join(' ');
     final preparation = [
+      kOpenwallaInternetPreflightCommand,
       'export OPENWALLA_RAW_BASE=$_rawSetupBase',
       'export OPENWALLA_ROOT=/tmp/openwalla-app-setup',
       'fetch() { if command -v wget >/dev/null 2>&1; then wget -qO "\$2" "\$1"; else curl -fsSL "\$1" -o "\$2"; fi; }',
@@ -120,6 +122,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
     final features = _uninstallFeatures.join(' ');
     if (features.trim().isEmpty) return '';
     return [
+      kOpenwallaInternetPreflightCommand,
       'export OPENWALLA_RAW_BASE=$_rawSetupBase',
       'export OPENWALLA_ROOT=/tmp/openwalla-app-setup',
       'fetch() { if command -v wget >/dev/null 2>&1; then wget -qO "\$2" "\$1"; else curl -fsSL "\$1" -o "\$2"; fi; }',
@@ -217,16 +220,15 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
       await _showSetupSuccessDialog();
     } catch (e) {
       if (!mounted) return;
-      console.setOutput(
-        'SSH install failed. Make sure SSH is enabled on the router and the saved router username/password can log in as root. You can still copy the SSH command below and run it manually.\n\n$e',
-      );
+      final failureMessage =
+          'Router setup did not complete. Review the connection check and installer output below.\n\n$e';
+      console.setOutput(failureMessage);
       setState(() {
-        _lastOutput =
-            'SSH install failed. Make sure SSH is enabled on the router and the saved router username/password can log in as root. You can still copy the SSH command below and run it manually.\n\n$e';
+        _lastOutput = failureMessage;
         _showDetails = true;
         _setupComplete = false;
       });
-      _showSnack('Router setup could not run over SSH.');
+      _showSnack('Router setup did not complete.');
     } finally {
       console.complete();
       if (mounted) setState(() => _isInstalling = false);
