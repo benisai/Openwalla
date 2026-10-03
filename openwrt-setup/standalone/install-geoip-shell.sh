@@ -1,5 +1,10 @@
 #!/bin/sh
 
+# Geo-blocking is provided by the geoip-shell project by friendly-bits/antonk:
+# https://github.com/friendly-bits/geoip-shell
+# Openwalla distributes its unmodified source archive under GPL-3.0 and invokes
+# the upstream installer. See openwrt-setup/vendor/geoip-shell/LICENSE.
+
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
