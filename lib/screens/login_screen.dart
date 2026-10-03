@@ -409,49 +409,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Future<void> _runLoginSshAction(_LoginSshRequest request) async {
-    final installingAcl = request.action == _LoginSshAction.installAcl;
     final console = SshConsoleController(
       initialOutput:
           'Connecting to ${request.username}@${request.host}:${request.port}...\n'
-          '${installingAcl ? 'Installing the bundled Openwalla RPC ACL' : 'Installing LuCI and RPC support'}...\n\n',
+          'Installing the bundled Openwalla RPC ACL...\n\n',
       running: true,
     );
     unawaited(
       showSshConsoleSheet(
         context: context,
         controller: console,
-        title: installingAcl ? 'Openwalla ACL Installer' : 'LuCI SSH Installer',
+        title: 'Openwalla ACL Installer',
       ).whenComplete(console.dispose),
     );
 
-    final command = installingAcl
-        ? _localAclInstallCommand
-        : r'''
-set -e
-echo "[openwalla-luci] Detecting package manager..."
-if command -v apk >/dev/null 2>&1; then
-  echo "[openwalla-luci] Updating APK packages..."
-  apk update
-  apk add luci luci-mod-rpc rpcd-mod-file || apk add luci luci-mod-rpc
-elif command -v opkg >/dev/null 2>&1; then
-  echo "[openwalla-luci] Updating OPKG packages..."
-  opkg update
-  opkg install luci luci-mod-rpc rpcd-mod-file || opkg install luci luci-mod-rpc
-else
-  echo "[openwalla-luci] No supported package manager was found."
-  exit 1
-fi
-for service in rpcd uhttpd; do
-  if [ -x "/etc/init.d/$service" ]; then
-    "/etc/init.d/$service" enable || true
-    "/etc/init.d/$service" restart || true
-  fi
-done
-echo "[openwalla-luci] Install complete. Return to Openwalla and connect again."
-''';
-    final commandInput = installingAcl
-        ? await rootBundle.loadString('openwrt-setup/rpcd-acl.json')
-        : null;
+    final commandInput = await rootBundle.loadString(
+      'openwrt-setup/rpcd-acl.json',
+    );
 
     final output = StringBuffer();
     try {
@@ -460,7 +434,7 @@ echo "[openwalla-luci] Install complete. Return to Openwalla and connect again."
         port: request.port,
         username: request.username,
         password: request.password,
-        command: command,
+        command: _localAclInstallCommand,
         stdin: commandInput,
         onOutput: (chunk) {
           output.write(chunk);
@@ -474,7 +448,7 @@ echo "[openwalla-luci] Install complete. Return to Openwalla and connect again."
       } else {
         console.setOutput(
           result.output.trim().isEmpty
-              ? '${installingAcl ? 'Openwalla RPC ACL installation' : 'LuCI installation'} completed. Return to Openwalla and connect again.'
+              ? 'Openwalla RPC ACL installation completed. Return to Openwalla and connect again.'
               : result.output.trimRight(),
         );
       }
@@ -1172,7 +1146,7 @@ echo "[openwalla-acl] Install complete. Return to Openwalla and connect again."
   }
 }
 
-enum _LoginSshAction { installLuci, installAcl }
+enum _LoginSshAction { installAcl }
 
 class _LoginSshRequest {
   final String host;
@@ -1375,7 +1349,7 @@ class _LoginHelpSheetState extends State<_LoginHelpSheet> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Openwalla needs LuCI RPC support and its access-control file to manage your router. Use SSH to prepare a fresh OpenWrt router.',
+                        'Copy Openwalla\'s bundled access-control file to a fresh OpenWrt router over SSH. No internet connection is required.',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: colors.onSurfaceVariant,
                           height: 1.4,
@@ -1391,13 +1365,6 @@ class _LoginHelpSheetState extends State<_LoginHelpSheet> {
                   label: const Text('Open Openwalla on GitHub'),
                 ),
                 const SizedBox(height: 18),
-                _buildSshActionTile(
-                  action: _LoginSshAction.installLuci,
-                  icon: Icons.download_rounded,
-                  title: 'Install LuCI via SSH',
-                  subtitle: 'Download and install required router packages',
-                ),
-                const SizedBox(height: 10),
                 _buildSshActionTile(
                   action: _LoginSshAction.installAcl,
                   icon: Icons.policy_rounded,
@@ -1492,16 +1459,8 @@ class _LoginHelpSheetState extends State<_LoginHelpSheet> {
                               onPressed: _sshAction == null
                                   ? null
                                   : () => _install(_sshAction!),
-                              icon: Icon(
-                                _sshAction == _LoginSshAction.installAcl
-                                    ? Icons.content_copy_rounded
-                                    : Icons.download_rounded,
-                              ),
-                              label: Text(
-                                _sshAction == _LoginSshAction.installAcl
-                                    ? 'Copy and Apply RPC ACL'
-                                    : 'Install Required Packages',
-                              ),
+                              icon: Icon(Icons.content_copy_rounded),
+                              label: const Text('Copy and Apply RPC ACL'),
                             ),
                           ),
                         ],
