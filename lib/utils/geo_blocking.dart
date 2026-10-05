@@ -7,6 +7,9 @@ class GeoBlockingInputException implements Exception {
   String toString() => message;
 }
 
+const kGeoBlockingInitialConfigureOptions =
+    r'-z -r none -w "$GEOIP_BACKEND" -i auto';
+
 String normalizeGeoCountryCodes(String value) {
   final codes = value
       .toUpperCase()

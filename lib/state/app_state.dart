@@ -20,6 +20,7 @@ import 'package:openwalla/services/api_service.dart';
 import 'package:openwalla/services/service_factory.dart';
 import 'package:openwalla/config/app_config.dart';
 import 'package:openwalla/utils/http_client_manager.dart';
+import 'package:openwalla/utils/geo_blocking.dart';
 import 'package:openwalla/utils/logger.dart';
 import 'package:openwalla/utils/rpc_result.dart';
 import 'package:openwalla/utils/router_setup_commands.dart';
@@ -3125,7 +3126,9 @@ class AppState extends ChangeNotifier {
     void Function(String chunk)? onOutput,
   }) {
     return runRouterSetupCommandViaSsh(
-      'NO_COLOR=1 geoip-shell configure '
+      'GEOIP_BACKEND=nft; '
+      'if apk info -e geoip-shell-iptables >/dev/null 2>&1; then GEOIP_BACKEND=ipt; fi; '
+      'NO_COLOR=1 geoip-shell configure $kGeoBlockingInitialConfigureOptions '
       '-D inbound -m blacklist -c ${_shellQuote(countryCodes)} '
       '-D outbound -m blacklist -c ${_shellQuote(countryCodes)} 2>&1',
       onOutput: onOutput,

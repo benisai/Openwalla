@@ -20,6 +20,19 @@ void main() {
     );
   });
 
+  test(
+    'first-run configuration supplies every noninteractive prerequisite',
+    () {
+      expect(kGeoBlockingInitialConfigureOptions, contains('-z'));
+      expect(kGeoBlockingInitialConfigureOptions, contains('-r none'));
+      expect(
+        kGeoBlockingInitialConfigureOptions,
+        contains(r'-w "$GEOIP_BACKEND"'),
+      );
+      expect(kGeoBlockingInitialConfigureOptions, contains('-i auto'));
+    },
+  );
+
   test('normalizes, sorts, and de-duplicates country codes', () {
     expect(normalizeGeoCountryCodes('us, de US;ca'), 'CA DE US');
   });

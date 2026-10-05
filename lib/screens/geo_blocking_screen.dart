@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/data/geo_countries.dart';
@@ -6,6 +8,7 @@ import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/utils/geo_blocking.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
 import 'package:openwalla/widgets/openwrt_feature_gate.dart';
+import 'package:openwalla/widgets/ssh_console_sheet.dart';
 
 class GeoBlockingScreen extends ConsumerStatefulWidget {
   const GeoBlockingScreen({super.key});
@@ -83,15 +86,43 @@ class _GeoBlockingScreenState extends ConsumerState<GeoBlockingScreen> {
     if (confirmed != true || !mounted) return;
 
     setState(() => _saving = true);
+    final console = SshConsoleController(
+      initialOutput:
+          'Connecting to router...\nInitializing GeoIP country lists...\n',
+      running: true,
+    );
+    unawaited(
+      showSshConsoleSheet(
+        context: context,
+        controller: console,
+        title: 'Applying Geo-Blocking',
+      ).whenComplete(console.dispose),
+    );
     try {
-      await ref.read(appStateProvider).configureGeoBlockingCountries(countries);
+      final outputBuffer = StringBuffer();
+      await ref
+          .read(appStateProvider)
+          .configureGeoBlockingCountries(
+            countries,
+            onOutput: (chunk) {
+              outputBuffer.write(chunk);
+              console.setOutput(outputBuffer.toString().trimRight());
+            },
+          );
       _selectedCountryCodes = countries.split(' ').toSet();
       await _load();
       if (!mounted) return;
+      if (outputBuffer.isEmpty) {
+        console.setOutput('GeoIP configuration completed.');
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Blocked countries updated.')),
       );
     } catch (error) {
+      console.setOutput(
+        'GeoIP configuration failed.\n\n'
+        '${error.toString().replaceFirst('Bad state: ', '')}',
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -99,6 +130,7 @@ class _GeoBlockingScreenState extends ConsumerState<GeoBlockingScreen> {
         ),
       );
     } finally {
+      console.complete();
       if (mounted) setState(() => _saving = false);
     }
   }
