@@ -4358,20 +4358,21 @@ class _NetworkInterfaceEditSheetState
 
     setState(() => _isSaving = true);
     try {
-      await ref
+      final changedLanAddress = await ref
           .read(appStateProvider)
-          .saveNetworkInterfaceConfig(next, context: context);
+          .saveNetworkInterfaceConfig(
+            next,
+            previousIpAddress: current.ipAddress,
+            context: context,
+          );
       if (!mounted) return;
-      final changedLanAddress =
-          current.ipAddress.trim() != next.ipAddress.trim() ||
-          current.netmask.trim() != next.netmask.trim();
       if (changedLanAddress) {
         await showDialog<void>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('LAN address updated'),
             content: Text(
-              'The router may now be reachable at ${next.ipAddress}. Log out and log back in with the new IP address if the app disconnects.',
+              'Openwalla updated this router to ${next.ipAddress} and will reconnect automatically. It may take a few seconds for the network to return.',
             ),
             actions: [
               FilledButton(

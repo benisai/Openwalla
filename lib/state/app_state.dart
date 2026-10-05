@@ -7427,13 +7427,14 @@ done | sort -t "|" -k1,1nr | head -n ''' +
     );
   }
 
-  Future<void> saveNetworkInterfaceConfig(
+  Future<bool> saveNetworkInterfaceConfig(
     OpenwrtNetworkInterfaceConfig config, {
+    String? previousIpAddress,
     BuildContext? context,
   }) async {
     if (_reviewerModeEnabled) {
       notifyListeners();
-      return;
+      return false;
     }
 
     final router = _routerService?.selectedRouter;
@@ -7503,14 +7504,73 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       );
     }
 
+    final lanAddressChanged =
+        config.interfaceName.toLowerCase() == 'lan' &&
+        previousIpAddress != null &&
+        previousIpAddress.trim() != config.ipAddress.trim();
+
+    // Return the RPC response before changing the LAN address. Waiting for a
+    // foreground reload makes a successful save look like a timeout because
+    // the router stops answering on its old address mid-request.
     await _apiService!.systemExec(
       router.ipAddress,
       sysauth,
       router.useHttps,
       command:
-          '/etc/init.d/network reload 2>/dev/null; /etc/init.d/dnsmasq restart 2>/dev/null || true',
+          '( sleep 2; /etc/init.d/network reload 2>/dev/null; '
+          '/etc/init.d/dnsmasq restart 2>/dev/null ) >/dev/null 2>&1 &',
     );
+
+    if (lanAddressChanged) {
+      final updatedAddress = _replaceRouterHost(
+        router.ipAddress,
+        previousIpAddress,
+        config.ipAddress,
+      );
+      if (updatedAddress != router.ipAddress) {
+        final updatedRouter = router.copyWith(ipAddress: updatedAddress);
+        await _routerService!.updateRouter(updatedRouter);
+        _httpClientManager.disposeClient(router.ipAddress, router.useHttps);
+        unawaited(_reconnectAfterLanAddressChange(updatedRouter));
+      }
+    }
     notifyListeners();
+    return lanAddressChanged;
+  }
+
+  String _replaceRouterHost(
+    String routerAddress,
+    String previousAddress,
+    String nextAddress,
+  ) {
+    final oldHost = previousAddress.trim();
+    if (routerAddress == oldHost) return nextAddress.trim();
+    if (routerAddress.startsWith('$oldHost:')) {
+      return '${nextAddress.trim()}${routerAddress.substring(oldHost.length)}';
+    }
+    return routerAddress;
+  }
+
+  Future<void> _reconnectAfterLanAddressChange(model.Router router) async {
+    await Future<void>.delayed(const Duration(seconds: 4));
+    try {
+      final connected = await _authService!.tryAutoLogin(
+        router.ipAddress,
+        router.username,
+        router.password,
+        router.useHttps,
+      );
+      if (!connected) return;
+      await fetchDashboardData();
+      _startThroughputTimer();
+      warmStatisticsData();
+    } catch (error) {
+      Logger.warning(
+        'Router reconnect after LAN address change is still pending: $error',
+      );
+    } finally {
+      notifyListeners();
+    }
   }
 
   Future<OpenwrtWirelessNetworkConfig?> fetchWirelessNetworkConfig(
