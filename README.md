@@ -144,9 +144,20 @@ lib/
 
 ## Troubleshooting
 
-- **Connection Failed:** Check router IP, LuCI web interface, firewall, and try both HTTP/HTTPS.
-- **Authentication Failed:** Verify credentials and admin privileges.
-- **No Data Displayed:** Ensure the router has LuCI RPC support: `opkg update && opkg install luci-mod-rpc rpcd-mod-luci rpcd-mod-iwinfo luci-mod-status`, restart `rpcd` (or reboot), then verify with `ubus list luci-rpc` and `ubus call luci-rpc getNetworkDevices '{}'`.
+- **Cannot connect to the router** - Confirm the phone is connected to the router's LAN or Wi-Fi, verify the router address in LuCI, and include a custom port when one is configured. Openwalla supports both HTTP and HTTPS.
+- **Login works in LuCI but fails in Openwalla** - Tap **Need help?** on the login page, choose **Copy RPC ACL via SSH**, apply the bundled permissions, and connect again.
+- **Fresh router has no password** - Leave the SSH password blank in the login-page RPC ACL helper. After connecting, set a root password under **More > Manage Device > Router Password**.
+- **Access denied or session expired** - Tap **Check Again** or refresh the page. Openwalla will renew the LuCI session and retry feature validation without marking installed software as missing.
+- **Router Setup says there is no internet** - Configure the WAN or Wi-Fi repeater first, then rerun Router Setup. The bundled RPC ACL helper works offline, but OpenWrt package installation requires internet access.
+- **Router Setup stops or produces no more output** - Verify the saved root password and test the connection under **Manage Device > Router Setup > SSH Terminal**. Then rerun the selected setup profile.
+- **A feature says it is not installed** - Use the feature's **Check Again** button. If it is genuinely missing, install its standalone component from the feature card or Router Setup.
+- **Router components are out of date** - Open **About**, tap **Router Components** to run the version check, then open Router Components and redeploy the helpers.
+- **App cannot reconnect after a LAN IP change** - Join the router's new subnet or reconnect Wi-Fi, then reopen Openwalla. The saved router profile is updated to the new LAN address automatically.
+- **Statistics is empty** - Install the Statistics tools from the Statistics page or Router Setup. Statistics relies on `vnstat`/`vnstat2` and `nlbwmon`.
+- **Network Flows is empty** - Install either Simple Flows or Detailed Flows, enable the Flows dashboard option, and verify the corresponding collector is running. Detailed Flows requires `netifyd` and should not be installed alongside Simple Flows.
+- **Devices are missing or stale** - Pull to refresh the Devices page and verify the Openwalla devices collector is installed under Router Components.
+- **Package installation fails** - Refresh the router's package indexes and confirm its configured OpenWrt feeds match the installed firmware release. Openwalla prefers `apk` and falls back to `opkg` when needed.
+- **Advanced RPC check** - On the router, run `ubus list luci-rpc` and `ubus call luci-rpc getNetworkDevices '{}'`. If those fail, reapply the bundled RPC ACL from the login page or restart `rpcd`.
 
 ---
 
