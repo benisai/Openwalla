@@ -77,20 +77,29 @@ Openwalla can install optional router components from **Manage Device > Router S
 ---
 
 ## Installation
-```
-On Openwrt Router:
-wget https://raw.githubusercontent.com/benisai/openwalla-apk/main/openwrt-setup/Setup-Openwrt-WGet-Files.sh
-chmod +X Setup-Openwrt-WGet-Files.sh
 
-./Setup-Openwrt-WGet-Files.sh 
-```
+### Set Up with the App
 
+1. Install Openwalla from [Google Play](https://play.google.com/store/apps/details?id=com.cogwheel.LuCIMobile), the [Apple App Store](https://apps.apple.com/app/luci-mobile/id6749455847), or [IzzyOnDroid](https://apt.izzysoft.de/fdroid/index/apk/com.cogwheel.LuCIMobile).
+2. Connect the phone to the OpenWrt router's LAN or Wi-Fi network.
+3. Open Openwalla and enter the router address, normally `192.168.1.1`, the OpenWrt username, normally `root`, and the router password.
+4. Tap **Connect**. Openwalla securely saves the router profile when credential saving is enabled.
+5. Open **More > Manage Device > Router Setup** after connecting.
+6. Choose a setup profile and review its components:
+   - **Basic Install** installs the core packages and helpers Openwalla needs.
+   - **Standard Install** adds AdBlock, parental controls, quarantine, Smart Queue, DDNS, and WireGuard.
+   - **Advanced Install** adds Policy-Based Routing to Basic and Standard.
+   - **Everything** installs all bundled router features, including Netify Detailed Flow.
+   - **Flows Install** installs or redeploys only Netify and the Detailed Flow collector.
+7. Tap **Install via SSH** and keep the app open until the success dialog appears. Package installation requires the router to have internet access.
 
-**Get it on [Google Play](https://play.google.com/store/apps/details?id=com.cogwheel.LuCIMobile)**, **[Apple App Store](https://apps.apple.com/app/luci-mobile/id6749455847)**, or **[IzzyOnDroid](https://apt.izzysoft.de/fdroid/index/apk/com.cogwheel.LuCIMobile)**, or build from source:
+> **Login hint:** If Openwalla reports missing RPC permissions or cannot complete the first login, tap **Need help?** on the login page. Choose **Copy RPC ACL via SSH** to copy and apply Openwalla's bundled access-control file. This works without router internet access; enter the SSH password, or leave it blank when a fresh router does not have one yet. Return to the login page and connect again afterward.
+
+### Build from Source
 
 ```bash
-git clone https://github.com/cogwheel0/luci-mobile.git
-cd luci-mobile
+git clone https://github.com/benisai/openwalla-apk.git
+cd openwalla-apk
 flutter pub get
 flutter run
 ```
