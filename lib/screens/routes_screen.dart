@@ -31,7 +31,9 @@ class RoutesScreen extends ConsumerStatefulWidget {
   ConsumerState<RoutesScreen> createState() => _RoutesScreenState();
 }
 
-class _RoutesScreenState extends ConsumerState<RoutesScreen> {
+class _RoutesScreenState extends ConsumerState<RoutesScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
   List<OpenwrtStaticRoute> _routes = const [];
   List<OpenwrtPbrPolicy> _pbrPolicies = const [];
   bool _hasPbrSupport = false;
@@ -42,7 +44,20 @@ class _RoutesScreenState extends ConsumerState<RoutesScreen> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(_handleTabChange);
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadRoutes());
+  }
+
+  @override
+  void dispose() {
+    _tabController.removeListener(_handleTabChange);
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  void _handleTabChange() {
+    if (!_tabController.indexIsChanging && mounted) setState(() {});
   }
 
   Future<void> _loadRoutes() async {
@@ -216,117 +231,113 @@ class _RoutesScreenState extends ConsumerState<RoutesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Scaffold(
       appBar: LuciAppBar(
         title: 'Routing',
         showBack: true,
         actions: [
           IconButton(
-            tooltip: 'Add route',
-            onPressed: _showAddRouteSheet,
+            tooltip: _tabController.index == 0 ? 'Add route' : 'Add policy',
+            onPressed: _tabController.index == 0
+                ? _showAddRouteSheet
+                : _hasPbrSupport
+                ? _showAddPbrSheet
+                : null,
             icon: const Icon(Icons.add_rounded),
           ),
         ],
       ),
       body: SafeArea(
         top: false,
-        child: RefreshIndicator(
-          onRefresh: _loadRoutes,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-            children: [
-              if (!_isLoading) ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Static IPv4 Routes',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 0,
-                            ),
-                      ),
-                    ),
-                    FilledButton.icon(
-                      onPressed: _showAddRouteSheet,
-                      icon: const Icon(Icons.add_rounded),
-                      label: const Text('Add'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                if (_error != null)
-                  _RouteEmptyCard(message: _error!, onRefresh: _loadRoutes)
-                else if (_routes.isEmpty)
-                  _RouteEmptyCard(
-                    message: 'No static routes found.',
-                    onRefresh: _loadRoutes,
-                  )
-                else
-                  ..._routes.map((route) => _RouteCard(route: route)),
-                const SizedBox(height: 22),
+        child: Column(
+          children: [
+            TabBar(
+              controller: _tabController,
+              tabs: const [
+                Tab(text: 'Static'),
+                Tab(text: 'PBR'),
               ],
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Policy-Based Routing',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                  if (!_isLoading && _hasPbrSupport)
-                    FilledButton.icon(
-                      onPressed: _showAddPbrSheet,
-                      icon: const Icon(Icons.add_rounded),
-                      label: const Text('Add Policy'),
-                    ),
-                ],
+            ),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [_buildStaticTab(), _buildPbrTab()],
               ),
-              const SizedBox(height: 6),
-              Text(
-                'Route domains or addresses through a VPN or another interface.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 12),
-              if (_isLoading)
-                const _PbrCheckingCard()
-              else if (!_hasPbrSupport)
-                _PbrInstallCard(
-                  isInstalling: _isInstallingPbr,
-                  onInstall: _installPbr,
-                )
-              else if (_pbrPolicies.isEmpty)
-                _RouteEmptyCard(
-                  message: 'No domain routing policies found.',
-                  onRefresh: _loadRoutes,
-                )
-              else
-                ..._pbrPolicies.map(
-                  (policy) => _PbrPolicyCard(
-                    policy: policy,
-                    onChanged: (enabled) => _togglePbrPolicy(policy, enabled),
-                    onDelete: () => _deletePbrPolicy(policy),
-                  ),
-                ),
-            ],
-          ),
+            ),
+          ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildStaticTab() {
+    return RefreshIndicator(
+      onRefresh: _loadRoutes,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        children: [
+          if (_isLoading)
+            const _PbrCheckingCard(label: 'Loading static routes')
+          else if (_error != null)
+            _RouteEmptyCard(message: _error!, onRefresh: _loadRoutes)
+          else if (_routes.isEmpty)
+            _RouteEmptyCard(
+              message: 'No static routes found.',
+              onRefresh: _loadRoutes,
+            )
+          else
+            ..._routes.map((route) => _RouteCard(route: route)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPbrTab() {
+    final colors = Theme.of(context).colorScheme;
+    return RefreshIndicator(
+      onRefresh: _loadRoutes,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        children: [
+          Text(
+            'Route domains or addresses through a VPN or another interface.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+          ),
+          const SizedBox(height: 12),
+          if (_isLoading)
+            const _PbrCheckingCard()
+          else if (!_hasPbrSupport)
+            _PbrInstallCard(
+              isInstalling: _isInstallingPbr,
+              onInstall: _installPbr,
+            )
+          else if (_pbrPolicies.isEmpty)
+            _RouteEmptyCard(
+              message: 'No domain routing policies found.',
+              onRefresh: _loadRoutes,
+            )
+          else
+            ..._pbrPolicies.map(
+              (policy) => _PbrPolicyCard(
+                policy: policy,
+                onChanged: (enabled) => _togglePbrPolicy(policy, enabled),
+                onDelete: () => _deletePbrPolicy(policy),
+              ),
+            ),
+        ],
       ),
     );
   }
 }
 
 class _PbrCheckingCard extends StatelessWidget {
-  const _PbrCheckingCard();
+  final String label;
+
+  const _PbrCheckingCard({this.label = 'Checking PBR support'});
 
   @override
   Widget build(BuildContext context) {
@@ -361,7 +372,7 @@ class _PbrCheckingCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Checking PBR support',
+                  label,
                   style: Theme.of(
                     context,
                   ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),

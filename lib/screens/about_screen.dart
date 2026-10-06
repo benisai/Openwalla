@@ -20,13 +20,12 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
   static const _outdatedRose = Color(0xFFFF8FB3);
 
   late final Future<_AppVersionStatus> _appVersionStatus;
-  late final Future<RouterComponentStatus> _componentStatus;
+  Future<RouterComponentStatus>? _componentStatus;
 
   @override
   void initState() {
     super.initState();
     _appVersionStatus = _loadAppVersionStatus();
-    _componentStatus = _loadComponentStatus();
   }
 
   Future<_AppVersionStatus> _loadAppVersionStatus() async {
@@ -58,6 +57,10 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
     return RouterComponentStatus.parse(output);
   }
 
+  void _checkComponentStatus() {
+    setState(() => _componentStatus = _loadComponentStatus());
+  }
+
   Future<void> _openLink(BuildContext context, String url) async {
     final opened = await launchUrlString(
       url,
@@ -79,8 +82,23 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
   }
 
   Widget _buildRouterComponentsCard(ColorScheme colors) {
+    final componentStatus = _componentStatus;
+    if (componentStatus == null) {
+      return Card(
+        elevation: 1,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        child: ListTile(
+          leading: Icon(Icons.memory_rounded, color: colors.primary),
+          title: const Text('Router Components'),
+          subtitle: const Text('Tap to check the installed version'),
+          trailing: const Icon(Icons.refresh_rounded),
+          onTap: _checkComponentStatus,
+        ),
+      );
+    }
+
     return FutureBuilder<RouterComponentStatus>(
-      future: _componentStatus,
+      future: componentStatus,
       builder: (context, snapshot) {
         final status = snapshot.data;
         final checking = snapshot.connectionState != ConnectionState.done;
@@ -125,10 +143,18 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
                     dimension: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
+                : snapshot.hasError
+                ? Icon(Icons.refresh_rounded, color: colors.error)
                 : outOfSync
                 ? const Icon(Icons.chevron_right_rounded, color: _outdatedRose)
                 : Icon(Icons.verified_rounded, color: statusColor),
-            onTap: outOfSync ? _openRouterComponents : null,
+            onTap: checking
+                ? null
+                : snapshot.hasError
+                ? _checkComponentStatus
+                : outOfSync
+                ? _openRouterComponents
+                : _checkComponentStatus,
           ),
         );
       },
