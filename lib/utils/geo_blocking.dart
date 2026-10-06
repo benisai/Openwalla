@@ -7,9 +7,6 @@ class GeoBlockingInputException implements Exception {
   String toString() => message;
 }
 
-const kGeoBlockingInitialConfigureOptions =
-    r'-z -r none -w "$GEOIP_BACKEND" -i auto';
-
 String normalizeGeoCountryCodes(String value) {
   final codes = value
       .toUpperCase()
@@ -47,10 +44,8 @@ String? countryCodesFromGeoBlockingStatus(String value) {
 
 bool geoBlockingStatusIsEnabled(String value) {
   final normalized = sanitizeGeoBlockingStatus(value).toLowerCase();
-  if (normalized.contains('geoblocking inactive') ||
-      normalized.contains('geoblocking is disabled') ||
-      normalized.contains('mode: disable')) {
-    return false;
-  }
-  return RegExp(r'mode:\s*blacklist').allMatches(normalized).length >= 2;
+  return RegExp(
+    r'^geo-blocking:\s*enabled\s*$',
+    multiLine: true,
+  ).hasMatch(normalized);
 }

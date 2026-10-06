@@ -20,19 +20,6 @@ void main() {
     );
   });
 
-  test(
-    'first-run configuration supplies every noninteractive prerequisite',
-    () {
-      expect(kGeoBlockingInitialConfigureOptions, contains('-z'));
-      expect(kGeoBlockingInitialConfigureOptions, contains('-r none'));
-      expect(
-        kGeoBlockingInitialConfigureOptions,
-        contains(r'-w "$GEOIP_BACKEND"'),
-      );
-      expect(kGeoBlockingInitialConfigureOptions, contains('-i auto'));
-    },
-  );
-
   test('normalizes, sorts, and de-duplicates country codes', () {
     expect(normalizeGeoCountryCodes('us, de US;ca'), 'CA DE US');
   });
@@ -50,22 +37,13 @@ void main() {
 
   test('parses country codes and active state from router status', () {
     const status =
-        '\u001b[34mInbound geoblocking:\u001b[0m\n'
-        '  Mode: blacklist\n'
-        '  Country codes: us de\n'
-        'Outbound geoblocking:\n'
-        '  Mode: blacklist\n'
-        '  Country codes: us de';
+        '\u001b[34mGeo-blocking: enabled\u001b[0m\n'
+        'Country codes: us de\n'
+        'Direction: inbound and outbound';
     expect(countryCodesFromGeoBlockingStatus(status), 'DE US');
     expect(geoBlockingStatusIsEnabled(status), isTrue);
     expect(
-      geoBlockingStatusIsEnabled('$status\n*Geoblocking inactive*'),
-      isFalse,
-    );
-    expect(
-      geoBlockingStatusIsEnabled(
-        status.replaceFirst('Mode: blacklist', 'Mode: disable'),
-      ),
+      geoBlockingStatusIsEnabled(status.replaceFirst('enabled', 'disabled')),
       isFalse,
     );
   });

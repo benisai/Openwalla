@@ -10,6 +10,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
 
 log "Installing Openwrt banIP support"
 
+if command -v geoip-shell >/dev/null 2>&1; then
+	log "Removing the previous geoip-shell country blocker"
+	geoip-shell off >/dev/null 2>&1 || true
+	remove_pkg_if_installed "geoip-shell"
+	remove_pkg_if_installed "geoip-shell-iptables"
+fi
+
 require_file "$FILES_DIR/openwalla.config"
 require_file "$RPCD_ACL"
 

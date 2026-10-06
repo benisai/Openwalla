@@ -88,7 +88,7 @@ class _GeoBlockingScreenState extends ConsumerState<GeoBlockingScreen> {
     setState(() => _saving = true);
     final console = SshConsoleController(
       initialOutput:
-          'Connecting to router...\nInitializing GeoIP country lists...\n',
+          'Connecting to router...\nUpdating banIP country lists...\n',
       running: true,
     );
     unawaited(
@@ -113,14 +113,14 @@ class _GeoBlockingScreenState extends ConsumerState<GeoBlockingScreen> {
       await _load();
       if (!mounted) return;
       if (outputBuffer.isEmpty) {
-        console.setOutput('GeoIP configuration completed.');
+        console.setOutput('banIP country blocking configured.');
       }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Blocked countries updated.')),
       );
     } catch (error) {
       console.setOutput(
-        'GeoIP configuration failed.\n\n'
+        'banIP configuration failed.\n\n'
         '${error.toString().replaceFirst('Bad state: ', '')}',
       );
       if (!mounted) return;
@@ -185,26 +185,10 @@ class _GeoBlockingScreenState extends ConsumerState<GeoBlockingScreen> {
                 feature: OpenwrtFeature.geoBlocking,
                 title: 'Geo-Blocking is not installed',
                 message:
-                    'Install the bundled geoip-shell source to block inbound and outbound connections by country.',
+                    'Install OpenWrt banIP to block inbound and outbound connections by country.',
                 warning:
                     'Country IP lists use router memory. Large countries may need substantially more RAM.',
                 installLabel: 'Install Geo-Blocking',
-                installOptions: const [
-                  OpenwrtFeatureInstallOption(
-                    feature: 'geoip-nftables',
-                    label: 'nftables',
-                    description:
-                        'geoip-shell_0.8.5-r1.apk for standard firewall4 OpenWrt.',
-                    icon: Icons.security_rounded,
-                  ),
-                  OpenwrtFeatureInstallOption(
-                    feature: 'geoip-iptables',
-                    label: 'iptables',
-                    description:
-                        'geoip-shell-iptables_0.8.5-r1.apk for legacy firewalls.',
-                    icon: Icons.shield_outlined,
-                  ),
-                ],
                 builder: (_) => _buildContent(),
               ),
             ],

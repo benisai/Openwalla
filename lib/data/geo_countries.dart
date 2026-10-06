@@ -5,7 +5,7 @@ class GeoCountry {
   const GeoCountry({required this.code, required this.name});
 }
 
-// ISO 3166-1 alpha-2 codes accepted by geoip-shell, with English display
+// ISO 3166-1 alpha-2 codes accepted by banIP, with English display
 // names from Unicode CLDR. Kept in-app so country selection works offline.
 // https://www.iso.org/iso-3166-country-codes.html
 // https://github.com/unicode-org/cldr-json

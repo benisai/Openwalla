@@ -3078,7 +3078,7 @@ class AppState extends ChangeNotifier {
       OpenwrtFeature.tailscale => 'tailscale',
       OpenwrtFeature.mwan3 => 'mwan3',
       OpenwrtFeature.quarantine => 'quarantine',
-      OpenwrtFeature.geoBlocking => 'geoip-nftables',
+      OpenwrtFeature.geoBlocking => 'banip',
     };
   }
 
@@ -3103,21 +3103,22 @@ class AppState extends ChangeNotifier {
       OpenwrtFeature.quarantine =>
         r'([ -x /usr/bin/openwalla-devices-collector ] && [ -x /etc/init.d/openwalla-devices-collector ] && uci -q get openwalla.quarantine >/dev/null 2>&1) && echo OK',
       OpenwrtFeature.geoBlocking =>
-        r'((apk info -e geoip-shell >/dev/null 2>&1 || apk info -e geoip-shell-iptables >/dev/null 2>&1) && command -v geoip-shell >/dev/null 2>&1) && echo OK',
+        r'([ -x /etc/init.d/banip ] && uci -q get banip.global >/dev/null 2>&1) && echo OK',
     };
   }
 
   Future<String> fetchGeoBlockingStatus() async {
     if (_reviewerModeEnabled) {
-      return 'Inbound geoblocking:\n'
-          '  Mode: blacklist\n'
-          '  Country codes: CN RU\n'
-          'Outbound geoblocking:\n'
-          '  Mode: blacklist\n'
-          '  Country codes: CN RU';
+      return 'Geo-blocking: enabled\n'
+          'Country codes: CN RU\n'
+          'Direction: inbound and outbound';
     }
     return runRouterSetupCommandViaSsh(
-      'NO_COLOR=1 geoip-shell status 2>&1 || true',
+      r'BAN_ENABLED="$(uci -q get banip.global.ban_enabled)"; '
+      r'BAN_COUNTRIES="$(uci -q get banip.global.ban_country)"; '
+      r'if [ "$BAN_ENABLED" = "1" ]; then BAN_STATE=enabled; else BAN_STATE=disabled; fi; '
+      r'printf "Geo-blocking: %s\nCountry codes: %s\nDirection: inbound and outbound\n" "$BAN_STATE" "$BAN_COUNTRIES"; '
+      r'/etc/init.d/banip status 2>&1 || true',
     );
   }
 
@@ -3125,12 +3126,27 @@ class AppState extends ChangeNotifier {
     String countryCodes, {
     void Function(String chunk)? onOutput,
   }) {
+    final normalized = normalizeGeoCountryCodes(countryCodes);
+    final addCountries = normalized
+        .split(' ')
+        .map(
+          (code) =>
+              'uci add_list banip.global.ban_country=${_shellQuote(code.toLowerCase())};',
+        )
+        .join(' ');
     return runRouterSetupCommandViaSsh(
-      'GEOIP_BACKEND=nft; '
-      'if apk info -e geoip-shell-iptables >/dev/null 2>&1; then GEOIP_BACKEND=ipt; fi; '
-      'NO_COLOR=1 geoip-shell configure $kGeoBlockingInitialConfigureOptions '
-      '-D inbound -m blacklist -c ${_shellQuote(countryCodes)} '
-      '-D outbound -m blacklist -c ${_shellQuote(countryCodes)} 2>&1',
+      'uci -q delete banip.global.ban_country; '
+      'uci -q del_list banip.global.ban_feed=country 2>/dev/null || true; '
+      'uci -q del_list banip.global.ban_feedin=country 2>/dev/null || true; '
+      'uci -q del_list banip.global.ban_feedout=country 2>/dev/null || true; '
+      'uci -q del_list banip.global.ban_feedinout=country 2>/dev/null || true; '
+      'uci add_list banip.global.ban_feed=country; '
+      'uci add_list banip.global.ban_feedinout=country; '
+      '$addCountries '
+      'uci set banip.global.ban_enabled=1; '
+      'uci commit banip; '
+      '/etc/init.d/banip enable; '
+      '/etc/init.d/banip restart 2>&1',
       onOutput: onOutput,
     );
   }
@@ -3140,7 +3156,14 @@ class AppState extends ChangeNotifier {
     void Function(String chunk)? onOutput,
   }) {
     return runRouterSetupCommandViaSsh(
-      'NO_COLOR=1 geoip-shell ${enabled ? 'on' : 'off'} 2>&1',
+      enabled
+          ? 'uci set banip.global.ban_enabled=1; uci commit banip; '
+                '/etc/init.d/banip enable; '
+                '( /etc/init.d/banip restart >/tmp/openwalla-banip.log 2>&1 ) & '
+                'echo "banIP geo-blocking enabled."'
+          : 'uci set banip.global.ban_enabled=0; uci commit banip; '
+                '/etc/init.d/banip stop 2>&1; /etc/init.d/banip disable; '
+                'echo "banIP geo-blocking disabled."',
       onOutput: onOutput,
     );
   }

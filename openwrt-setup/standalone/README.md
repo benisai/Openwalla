@@ -28,7 +28,7 @@ Available installers:
 - `install-standard-apps.sh` - uhttpd-mod-ubus, nlbwmon, vnstat2, sqlite, conntrack, and qrencode
 - `install-adblock.sh` - OpenWrt adblock and LuCI adblock packages
 - `install-qos-scripts.sh` - Smart Queue/SQM package support
-- `install-banip.sh` - banIP package support
+- `install-banip.sh` - banIP package and country-blocking support
 - `install-pbr.sh` - PBR package support
 - `install-netify.sh` - netifyd plus Openwalla Netify collector
 - `install-conntrack.sh` - connection flow collector backed by SQLite
