@@ -2149,6 +2149,13 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  int? consumeRequestedTab() {
+    final index = requestedTab;
+    requestedTab = null;
+    requestedInterfaceToScroll = null;
+    return index;
+  }
+
   AppState._() {
     _initializationFuture = _initialize();
   }

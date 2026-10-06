@@ -72,17 +72,13 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   Widget build(BuildContext context) {
     // Listen for requestedTab in AppState
     final appState = ref.watch(appStateProvider);
-    if (appState.requestedTab != null &&
-        appState.requestedTab != _selectedIndex) {
-      // Store the values before the callback to avoid null reference issues
-      final requestedTab = appState.requestedTab!;
-
+    final requestedTab = appState.consumeRequestedTab();
+    if (requestedTab != null && requestedTab != _selectedIndex) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
         setState(() {
           _selectedIndex = requestedTab.clamp(0, 2);
         });
-        appState.requestedTab = null;
-        appState.requestedInterfaceToScroll = null;
       });
     }
     return Scaffold(
