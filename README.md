@@ -7,14 +7,53 @@
 
 ## Features
 
-- **Multiple Router Management:** Add, switch, and manage any number of OpenWrt routers. Each router’s data is kept separate and secure.
-- **Secure Login:** HTTP/HTTPS support, self-signed certificate handling, and secure credential storage.
-- **Dashboard Overview:** Real-time system stats, interface status, connected clients, and interactive charts.
-- **Network Interface Management:** View and monitor all wired and wireless interfaces, bandwidth, IPs, and DNS.
-- **Client Management:** See all connected devices, connection type, MAC/IP, vendor, DHCP lease, and more.
-- **System Control:** Remote reboot, settings, and theme customization (light/dark mode).
-- **Modern UI/UX:** Material Design 3, responsive layout, and intuitive navigation.
-- **Open Source:** GPLv3 licensed and available on [Google Play](https://play.google.com/store/apps/details?id=com.cogwheel.LuCIMobile) and [IzzyOnDroid](https://apt.izzysoft.de/fdroid/index/apk/com.cogwheel.LuCIMobile).
+Openwalla can install optional router components from **Manage Device > Router Setup**. Features marked **Built in** only require a normal OpenWrt LuCI/RPC installation.
+
+### Router and Network
+
+- **Multiple Routers** - Saves separate credentials, preferences, and cached data for each router. **Software:** Built in.
+- **Secure Login** - Connects over HTTP or HTTPS, supports self-signed certificates, securely stores credentials, and refreshes expired LuCI sessions. **Software:** LuCI RPC (`uhttpd-mod-ubus`, `rpcd-mod-luci`, and `rpcd-mod-iwinfo`).
+- **Dashboard** - Shows CPU, memory, load, interfaces, clients, live traffic, and enabled shortcuts. **Software:** Built in; richer traffic data uses the monitoring packages below.
+- **Network Interfaces** - Views, edits, starts, stops, and restarts LAN, WAN, VPN, and other logical interfaces through UCI and ubus. **Software:** Built in.
+- **Wi-Fi** - Manages radios, SSIDs, security, channels, and repeater connections. **Software:** OpenWrt wireless tools and `rpcd-mod-iwinfo`.
+- **LAN and DHCP** - Changes the LAN address, subnet, DNS, DHCP pool, and lease time while updating the saved router connection. **Software:** Built in.
+- **Firewall and Routing** - Manages firewall rules, port forwards, static IPv4 routes, and interface routing. **Software:** Built in with OpenWrt firewall4/UCI.
+- **Package Manager** - Detects and uses `apk` on newer OpenWrt releases, with `opkg` as the fallback. **Software:** Built in.
+- **SSH Terminal** - Opens a router shell using the saved router credentials. **Software:** OpenWrt SSH server, normally Dropbear.
+- **Backup and Restore** - Exports or restores Openwalla state and selected router configuration. **Software:** Openwalla state-sync helper for scheduled router-side backups.
+- **Router Components** - Compares installed Openwalla helper versions with the published script version and redeploys them when needed. **Software:** Openwalla setup scripts.
+
+### Devices and Monitoring
+
+- **Device Inventory** - Tracks devices by MAC address with hostname, IPv4 address, interface, online state, and traffic totals. **Software:** Openwalla devices collector, SQLite, and `nlbwmon`.
+- **Pause and Block** - Applies device-specific internet access rules immediately or from a schedule. **Software:** Openwalla internet-blocking helper and firewall4.
+- **Quarantine** - Detects new devices and places them in quarantine until they are approved. Hidden devices are exempt from detection. **Software:** Openwalla devices collector and quarantine support.
+- **Parental Controls** - Groups devices and applies recurring access schedules. **Software:** Openwalla parental-control and scheduler helpers.
+- **Live Throughput** - Displays current upload/download rates for the router and devices. **Software:** Interface counters; per-device rates use the Openwalla device-speed helper and `conntrack`.
+- **Bandwidth History** - Stores summarized per-device usage for dashboard and device views. **Software:** Openwalla bandwidth collector, SQLite, and `conntrack`.
+- **Statistics** - Shows vnStat interface history, nlbwmon device totals, protocols, and monthly usage. **Software:** `vnstat`/`vnstat2`, `vnstati`, and `nlbwmon`.
+- **Network Performance** - Records latency, outages, Ethernet link state, DNS health, and scheduled speed tests. **Software:** Openwalla network, DNS, and speed-test monitor helpers.
+- **Notifications** - Stores router and Openwalla events in a local router database for the app inbox. **Software:** Openwalla notifications helper and SQLite.
+
+### Flows
+
+- **Simple Network Flows** - Periodically reads IPv4 conntrack entries and stores a lightweight connection history. **Software:** Openwalla conntrack collector, `conntrack`, and SQLite.
+- **Detailed Network Flows** - Reads Netify flow events with application, protocol, domain, destination, risk, and device details. **Software:** `netifyd`, the Openwalla Netify collector, and SQLite. Use this instead of Simple Network Flows on routers with enough CPU and memory.
+- **Flow Usage Statistics** - Optionally aggregates Netify byte counters at a configurable polling interval. **Software:** Detailed Network Flows must be installed and enabled.
+
+### Security and Traffic Control
+
+- **AdBlock** - Controls OpenWrt domain blocking and service state. **Software:** `adblock` and optionally `luci-app-adblock`.
+- **Smart Queue** - Configures SQM to reduce latency and bufferbloat under load. **Software:** `sqm-scripts` and optionally `luci-app-sqm`.
+- **WireGuard VPN** - Creates and manages WireGuard interfaces, servers, peers, and QR configurations. **Software:** `wireguard-tools` and `luci-proto-wireguard`.
+- **Policy-Based Routing (PBR)** - Routes selected domains or addresses through a VPN or another interface. **Software:** `pbr` and optionally `luci-app-pbr`.
+- **Dynamic DNS** - Keeps a hostname synchronized with a changing public IP address. **Software:** `ddns-scripts`, service providers, and optionally `luci-app-ddns`.
+- **Geo-Blocking** - Uses country IP feeds to block inbound and outbound traffic, with split country sets and NFT reporting counters. **Software:** `banip` and optionally `luci-app-banip`.
+- **Tor Routing** - Routes all traffic or selected devices through Tor, with optional DNS routing. **Software:** `tor`, `tor-geoip`, and the Openwalla Tor helper.
+- **Tailscale** - Manages the Tailscale service, mesh VPN connection, routes, and exit-node options. **Software:** `tailscale` and the Openwalla Tailscale helper.
+- **Multi-WAN** - Configures WAN failover, load balancing, members, policies, and rules. **Software:** `mwan3`, optionally `luci-app-mwan3`, and nftables compatibility packages when required.
+
+- **Open Source** - GPLv3 licensed and available on [Google Play](https://play.google.com/store/apps/details?id=com.cogwheel.LuCIMobile) and [IzzyOnDroid](https://apt.izzysoft.de/fdroid/index/apk/com.cogwheel.LuCIMobile).
 
 ---
 
