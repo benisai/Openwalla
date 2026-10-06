@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/main.dart';
 import 'package:openwalla/models/dashboard_preferences.dart';
+import 'package:openwalla/screens/router_components_screen.dart';
+import 'package:openwalla/screens/ssh_terminal_screen.dart';
 import 'package:openwalla/utils/router_setup_commands.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
 import 'package:openwalla/widgets/ssh_console_sheet.dart';
@@ -474,6 +476,52 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
                   isRunning: _isInstalling || _isUninstalling,
                 ),
               ],
+            ],
+            if (!widget.netifyOnly) ...[
+              const SizedBox(height: 20),
+              Text(
+                'Router Tools',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              Card(
+                margin: EdgeInsets.zero,
+                child: Column(
+                  children: ListTile.divideTiles(
+                    context: context,
+                    tiles: [
+                      ListTile(
+                        leading: const Icon(Icons.system_update_alt_rounded),
+                        title: const Text('Router Components'),
+                        subtitle: const Text(
+                          'Verify and update installed helper files',
+                        ),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const RouterComponentsScreen(),
+                          ),
+                        ),
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.terminal_rounded),
+                        title: const Text('SSH Terminal'),
+                        subtitle: const Text(
+                          'Open a shell with saved router credentials',
+                        ),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const SshTerminalScreen(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ).toList(),
+                ),
+              ),
             ],
           ],
         ),

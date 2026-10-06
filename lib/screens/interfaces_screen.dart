@@ -31,6 +31,19 @@ bool shouldShowWiredInterface({
   return !isDisabled;
 }
 
+Future<bool?> showNetworkInterfaceEditor(
+  BuildContext context, {
+  required String interfaceName,
+}) {
+  return showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (context) =>
+        _NetworkInterfaceEditSheet(interfaceName: interfaceName),
+  );
+}
+
 class InterfacesScreen extends ConsumerStatefulWidget {
   final String? scrollToInterface;
   final VoidCallback? onScrollComplete;
@@ -594,12 +607,9 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
   }
 
   Future<void> _showEditInterfaceSheet(NetworkInterface iface) async {
-    final updated = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) =>
-          _NetworkInterfaceEditSheet(interfaceName: iface.name),
+    final updated = await showNetworkInterfaceEditor(
+      context,
+      interfaceName: iface.name,
     );
     if (updated == true && mounted) {
       await ref.read(appStateProvider).fetchDashboardData();

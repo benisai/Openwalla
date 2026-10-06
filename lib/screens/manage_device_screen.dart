@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:openwalla/design/luci_design_system.dart';
 import 'package:openwalla/screens/backup_restore_screen.dart';
+import 'package:openwalla/screens/interfaces_screen.dart';
 import 'package:openwalla/screens/package_manager_screen.dart';
 import 'package:openwalla/screens/reset_router_screen.dart';
-import 'package:openwalla/screens/router_components_screen.dart';
 import 'package:openwalla/screens/router_password_screen.dart';
 import 'package:openwalla/screens/router_setup_screen.dart';
-import 'package:openwalla/screens/ssh_terminal_screen.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
 
 class ManageDeviceScreen extends StatelessWidget {
@@ -41,25 +40,19 @@ class ManageDeviceScreen extends StatelessWidget {
                 onTap: () => _open(context, const RouterPasswordScreen()),
               ),
               _DeviceManagementTile(
+                icon: Icons.lan_rounded,
+                color: colors.primary,
+                title: 'LAN IP Address',
+                subtitle: 'Change the router address and DHCP pool',
+                onTap: () =>
+                    showNetworkInterfaceEditor(context, interfaceName: 'lan'),
+              ),
+              _DeviceManagementTile(
                 icon: Icons.inventory_2_rounded,
                 color: colors.primary,
                 title: 'Package Manager',
                 subtitle: 'Install and remove OpenWrt software packages',
                 onTap: () => _open(context, const PackageManagerScreen()),
-              ),
-              _DeviceManagementTile(
-                icon: Icons.system_update_alt_rounded,
-                color: colors.primary,
-                title: 'Router Components',
-                subtitle: 'Verify and update installed helper files',
-                onTap: () => _open(context, const RouterComponentsScreen()),
-              ),
-              _DeviceManagementTile(
-                icon: Icons.terminal_rounded,
-                color: colors.primary,
-                title: 'SSH Terminal',
-                subtitle: 'Open a shell with saved router credentials',
-                onTap: () => _open(context, const SshTerminalScreen()),
               ),
               _DeviceManagementTile(
                 icon: Icons.backup_rounded,
