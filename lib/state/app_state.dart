@@ -2997,15 +2997,29 @@ class AppState extends ChangeNotifier {
     }
 
     final cacheKey = _openwrtFeatureCacheKey(feature);
+    final cached = _parseOpenwrtFeatureCache(
+      feature,
+      await _secureStorageService.readValue(cacheKey),
+    );
     if (!forceRefresh) {
-      final cached = await _secureStorageService.readValue(cacheKey);
-      final parsed = _parseOpenwrtFeatureCache(feature, cached);
-      if (parsed != null) return parsed;
+      if (cached != null) return cached;
     }
 
-    final installed = await _routerCommandSucceeds(
-      _openwrtFeatureCheckCommand(feature),
-    );
+    late final bool installed;
+    try {
+      installed = await _routerCommandSucceeds(
+        _openwrtFeatureCheckCommand(feature),
+        context: context?.mounted == true ? context : null,
+        throwOnError: true,
+      );
+    } catch (error, stack) {
+      Logger.warning(
+        'Unable to validate ${_openwrtFeatureLabel(feature)}: $error',
+      );
+      Logger.debug('Feature validation stack: $stack');
+      if (cached != null) return cached;
+      rethrow;
+    }
     final status = OpenwrtFeatureStatus(
       feature: feature,
       label: _openwrtFeatureLabel(feature),
@@ -3685,10 +3699,15 @@ class AppState extends ChangeNotifier {
   Future<bool> _routerCommandSucceeds(
     String command, {
     BuildContext? context,
+    bool allowAuthRetry = true,
+    bool throwOnError = false,
   }) async {
     final router = _routerService?.selectedRouter;
     final sysauth = _authService?.sysauth;
     if (router == null || sysauth == null || _apiService == null) {
+      if (throwOnError) {
+        throw StateError('No authenticated router connection is available');
+      }
       return false;
     }
 
@@ -3705,11 +3724,31 @@ class AppState extends ChangeNotifier {
         },
         context: context,
       );
+      final rpcStatus = rpcUbusStatusCode(result);
+      if (rpcStatus != null && rpcStatus != 0) {
+        if (rpcStatus == 6) {
+          throw StateError('Access denied: router session expired');
+        }
+        throw StateError('Router validation RPC failed with status $rpcStatus');
+      }
       final output = _commandOutput(result).trim();
       return output.contains('OK');
     } catch (e, stack) {
+      if (allowAuthRetry &&
+          _looksLikeExpiredSession(e) &&
+          await refreshRouterAuthenticationAfterSetup(
+            context: context?.mounted == true ? context : null,
+          )) {
+        return _routerCommandSucceeds(
+          command,
+          context: context?.mounted == true ? context : null,
+          allowAuthRetry: false,
+          throwOnError: throwOnError,
+        );
+      }
       Logger.debug('Optional router support check failed: $e');
       Logger.debug('Optional router support check stack: $stack');
+      if (throwOnError) rethrow;
       return false;
     }
   }

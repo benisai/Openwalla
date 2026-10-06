@@ -33,3 +33,8 @@ bool rpcBooleanResultSucceeded(dynamic value) {
 
   return false;
 }
+
+int? rpcUbusStatusCode(dynamic value) {
+  if (value is! List || value.isEmpty) return null;
+  return int.tryParse(value.first.toString());
+}

@@ -70,7 +70,12 @@ class _OpenwrtFeatureGateState extends ConsumerState<OpenwrtFeatureGate> {
     setState(() {
       _statusFuture = _loadStatus(force: true);
     });
-    await _statusFuture;
+    try {
+      await _statusFuture;
+    } catch (_) {
+      // FutureBuilder presents the retry state without surfacing an uncaught
+      // button-handler exception.
+    }
   }
 
   Future<void> _install() async {
@@ -199,6 +204,13 @@ class _OpenwrtFeatureGateState extends ConsumerState<OpenwrtFeatureGate> {
           return const Center(child: CircularProgressIndicator());
         }
 
+        if (snapshot.hasError) {
+          return _FeatureCheckErrorPrompt(
+            label: _shortcutLabel(widget.feature),
+            onRetry: _recheck,
+          );
+        }
+
         final status = snapshot.data;
         if (status?.installed == true) {
           return widget.builder(context);
@@ -241,6 +253,49 @@ class _OpenwrtFeatureGateState extends ConsumerState<OpenwrtFeatureGate> {
     OpenwrtFeature.quarantine => 'Quarantine',
     OpenwrtFeature.geoBlocking => 'Geo-Blocking',
   };
+}
+
+class _FeatureCheckErrorPrompt extends StatelessWidget {
+  final String label;
+  final VoidCallback onRetry;
+
+  const _FeatureCheckErrorPrompt({required this.label, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.sync_problem_rounded, color: colors.error),
+            const SizedBox(height: 12),
+            Text(
+              '$label status unavailable',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Openwalla could not verify the router installation. The feature has not been marked as missing.',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Check Again'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _FeatureInstallPrompt extends StatelessWidget {
