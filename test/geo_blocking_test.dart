@@ -47,4 +47,21 @@ void main() {
       isFalse,
     );
   });
+
+  test('parses wrapped banIP runtime fields', () {
+    const status = '''
+Geo-blocking: enabled
+Country codes: cn ru
+::: banIP runtime information
+  + status         : running
+  + frontend_ver   : 1.9.0-r1
+  + element_count  : 120 (chains: 3, sets: 2, rules: 4)
+  + run_flags      : auto: ✔, proto (4/6): ✔/✘,
+                     split: ✔, debug: ✘
+  + system_info    : cores: 2, OpenWrt 25.12.5
+''';
+    expect(banIpRuntimeFields(status), containsPair('status', 'running'));
+    expect(banIpRuntimeFields(status)['run_flags'], contains('split: ✔'));
+    expect(banIpRuntimeFields(status)['element_count'], contains('sets: 2'));
+  });
 }

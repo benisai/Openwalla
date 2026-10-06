@@ -331,18 +331,11 @@ class _GeoBlockingScreenState extends ConsumerState<GeoBlockingScreen> {
           _GeoCard(
             child: ExpansionTile(
               tilePadding: EdgeInsets.zero,
-              childrenPadding: const EdgeInsets.only(bottom: 8),
+              childrenPadding: const EdgeInsets.only(bottom: 4),
               leading: const Icon(Icons.terminal_rounded),
               title: const Text('Router Status'),
-              children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: SelectableText(
-                    _status,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ),
-              ],
+              subtitle: Text(_routerStatusSummary),
+              children: [_BanIpStatusDetails(status: _status)],
             ),
           ),
         ],
@@ -353,6 +346,164 @@ class _GeoBlockingScreenState extends ConsumerState<GeoBlockingScreen> {
   List<GeoCountry> get _selectedCountries => geoCountries
       .where((country) => _selectedCountryCodes.contains(country.code))
       .toList();
+
+  String get _routerStatusSummary {
+    final fields = banIpRuntimeFields(_status);
+    final service = fields['status'];
+    final sets = fields['element_count'];
+    if (service == null) return _enabled ? 'Enabled' : 'Disabled';
+    if (sets == null || sets.isEmpty) return 'banIP $service';
+    return 'banIP $service  •  $sets';
+  }
+}
+
+class _BanIpStatusDetails extends StatelessWidget {
+  final String status;
+
+  const _BanIpStatusDetails({required this.status});
+
+  static const _fieldOrder = [
+    'status',
+    'frontend_ver',
+    'backend_ver',
+    'element_count',
+    'active_feeds',
+    'active_devices',
+    'active_uplink',
+    'nft_info',
+    'run_info',
+    'run_flags',
+    'last_run',
+    'system_info',
+  ];
+
+  static const _labels = {
+    'status': 'Service status',
+    'frontend_ver': 'Frontend version',
+    'backend_ver': 'Backend version',
+    'element_count': 'Loaded elements',
+    'active_feeds': 'Active feeds',
+    'active_devices': 'Active devices',
+    'active_uplink': 'Active uplink',
+    'nft_info': 'nftables',
+    'run_info': 'Storage paths',
+    'run_flags': 'Runtime flags',
+    'last_run': 'Last completed run',
+    'system_info': 'Router system',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final fields = banIpRuntimeFields(status);
+    final visibleFields = _fieldOrder
+        .where((key) => fields[key]?.isNotEmpty == true)
+        .toList();
+
+    if (visibleFields.isEmpty) {
+      return SelectableText(
+        status,
+        style: Theme.of(context).textTheme.bodySmall,
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Divider(height: 1),
+        const SizedBox(height: 8),
+        ...visibleFields.indexed.map((entry) {
+          final index = entry.$1;
+          final key = entry.$2;
+          return Column(
+            children: [
+              _BanIpStatusRow(
+                label: _labels[key] ?? key,
+                value: fields[key]!,
+                emphasized: key == 'status',
+              ),
+              if (index != visibleFields.length - 1)
+                Divider(
+                  height: 1,
+                  color: colors.outlineVariant.withValues(alpha: 0.45),
+                ),
+            ],
+          );
+        }),
+        const SizedBox(height: 6),
+        ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          childrenPadding: const EdgeInsets.only(bottom: 8),
+          leading: Icon(
+            Icons.code_rounded,
+            size: 20,
+            color: colors.onSurfaceVariant,
+          ),
+          title: const Text('Raw output'),
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SelectableText(
+                status,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontFamily: 'monospace',
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _BanIpStatusRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final bool emphasized;
+
+  const _BanIpStatusRow({
+    required this.label,
+    required this.value,
+    this.emphasized = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final active =
+        value.toLowerCase() == 'running' || value.toLowerCase() == 'active';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 116,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: SelectableText(
+              value,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: emphasized && active ? colors.primary : null,
+                fontWeight: emphasized ? FontWeight.w800 : FontWeight.w500,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _GeoCountryPicker extends StatefulWidget {

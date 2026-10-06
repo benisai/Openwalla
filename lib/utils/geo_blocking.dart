@@ -49,3 +49,33 @@ bool geoBlockingStatusIsEnabled(String value) {
     multiLine: true,
   ).hasMatch(normalized);
 }
+
+Map<String, String> banIpRuntimeFields(String value) {
+  final fields = <String, String>{};
+  var inRuntimeSection = false;
+  String? currentKey;
+
+  for (final rawLine in sanitizeGeoBlockingStatus(value).split('\n')) {
+    final line = rawLine.trim();
+    if (line.toLowerCase().contains('banip runtime information')) {
+      inRuntimeSection = true;
+      currentKey = null;
+      continue;
+    }
+    if (!inRuntimeSection || line.isEmpty || line == ':::') continue;
+
+    final fieldMatch = RegExp(
+      r'^\+\s*([a-zA-Z0-9_]+)\s*:\s*(.*)$',
+    ).firstMatch(line);
+    if (fieldMatch != null) {
+      currentKey = fieldMatch.group(1)!.toLowerCase();
+      fields[currentKey] = fieldMatch.group(2)!.trim();
+      continue;
+    }
+
+    if (currentKey != null) {
+      fields[currentKey] = '${fields[currentKey]} $line'.trim();
+    }
+  }
+  return fields;
+}
