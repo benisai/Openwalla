@@ -3152,6 +3152,7 @@ class AppState extends ChangeNotifier {
       '$addCountries '
       'uci set banip.global.ban_enabled=1; '
       'uci set banip.global.ban_countrysplit=1; '
+      'uci set banip.global.ban_nftcount=1; '
       'uci commit banip; '
       '/etc/init.d/banip enable; '
       '/etc/init.d/banip restart 2>&1',

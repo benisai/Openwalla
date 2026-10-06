@@ -32,6 +32,7 @@ set_uci openwalla.features.banip "1"
 uci commit openwalla
 
 set_uci banip.global.ban_countrysplit "1"
+set_uci banip.global.ban_nftcount "1"
 uci commit banip
 
 enable_restart_service banip
