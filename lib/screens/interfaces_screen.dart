@@ -4174,15 +4174,19 @@ class _NetworkInterfaceEditSheetState
   var _dhcpEnabled = false;
   bool _isLoading = true;
   bool _isSaving = false;
+  String? _lastValidLanIp;
+  bool _syncingDhcpRange = false;
 
   @override
   void initState() {
     super.initState();
+    _ipController.addListener(_syncDhcpPoolSubnet);
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
   @override
   void dispose() {
+    _ipController.removeListener(_syncDhcpPoolSubnet);
     _ipController.dispose();
     _netmaskController.dispose();
     _dnsController.dispose();
@@ -4204,6 +4208,8 @@ class _NetworkInterfaceEditSheetState
     _config = config;
     _protocol = config.protocol;
     _dhcpEnabled = config.dhcpEnabled;
+    _lastValidLanIp = config.ipAddress;
+    _syncingDhcpRange = true;
     _ipController.text = config.ipAddress;
     _netmaskController.text = config.netmask;
     _dnsController.text = config.dnsText;
@@ -4217,8 +4223,57 @@ class _NetworkInterfaceEditSheetState
       config.netmask,
       config.dhcpStart + config.dhcpLimit - 1,
     );
+    _syncingDhcpRange = false;
     _leaseTimeController.text = config.leaseTime;
     setState(() => _isLoading = false);
+  }
+
+  void _syncDhcpPoolSubnet() {
+    if (_syncingDhcpRange ||
+        _netmaskController.text.trim() != '255.255.255.0') {
+      return;
+    }
+
+    final nextParts = _validIpv4Parts(_ipController.text);
+    if (nextParts == null) return;
+
+    final previousParts = _validIpv4Parts(_lastValidLanIp ?? '');
+    _lastValidLanIp = nextParts.join('.');
+    if (previousParts == null ||
+        _sameFirstThreeOctets(previousParts, nextParts)) {
+      return;
+    }
+
+    _syncingDhcpRange = true;
+    _startIpController.text = _replaceFirstThreeOctets(
+      _startIpController.text,
+      nextParts,
+    );
+    _endIpController.text = _replaceFirstThreeOctets(
+      _endIpController.text,
+      nextParts,
+    );
+    _syncingDhcpRange = false;
+  }
+
+  List<int>? _validIpv4Parts(String value) {
+    final parts = value.trim().split('.');
+    if (parts.length != 4) return null;
+    final octets = parts.map(int.tryParse).toList();
+    if (octets.any((octet) => octet == null || octet < 0 || octet > 255)) {
+      return null;
+    }
+    return octets.cast<int>();
+  }
+
+  bool _sameFirstThreeOctets(List<int> left, List<int> right) {
+    return left[0] == right[0] && left[1] == right[1] && left[2] == right[2];
+  }
+
+  String _replaceFirstThreeOctets(String poolAddress, List<int> lanParts) {
+    final poolParts = _validIpv4Parts(poolAddress);
+    if (poolParts == null) return poolAddress;
+    return '${lanParts[0]}.${lanParts[1]}.${lanParts[2]}.${poolParts[3]}';
   }
 
   String _offsetToIp(String routerIp, String netmask, int offset) {
