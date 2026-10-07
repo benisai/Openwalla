@@ -208,6 +208,14 @@ is_router_lan_destination() {
 	return 1
 }
 
+is_router_lan_http_source() {
+	local source_ip source_port
+	source_ip="${1:-}"
+	source_port="$(sanitize_int "${2:-}" 0)"
+	[ "$source_port" -eq 80 ] || return 1
+	is_router_lan_destination "$source_ip"
+}
+
 refresh_runtime_config() {
 	load_config
 	refresh_router_lan_ipv4s
@@ -339,6 +347,7 @@ upsert_flow_label() {
 	is_router_lan_destination "$other_ip" && return 0
 	local_port="$(extract_json_number "$line" local_port)"
 	other_port="$(extract_json_number "$line" other_port)"
+	is_router_lan_http_source "$local_ip" "$local_port" && return 0
 	case "$local_ip" in *:*) return 0 ;; esac
 	case "$other_ip" in *:*) return 0 ;; esac
 	[ -n "$local_ip" ] && [ -n "$other_ip" ] && [ -n "$local_port" ] && [ -n "$other_port" ] || return 0
@@ -396,12 +405,17 @@ flow_stats_conntrack_snapshot() {
 		cat /proc/net/nf_conntrack
 	elif command -v conntrack >/dev/null 2>&1; then
 		conntrack -L -o extended 2>/dev/null
-	fi | awk '
+	fi | awk -v router_ips="$ROUTER_LAN_IPV4S" '
 	function private4(ip, a) {
 		split(ip, a, ".")
 		return a[1] == 10 || (a[1] == 172 && a[2] >= 16 && a[2] <= 31) || (a[1] == 192 && a[2] == 168)
 	}
 	function ipv4(ip) { return ip ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ }
+	function router4(ip, addresses, count, i) {
+		count=split(router_ips, addresses, /[[:space:]]+/)
+		for (i=1; i<=count; i++) if (addresses[i] == ip) return 1
+		return 0
+	}
 	{
 		proto=""; src1=""; dst1=""; sp1=""; dp1=""; b1=""; src2=""; dst2=""; b2=""
 		for (i=1; i<=NF; i++) {
@@ -414,6 +428,7 @@ flow_stats_conntrack_snapshot() {
 		}
 		if (proto == "" || !ipv4(src1) || !ipv4(dst1) || !private4(src1) || private4(dst1)) next
 		if (sp1 == "" || dp1 == "" || b1 == "" || b2 == "") next
+		if (sp1 == 80 && router4(src1)) next
 		print proto "|" src1 "|" dst1 "|" sp1 "|" dp1 "\t" src1 "\t" dst1 "\t" b2 "\t" b1
 	}'
 }
@@ -548,6 +563,7 @@ parse_flow_columns() {
 	local line
 	line="$1"
 	local_ip=""
+	local_port="0"
 	local_mac=""
 	fqdn=""
 	dest_ip=""
@@ -576,6 +592,7 @@ parse_flow_columns() {
 		json_get_var internal internal
 		json_select flow || return 1
 		json_get_var local_ip local_ip
+		json_get_var local_port local_port
 		json_get_var local_mac local_mac
 		json_get_var fqdn fqdn
 		json_get_var dest_ip other_ip
@@ -607,6 +624,7 @@ parse_flow_columns() {
 		fi
 	else
 		local_ip="$(extract_json_string "$line" local_ip)"
+		local_port="$(extract_json_number "$line" local_port)"
 		local_mac="$(extract_json_string "$line" local_mac)"
 		fqdn="$(extract_json_string "$line" fqdn)"
 		dest_ip="$(extract_json_string "$line" other_ip)"
@@ -631,6 +649,7 @@ parse_flow_columns() {
 	[ -n "$fqdn" ] || fqdn="$host_server_name"
 	[ -n "$fqdn" ] || fqdn="$dns_host_name"
 	[ -n "$fqdn" ] || fqdn="$dest_ip"
+	local_port="$(sanitize_int "$local_port" 0)"
 	dest_port="$(sanitize_int "$dest_port" 0)"
 	internal="$(bool_to_int "$internal")"
 	detection_guessed="$(bool_to_int "$detection_guessed")"
@@ -648,6 +667,7 @@ insert_flow() {
 	local line escaped
 	line="$1"
 	parse_flow_columns "$line" || return 1
+	is_router_lan_http_source "$local_ip" "$local_port" && return 0
 	is_router_lan_destination "$dest_ip" && return 0
 	escaped="$(sql_escape "$line")"
 	sql_exec "INSERT INTO flow_raw(
