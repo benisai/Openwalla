@@ -8027,7 +8027,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       throw ArgumentError('Wi-Fi password must be at least 8 characters.');
     }
 
-    await _apiService!.uciSet(
+    final networkSetResult = await _apiService!.uciSet(
       router.ipAddress,
       sysauth,
       router.useHttps,
@@ -8042,9 +8042,14 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       },
       context: context,
     );
+    if (!_rpcCallSucceeded(networkSetResult)) {
+      throw StateError(
+        'The router did not allow the wireless network to be updated.',
+      );
+    }
 
     if (config.radioSection.isNotEmpty) {
-      await _apiService!.uciSet(
+      final radioSetResult = await _apiService!.uciSet(
         router.ipAddress,
         sysauth,
         router.useHttps,
@@ -8054,21 +8059,65 @@ done | sort -t "|" -k1,1nr | head -n ''' +
           'disabled': config.enabled ? '0' : '1',
           if (config.txPower != null) 'txpower': config.txPower!.toString(),
         },
+        context: context?.mounted == true ? context : null,
       );
+      if (!_rpcCallSucceeded(radioSetResult)) {
+        throw StateError('The router did not allow the radio to be updated.');
+      }
     }
 
-    await _apiService!.uciCommit(
+    final commitResult = await _apiService!.uciCommit(
       router.ipAddress,
       sysauth,
       router.useHttps,
       config: 'wireless',
+      context: context?.mounted == true ? context : null,
     );
-    await _apiService!.systemExec(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      command: 'wifi reload',
-    );
+    if (!_rpcCallSucceeded(commitResult)) {
+      throw StateError('The router could not commit the wireless settings.');
+    }
+
+    var appliedWithLuci = false;
+    try {
+      final applyResult = await _apiService!.call(
+        router.ipAddress,
+        sysauth,
+        router.useHttps,
+        object: 'uci',
+        method: 'apply',
+        params: const {'rollback': false},
+        context: context?.mounted == true ? context : null,
+      );
+      appliedWithLuci = _rpcCallSucceeded(applyResult);
+      if (!appliedWithLuci) {
+        Logger.warning(
+          'LuCI UCI apply was rejected; falling forward to wifi reload: '
+          '$applyResult',
+        );
+      }
+    } catch (error, stack) {
+      Logger.warning(
+        'LuCI UCI apply was unavailable; falling forward to wifi reload: '
+        '$error',
+      );
+      Logger.debug('LuCI UCI apply stack: $stack');
+    }
+
+    if (!appliedWithLuci) {
+      final reloadResult = await _apiService!.systemExec(
+        router.ipAddress,
+        sysauth,
+        router.useHttps,
+        command: 'wifi reload',
+        context: context?.mounted == true ? context : null,
+      );
+      if (!_rpcCallSucceeded(reloadResult)) {
+        throw StateError(
+          'The settings were saved, but the router could not reload Wi-Fi. '
+          'Install the Openwalla RPC permissions and try again.',
+        );
+      }
+    }
     await fetchDashboardData();
   }
 
