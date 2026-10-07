@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:openwalla/services/secure_storage_service.dart';
 import 'package:openwalla/services/router_service.dart';
@@ -11174,6 +11175,56 @@ done | sort -t "|" -k1,1nr | head -n ''' +
     try {
       final router = _routerService!.selectedRouter!;
       final sysauth = _authService!.sysauth!;
+
+      try {
+        final luciResetResult = await _apiService!.call(
+          router.ipAddress,
+          sysauth,
+          router.useHttps,
+          object: 'file',
+          method: 'exec',
+          params: const {
+            'command': '/sbin/firstboot',
+            'params': ['-r', '-y'],
+          },
+          context: context,
+          receiveTimeout: const Duration(seconds: 5),
+        );
+        if (_rpcCallSucceeded(luciResetResult)) {
+          return true;
+        }
+        Logger.warning(
+          'LuCI factory reset was rejected; falling forward to the '
+          'Openwalla reset command: $luciResetResult',
+        );
+      } on DioException catch (error, stack) {
+        // LuCI does not await firstboot because a successful reset normally
+        // closes the RPC connection while the router is restarting.
+        final connectionClosed =
+            error.response == null &&
+            (error.type == DioExceptionType.connectionError ||
+                error.type == DioExceptionType.receiveTimeout ||
+                error.type == DioExceptionType.unknown);
+        if (connectionClosed) {
+          Logger.info(
+            'LuCI factory reset connection closed after dispatch: $error',
+          );
+          Logger.debug('LuCI factory reset dispatch stack: $stack');
+          return true;
+        }
+        Logger.warning(
+          'LuCI factory reset request failed; falling forward to the '
+          'Openwalla reset command: $error',
+        );
+        Logger.debug('LuCI factory reset request stack: $stack');
+      } catch (error, stack) {
+        Logger.warning(
+          'LuCI factory reset was unavailable; falling forward to the '
+          'Openwalla reset command: $error',
+        );
+        Logger.debug('LuCI factory reset request stack: $stack');
+      }
+
       const resetCommand =
           '/sbin/firstboot -y && sync && '
           '( (sleep 3; /sbin/reboot -f) >/dev/null 2>&1 & ) && '
@@ -11189,7 +11240,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
           'params': ['-c', resetCommand],
           'args': ['-c', resetCommand],
         },
-        context: context,
+        context: context?.mounted == true ? context : null,
       );
       final resetAccepted =
           _isSuccessfulRouterCommand(result) &&
@@ -11202,8 +11253,8 @@ done | sort -t "|" -k1,1nr | head -n ''' +
 
       // Do not call reboot(), because normal reboots intentionally save
       // Openwalla state first. A factory reset must leave nothing to restore.
-      // The delayed reboot above runs only after firstboot and sync complete,
-      // avoiding firmware-specific races that can leave overlay settings.
+      // The LuCI path lets firstboot reboot the router. The fallback delays its
+      // reboot until firstboot and sync complete to avoid overlay races.
       return true;
     } catch (e, stack) {
       Logger.exception('Router factory reset failed', e, stack);
