@@ -11,14 +11,14 @@ import 'package:openwalla/utils/router_setup_commands.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
 import 'package:openwalla/widgets/ssh_console_sheet.dart';
 
-enum _SetupProfile { basic, standard, advanced, everything, flows, remove }
+enum _SetupProfile { basic, standard, advanced, everything, custom, remove }
 
 extension on _SetupProfile {
   String get title => switch (this) {
     _SetupProfile.basic => 'Basic Install',
     _SetupProfile.standard => 'Standard Install',
     _SetupProfile.advanced => 'Advanced Install',
-    _SetupProfile.flows => 'Flows Install',
+    _SetupProfile.custom => 'Custom Install',
     _SetupProfile.everything => 'Everything',
     _SetupProfile.remove => 'Remove Installed Apps',
   };
@@ -30,8 +30,8 @@ extension on _SetupProfile {
       'Basic plus AdBlock, Parental Controls, Quarantine, Smart Queue, DDNS, and WireGuard.',
     _SetupProfile.advanced =>
       'Basic and Standard plus Policy-Based Routing (PBR).',
-    _SetupProfile.flows =>
-      'Install or redeploy Netify and the Detailed Flow collector.',
+    _SetupProfile.custom =>
+      'Choose the exact Openwalla components to install or redeploy.',
     _SetupProfile.everything =>
       'All bundled router features, including Netify Detailed Flow.',
     _SetupProfile.remove =>
@@ -42,7 +42,7 @@ extension on _SetupProfile {
     _SetupProfile.basic => Icons.foundation_rounded,
     _SetupProfile.standard => Icons.auto_awesome_rounded,
     _SetupProfile.advanced => Icons.tune_rounded,
-    _SetupProfile.flows => Icons.account_tree_rounded,
+    _SetupProfile.custom => Icons.checklist_rounded,
     _SetupProfile.everything => Icons.apps_rounded,
     _SetupProfile.remove => Icons.delete_sweep_outlined,
   };
@@ -80,6 +80,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
   bool _showDetails = false;
   bool _setupComplete = false;
   String? _lastOutput;
+  final Set<String> _customInstallFeatures = {};
   final Set<String> _uninstallFeatures = {};
 
   List<String> get _selectedFeatures {
@@ -88,7 +89,11 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
       _SetupProfile.basic => _basicFeatures,
       _SetupProfile.standard => _standardFeatures,
       _SetupProfile.advanced => [..._standardFeatures, 'pbr'],
-      _SetupProfile.flows => const ['netify'],
+      _SetupProfile.custom =>
+        _CustomInstallComponentsCard.items
+            .where((item) => _customInstallFeatures.contains(item.feature))
+            .map((item) => item.feature)
+            .toList(growable: false),
       _SetupProfile.everything => [..._standardFeatures, 'pbr', 'netify'],
       _ => const [],
     };
@@ -334,20 +339,31 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
 
   Future<void> _enableDashboardCardsForInstalledFeatures() async {
     final appState = ref.read(appStateProvider);
+    final selectedFeatures = _selectedFeatures;
+    final isCustomInstall = _selectedProfile == _SetupProfile.custom;
+    final installsFlows = selectedFeatures.any(
+      (feature) => feature == 'conntrack' || feature == 'netify',
+    );
     final prefs = widget.netifyOnly
         ? appState.dashboardPreferences.copyWith(
             showFlowsCard: true,
             flowMode: DashboardFlowMode.detailed,
           )
         : appState.dashboardPreferences.copyWith(
-            showNetworkPerformanceCard: true,
-            showFlowsCard: _selectedFeatures.any(
-              (feature) => feature == 'conntrack' || feature == 'netify',
-            ),
-            showStatisticsTab: true,
-            flowMode: _selectedFeatures.contains('netify')
+            showNetworkPerformanceCard:
+                !isCustomInstall || selectedFeatures.contains('network-monitor')
+                ? true
+                : appState.dashboardPreferences.showNetworkPerformanceCard,
+            showFlowsCard: installsFlows
+                ? true
+                : appState.dashboardPreferences.showFlowsCard,
+            showStatisticsTab:
+                !isCustomInstall || selectedFeatures.contains('usage')
+                ? true
+                : appState.dashboardPreferences.showStatisticsTab,
+            flowMode: selectedFeatures.contains('netify')
                 ? DashboardFlowMode.detailed
-                : _selectedFeatures.contains('conntrack')
+                : selectedFeatures.contains('conntrack')
                 ? DashboardFlowMode.simple
                 : appState.dashboardPreferences.flowMode,
           );
@@ -372,6 +388,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
   Widget build(BuildContext context) {
     final command = _setupCommand;
     final isRemovePage = _selectedProfile == _SetupProfile.remove;
+    final canInstall = _selectedFeatures.isNotEmpty;
 
     return Scaffold(
       appBar: const LuciAppBar(title: 'Router Setup', showBack: true),
@@ -418,7 +435,9 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: FilledButton.icon(
-                        onPressed: _isInstalling ? null : _runSetup,
+                        onPressed: _isInstalling || !canInstall
+                            ? null
+                            : _runSetup,
                         icon: _isInstalling
                             ? const SizedBox(
                                 width: 18,
@@ -441,7 +460,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
               const SizedBox(height: 10),
               Center(
                 child: TextButton.icon(
-                  onPressed: _isInstalling ? null : _copyCommand,
+                  onPressed: _isInstalling || !canInstall ? null : _copyCommand,
                   icon: const Icon(Icons.copy_rounded, size: 18),
                   label: const Text('Copy SSH Command'),
                 ),
@@ -577,6 +596,41 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
       );
     }
 
+    if (_selectedProfile == _SetupProfile.custom) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _CustomInstallComponentsCard(
+            selectedFeatures: _customInstallFeatures,
+            enabled: !_isInstalling && !_isUninstalling,
+            onChanged: (feature, selected) {
+              setState(() {
+                if (selected) {
+                  if (feature == 'netify') {
+                    _customInstallFeatures.remove('conntrack');
+                  } else if (feature == 'conntrack') {
+                    _customInstallFeatures.remove('netify');
+                  }
+                  _customInstallFeatures.add(feature);
+                } else {
+                  _customInstallFeatures.remove(feature);
+                }
+              });
+            },
+          ),
+          if (_customInstallFeatures.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _SetupPermissionCard(
+              isInstalling: _isInstalling,
+              extraSoftware: 0,
+              featureCount: _customInstallFeatures.length,
+              onToggleDetails: () => setState(() => _showDetails = true),
+            ),
+          ],
+        ],
+      );
+    }
+
     final profile = _selectedProfile!;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -621,15 +675,17 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
         ..._installLabels(_SetupProfile.standard),
         'Policy-Based Routing (PBR)',
       ],
-      _SetupProfile.flows => const [
-        'Netify deep-packet inspection service',
-        'Detailed Flow SQLite collector',
-        'Hybrid relational and JSON flow database',
-      ],
+      _SetupProfile.custom =>
+        _CustomInstallComponentsCard.items
+            .where((item) => _customInstallFeatures.contains(item.feature))
+            .map((item) => item.title)
+            .toList(growable: false),
       _SetupProfile.everything => [
         ..._installLabels(_SetupProfile.standard),
         'Policy-Based Routing (PBR)',
-        ..._installLabels(_SetupProfile.flows),
+        'Netify deep-packet inspection service',
+        'Detailed Flow SQLite collector',
+        'Hybrid relational and JSON flow database',
       ],
       _SetupProfile.remove => const [],
     };
@@ -988,6 +1044,212 @@ class _SetupCompleteBanner extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CustomInstallComponentsCard extends StatelessWidget {
+  final Set<String> selectedFeatures;
+  final bool enabled;
+  final void Function(String feature, bool selected) onChanged;
+
+  static const items = [
+    (
+      feature: 'standard',
+      title: 'Core Packages',
+      subtitle: 'OpenWrt RPC, SQLite, conntrack, and command dependencies.',
+      icon: Icons.foundation_rounded,
+    ),
+    (
+      feature: 'usage',
+      title: 'Statistics',
+      subtitle: 'vnStat and nlbwmon usage support.',
+      icon: Icons.bar_chart_rounded,
+    ),
+    (
+      feature: 'network-monitor',
+      title: 'Network Monitor',
+      subtitle: 'Latency, outage, and Ethernet link monitoring.',
+      icon: Icons.monitor_heart_outlined,
+    ),
+    (
+      feature: 'dns',
+      title: 'DNS Test',
+      subtitle: 'DNS health monitoring service.',
+      icon: Icons.dns_rounded,
+    ),
+    (
+      feature: 'speedtest',
+      title: 'Speed Test',
+      subtitle: 'Scheduled network speed tests.',
+      icon: Icons.speed_rounded,
+    ),
+    (
+      feature: 'notifications',
+      title: 'Notifications',
+      subtitle: 'Router notification database helper.',
+      icon: Icons.notifications_rounded,
+    ),
+    (
+      feature: 'devices',
+      title: 'Devices',
+      subtitle: 'Device inventory and quarantine-aware collector.',
+      icon: Icons.devices_rounded,
+    ),
+    (
+      feature: 'device-speed',
+      title: 'Live Device Speed',
+      subtitle: 'Per-device live throughput helper.',
+      icon: Icons.swap_vert_rounded,
+    ),
+    (
+      feature: 'bandwidth',
+      title: 'Device Bandwidth',
+      subtitle: 'Per-device historical usage collector.',
+      icon: Icons.data_usage_rounded,
+    ),
+    (
+      feature: 'blocking',
+      title: 'Internet Blocking',
+      subtitle: 'Manual device pause and blocking helper.',
+      icon: Icons.block_rounded,
+    ),
+    (
+      feature: 'scheduler',
+      title: 'Parental Controls',
+      subtitle: 'Device profiles, schedules, and access limits.',
+      icon: Icons.schedule_rounded,
+    ),
+    (
+      feature: 'quarantine',
+      title: 'Device Quarantine',
+      subtitle: 'New-device detection and automatic isolation.',
+      icon: Icons.gpp_bad_rounded,
+    ),
+    (
+      feature: 'state-sync',
+      title: 'Backup State Sync',
+      subtitle: 'Persistent Openwalla router-state backups.',
+      icon: Icons.backup_rounded,
+    ),
+    (
+      feature: 'conntrack',
+      title: 'Simple Flow',
+      subtitle: 'Lightweight conntrack flow collector.',
+      icon: Icons.route_rounded,
+    ),
+    (
+      feature: 'netify',
+      title: 'Detailed Flow',
+      subtitle: 'Netify deep inspection and detailed flow collector.',
+      icon: Icons.account_tree_rounded,
+    ),
+    (
+      feature: 'adblock',
+      title: 'AdBlock',
+      subtitle: 'OpenWrt domain-blocking service.',
+      icon: Icons.shield_rounded,
+    ),
+    (
+      feature: 'qos',
+      title: 'Smart Queue',
+      subtitle: 'SQM latency and bufferbloat controls.',
+      icon: Icons.tune_rounded,
+    ),
+    (
+      feature: 'ddns',
+      title: 'Dynamic DNS',
+      subtitle: 'OpenWrt DDNS packages and service.',
+      icon: Icons.public_rounded,
+    ),
+    (
+      feature: 'wireguard',
+      title: 'WireGuard',
+      subtitle: 'WireGuard tools and LuCI protocol support.',
+      icon: Icons.vpn_key_rounded,
+    ),
+    (
+      feature: 'pbr',
+      title: 'Policy-Based Routing',
+      subtitle: 'Route selected traffic through specific interfaces.',
+      icon: Icons.alt_route_rounded,
+    ),
+    (
+      feature: 'banip',
+      title: 'banIP',
+      subtitle: 'IP blocklists and country blocking.',
+      icon: Icons.gpp_bad_outlined,
+    ),
+    (
+      feature: 'tor',
+      title: 'Tor',
+      subtitle: 'Tor transparent proxy support.',
+      icon: Icons.security_rounded,
+    ),
+    (
+      feature: 'tailscale',
+      title: 'Tailscale',
+      subtitle: 'Tailscale mesh VPN and subnet routing.',
+      icon: Icons.hub_rounded,
+    ),
+    (
+      feature: 'mwan3',
+      title: 'Multi-WAN',
+      subtitle: 'WAN failover and load balancing.',
+      icon: Icons.call_split_rounded,
+    ),
+  ];
+
+  const _CustomInstallComponentsCard({
+    required this.selectedFeatures,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 14, 8, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                'Choose Components',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+              child: Text(
+                'Select only what you want to install or redeploy. Simple Flow and Detailed Flow cannot be installed together.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            ...items.map(
+              (item) => CheckboxListTile(
+                value: selectedFeatures.contains(item.feature),
+                onChanged: enabled
+                    ? (value) => onChanged(item.feature, value ?? false)
+                    : null,
+                controlAffinity: ListTileControlAffinity.trailing,
+                secondary: Icon(item.icon, color: colorScheme.primary),
+                title: Text(item.title),
+                subtitle: Text(item.subtitle),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
