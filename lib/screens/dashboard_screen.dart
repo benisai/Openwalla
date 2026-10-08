@@ -55,7 +55,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   static const Color _openwallaCardBorder = Color(0xFF313C52);
   static const double _openwallaRadius = 8;
   Timer? _summaryRefreshTimer;
+  Timer? _flowSummaryRefreshTimer;
   bool _summaryRefreshInFlight = false;
+  bool _flowSummaryRefreshInFlight = false;
+  int? _activeFlowRefreshSeconds;
   bool _dashboardRefreshInFlight = false;
   final PageController _shortcutPageController = PageController();
   int _shortcutPanelPage = 0;
@@ -67,6 +70,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_loadDashboardAndWarmStatistics());
       _startSummaryRefreshTimer();
+      _syncFlowSummaryRefreshTimer();
     });
   }
 
@@ -88,6 +92,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   @override
   void dispose() {
     _summaryRefreshTimer?.cancel();
+    _flowSummaryRefreshTimer?.cancel();
     _shortcutPageController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -97,13 +102,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _startSummaryRefreshTimer();
+      _syncFlowSummaryRefreshTimer(force: true);
       _refreshSummaryCounts();
+      _refreshFlowSummary();
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached ||
         state == AppLifecycleState.hidden) {
       _summaryRefreshTimer?.cancel();
       _summaryRefreshTimer = null;
+      _flowSummaryRefreshTimer?.cancel();
+      _flowSummaryRefreshTimer = null;
+      _activeFlowRefreshSeconds = null;
     }
   }
 
@@ -123,6 +133,40 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
           .refreshDashboardSummaryCounts(context: context);
     } finally {
       _summaryRefreshInFlight = false;
+    }
+  }
+
+  void _syncFlowSummaryRefreshTimer({bool force = false}) {
+    final preferences = ref.read(appStateProvider).dashboardPreferences;
+    if (!preferences.showFlowsCard) {
+      _flowSummaryRefreshTimer?.cancel();
+      _flowSummaryRefreshTimer = null;
+      _activeFlowRefreshSeconds = null;
+      return;
+    }
+
+    final seconds = preferences.flowCardRefreshSeconds;
+    if (!force &&
+        _flowSummaryRefreshTimer?.isActive == true &&
+        _activeFlowRefreshSeconds == seconds) {
+      return;
+    }
+    _flowSummaryRefreshTimer?.cancel();
+    _activeFlowRefreshSeconds = seconds;
+    _flowSummaryRefreshTimer = Timer.periodic(Duration(seconds: seconds), (_) {
+      _refreshFlowSummary();
+    });
+  }
+
+  Future<void> _refreshFlowSummary() async {
+    if (!mounted || _flowSummaryRefreshInFlight) return;
+    _flowSummaryRefreshInFlight = true;
+    try {
+      await ref
+          .read(appStateProvider)
+          .refreshDashboardFlowSummary(context: context);
+    } finally {
+      _flowSummaryRefreshInFlight = false;
     }
   }
 
@@ -1573,6 +1617,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   @override
   Widget build(BuildContext context) {
     final appState = ref.watch(appStateProvider);
+    _syncFlowSummaryRefreshTimer();
     final List<model.Router> routers = appState.routers;
     final model.Router? selected = appState.selectedRouter;
     final boardInfo =

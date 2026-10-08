@@ -20,6 +20,22 @@ void main() {
     expect(preferences.shortcutOrder, contains('quarantine'));
     expect(preferences.showGeoBlockingShortcut, isTrue);
     expect(preferences.shortcutOrder, contains('geo_blocking'));
+    expect(preferences.flowCardRefreshSeconds, 10);
+  });
+
+  test('dashboard flow refresh interval persists supported values', () {
+    final preferences = DashboardPreferences.fromJson({
+      'flowCardRefreshSeconds': 30,
+    });
+
+    expect(preferences.flowCardRefreshSeconds, 30);
+    expect(preferences.toJson()['flowCardRefreshSeconds'], 30);
+    expect(
+      DashboardPreferences.fromJson({
+        'flowCardRefreshSeconds': 3,
+      }).flowCardRefreshSeconds,
+      10,
+    );
   });
 
   TestWidgetsFlutterBinding.ensureInitialized();

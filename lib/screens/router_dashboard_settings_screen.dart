@@ -635,6 +635,58 @@ class _RouterDashboardSettingsScreenState
                   _onPreferenceChanged();
                 },
               ),
+              if (_preferences.showFlowsCard) ...[
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Flow Count Refresh',
+                              style: LuciTextStyles.detailValue(
+                                context,
+                              ).copyWith(fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Update the dashboard flow count independently',
+                              style: LuciTextStyles.cardSubtitle(context),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: LuciSpacing.md),
+                      DropdownButton<int>(
+                        value: _preferences.flowCardRefreshSeconds,
+                        underline: const SizedBox.shrink(),
+                        borderRadius: BorderRadius.circular(12),
+                        items: const [5, 10, 15, 30, 60]
+                            .map(
+                              (seconds) => DropdownMenuItem<int>(
+                                value: seconds,
+                                child: Text('${seconds}s'),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() {
+                            _preferences = _preferences.copyWith(
+                              flowCardRefreshSeconds: value,
+                            );
+                          });
+                          _onPreferenceChanged();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
             ],
           ),
         ),
