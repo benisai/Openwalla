@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/main.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 
 enum _RulesPanel { openwalla, defaults }
 
@@ -187,18 +188,22 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     );
     if (confirmed != true || !mounted) return;
 
-    final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(appStateProvider).deletePortForward(forward);
       if (!mounted) return;
       await _loadRules();
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Port forward deleted.')),
+      if (!mounted) return;
+      context.showToastSuccess(
+        'Port forward deleted',
+        subtitle: forward.name,
+        actionKey: 'port-forward-delete',
       );
     } catch (e) {
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text('Failed to delete port forward: $e')),
+      context.showToastError(
+        'Port forward could not be deleted',
+        subtitle: e.toString().replaceFirst('Bad state: ', ''),
+        actionKey: 'port-forward-delete',
       );
     }
   }

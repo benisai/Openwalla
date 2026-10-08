@@ -11,6 +11,7 @@ import 'package:openwalla/screens/router_dashboard_settings_screen.dart';
 import 'package:openwalla/design/luci_design_system.dart';
 import 'package:openwalla/widgets/luci_loading_states.dart';
 import 'package:openwalla/widgets/luci_refresh_components.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 bool shouldShowWiredInterface({
@@ -1146,13 +1147,18 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
                                     () => _networkPanelIndex = index,
                                   ),
                                   children: [
-                                    CustomScrollView(
-                                      slivers: [_buildWiredInterfacesList()],
+                                    LuciPullToRefresh(
+                                      onRefresh: _refreshNetworkData,
+                                      child: CustomScrollView(
+                                        physics:
+                                            const AlwaysScrollableScrollPhysics(),
+                                        slivers: [_buildWiredInterfacesList()],
+                                      ),
                                     ),
                                     _PortForwardingPanel(
                                       isLoading: _isLoadingNetworkPanels,
                                       forwards: _portForwards,
-                                      onRefresh: _loadNetworkPanels,
+                                      onRefresh: _refreshNetworkData,
                                       onAdd: _showAddPortForwardSheet,
                                       onEdit: _showAddPortForwardSheet,
                                     ),
@@ -1160,7 +1166,7 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
                                       isLoading: _isLoadingNetworkPanels,
                                       defaults: _firewallDefaults,
                                       zones: _firewallZones,
-                                      onRefresh: _loadNetworkPanels,
+                                      onRefresh: _refreshNetworkData,
                                       onEdit: _showEditFirewallZoneSheet,
                                     ),
                                   ],
@@ -1620,16 +1626,24 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
               onPageChanged: (index) =>
                   setState(() => _wirelessPanelIndex = index),
               children: [
-                CustomScrollView(
-                  slivers: [_buildWirelessSliver(mainActive, mainDisabled)],
+                LuciPullToRefresh(
+                  onRefresh: _refreshNetworkData,
+                  child: CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [_buildWirelessSliver(mainActive, mainDisabled)],
+                  ),
                 ),
-                CustomScrollView(
-                  slivers: [
-                    if (staActive.isEmpty && staDisabled.isEmpty)
-                      _buildRepeaterEmptySliver()
-                    else
-                      _buildWirelessSliver(staActive, staDisabled),
-                  ],
+                LuciPullToRefresh(
+                  onRefresh: _refreshNetworkData,
+                  child: CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      if (staActive.isEmpty && staDisabled.isEmpty)
+                        _buildRepeaterEmptySliver()
+                      else
+                        _buildWirelessSliver(staActive, staDisabled),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -2652,33 +2666,41 @@ class _PortForwardingPanel extends StatelessWidget {
       onPressed: onAdd,
     );
     if (forwards.isEmpty) {
-      return ListView(
+      return LuciPullToRefresh(
+        onRefresh: onRefresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          children: [
+            header,
+            _NetworkPanelEmptyState(
+              icon: Icons.low_priority_rounded,
+              title: 'No Port Forwards',
+              message: 'No firewall redirect rules were found on this router.',
+              onRefresh: onRefresh,
+            ),
+          ],
+        ),
+      );
+    }
+    return LuciPullToRefresh(
+      onRefresh: onRefresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         children: [
           header,
-          _NetworkPanelEmptyState(
-            icon: Icons.low_priority_rounded,
-            title: 'No Port Forwards',
-            message: 'No firewall redirect rules were found on this router.',
-            onRefresh: onRefresh,
-          ),
-        ],
-      );
-    }
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      children: [
-        header,
-        ...forwards.map(
-          (forward) => Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _PortForwardCard(
-              forward: forward,
-              onTap: () => onEdit(forward),
+          ...forwards.map(
+            (forward) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _PortForwardCard(
+                forward: forward,
+                onTap: () => onEdit(forward),
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -3096,34 +3118,47 @@ class _FirewallZonesPanel extends StatelessWidget {
       return const Center(child: CircularProgressIndicator());
     }
     if (zones.isEmpty) {
-      return _NetworkPanelEmptyState(
-        icon: Icons.security_rounded,
-        title: 'No Firewall Zones',
-        message: 'No firewall zone sections were found on this router.',
+      return LuciPullToRefresh(
         onRefresh: onRefresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          children: [
+            _NetworkPanelEmptyState(
+              icon: Icons.security_rounded,
+              title: 'No Firewall Zones',
+              message: 'No firewall zone sections were found on this router.',
+              onRefresh: onRefresh,
+            ),
+          ],
+        ),
       );
     }
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      children: [
-        const SizedBox(height: 12),
-        const _FirewallSectionHeader(
-          icon: Icons.shield_outlined,
-          title: 'Global Default Policies',
-        ),
-        const SizedBox(height: 10),
-        _FirewallDefaultsCard(defaults: defaults),
-        const SizedBox(height: 18),
-        const _FirewallSectionHeader(
-          icon: Icons.layers_outlined,
-          title: 'Firewall Zones Overview',
-        ),
-        const SizedBox(height: 10),
-        ...zones.map(
-          (zone) => _FirewallZoneCard(zone: zone, onEdit: () => onEdit(zone)),
-        ),
-      ],
+    return LuciPullToRefresh(
+      onRefresh: onRefresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        children: [
+          const SizedBox(height: 12),
+          const _FirewallSectionHeader(
+            icon: Icons.shield_outlined,
+            title: 'Global Default Policies',
+          ),
+          const SizedBox(height: 10),
+          _FirewallDefaultsCard(defaults: defaults),
+          const SizedBox(height: 18),
+          const _FirewallSectionHeader(
+            icon: Icons.layers_outlined,
+            title: 'Firewall Zones Overview',
+          ),
+          const SizedBox(height: 10),
+          ...zones.map(
+            (zone) => _FirewallZoneCard(zone: zone, onEdit: () => onEdit(zone)),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -3589,7 +3624,6 @@ class _AddPortForwardSheetState extends ConsumerState<_AddPortForwardSheet> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
-    final messenger = ScaffoldMessenger.of(context);
     try {
       final appState = ref.read(appStateProvider);
       final forward = widget.forward;
@@ -3622,25 +3656,21 @@ class _AddPortForwardSheetState extends ConsumerState<_AddPortForwardSheet> {
         );
       }
       if (!mounted) return;
-      Navigator.of(context).pop(true);
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            _isEditing ? 'Port forward updated.' : 'Port forward added.',
-          ),
-        ),
+      context.showToastSuccess(
+        _isEditing ? 'Port forward updated' : 'Port forward added',
+        subtitle: _nameController.text.trim(),
+        actionKey: 'port-forward-save',
       );
+      Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            _isEditing
-                ? 'Failed to update port forward: $e'
-                : 'Failed to add port forward: $e',
-          ),
-        ),
+      context.showToastError(
+        _isEditing
+            ? 'Port forward could not be updated'
+            : 'Port forward could not be added',
+        subtitle: e.toString().replaceFirst('Bad state: ', ''),
+        actionKey: 'port-forward-save',
       );
     }
   }

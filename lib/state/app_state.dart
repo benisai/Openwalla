@@ -6658,12 +6658,23 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       Logger.debug('LuCI firewall apply stack: $stack');
     }
 
-    final reloaded = await _reloadFirewall(router, sysauth);
-    if (!reloaded) {
-      throw StateError(
-        'The firewall changes were saved, but the router could not apply '
-        'them. Install the Openwalla RPC permissions and try again.',
+    try {
+      final reloaded = await _reloadFirewall(router, sysauth);
+      if (!reloaded) {
+        Logger.warning(
+          'Firewall changes were committed, but the optional Openwalla '
+          'firewall reload was rejected.',
+        );
+      }
+    } catch (error, stack) {
+      // A successful UCI commit is authoritative. Some stock LuCI sessions do
+      // not expose either apply or shell reload even though firewall4 picks up
+      // the committed redirect successfully.
+      Logger.warning(
+        'Firewall changes were committed; optional reload was unavailable: '
+        '$error',
       );
+      Logger.debug('Optional firewall reload stack: $stack');
     }
   }
 
