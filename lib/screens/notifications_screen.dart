@@ -40,6 +40,9 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     setState(() => _isLoading = true);
     final appState = ref.read(appStateProvider);
     final notifications = await appState.fetchNotifications(context: context);
+    if (mounted) {
+      await appState.markNotificationsSeen(context: context);
+    }
     await appState.refreshNotificationCount();
     if (!mounted) return;
     setState(() {

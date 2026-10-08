@@ -7,6 +7,7 @@ class LuciAppBar extends StatelessWidget implements PreferredSizeWidget {
   final bool centerTitle;
   final bool showBack;
   final bool balanceActions;
+  final Widget? leading;
   final List<Widget>? actions;
   final Color? backgroundColor;
   final double elevation;
@@ -19,6 +20,7 @@ class LuciAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.centerTitle = true,
     this.showBack = false,
     this.balanceActions = false,
+    this.leading,
     this.actions,
     this.backgroundColor,
     this.elevation = 0.0,
@@ -35,18 +37,20 @@ class LuciAppBar extends StatelessWidget implements PreferredSizeWidget {
       scrolledUnderElevation: elevation,
       centerTitle: centerTitle,
       titleSpacing: 16.0,
-      leading: showBack
-          ? IconButton(
-              icon: Icon(
-                Icons.arrow_back_ios_new_rounded,
-                color: theme.colorScheme.onSurface,
-              ),
-              onPressed: onBack ?? () => Navigator.of(context).maybePop(),
-              tooltip: 'Back',
-            )
-          : balanceActions && actions?.isNotEmpty == true
-          ? const SizedBox.shrink()
-          : null,
+      leading:
+          leading ??
+          (showBack
+              ? IconButton(
+                  icon: Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                  onPressed: onBack ?? () => Navigator.of(context).maybePop(),
+                  tooltip: 'Back',
+                )
+              : balanceActions && actions?.isNotEmpty == true
+              ? const SizedBox.shrink()
+              : null),
       leadingWidth: balanceActions && !showBack && actions?.isNotEmpty == true
           ? 48.0 * actions!.length
           : null,

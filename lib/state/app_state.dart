@@ -3862,6 +3862,7 @@ class AppState extends ChangeNotifier {
       _isClientsLoading = false;
       _parentalPausedMacs.clear();
       _dashboardPreferences = DashboardPreferences();
+      _hasUnseenNotifications = false;
     }
 
     final needsSwitch = await _routerService!.removeRouter(id);
@@ -3884,6 +3885,7 @@ class AppState extends ChangeNotifier {
 
     _isLoading = true;
     _dashboardError = null;
+    _hasUnseenNotifications = false;
 
     // Clear throughput data when switching routers to prevent mixing data from different routers
     _cancelThroughputTimer();
@@ -8644,7 +8646,10 @@ done | sort -t "|" -k1,1nr | head -n ''' +
   }
 
   Future<int> fetchNotificationCount({BuildContext? context}) async {
-    if (_reviewerModeEnabled) return 2;
+    if (_reviewerModeEnabled) {
+      _hasUnseenNotifications = !_reviewerNotificationsSeen;
+      return 2;
+    }
 
     try {
       final output = await _sqliteQueryOutput(
@@ -8653,11 +8658,72 @@ done | sort -t "|" -k1,1nr | head -n ''' +
             'SELECT COUNT(*) FROM notifications WHERE "delete" = 0 AND archived = 0;',
         context: context,
       );
-      return _parseSqliteCount(output);
+      final count = _parseSqliteCount(output);
+      try {
+        await _refreshNotificationBellState();
+      } catch (error, stack) {
+        Logger.warning('Optional notification bell refresh failed: $error');
+        Logger.debug('Optional notification bell refresh stack: $stack');
+      }
+      return count;
     } catch (e, stack) {
       Logger.warning('Optional notification count fetch failed: $e');
       Logger.debug('Optional notification count stack: $stack');
       return 0;
+    }
+  }
+
+  bool _hasUnseenNotifications = false;
+  bool _reviewerNotificationsSeen = false;
+  bool get hasUnseenNotifications => _hasUnseenNotifications;
+
+  String? get _notificationSeenStorageKey {
+    final routerId = _routerService?.selectedRouter?.id;
+    return routerId == null ? null : 'notifications_seen_id:$routerId';
+  }
+
+  Future<void> _refreshNotificationBellState() async {
+    final storageKey = _notificationSeenStorageKey;
+    if (storageKey == null) return;
+    final rawSeenId = await _secureStorageService.readValue(storageKey);
+    final seenId = int.tryParse(rawSeenId ?? '') ?? 0;
+    final output = await _sqliteQueryOutput(
+      dbExpression: _notificationsDbExpression(),
+      sql:
+          'SELECT COUNT(*) FROM notifications WHERE "delete" = 0 AND archived = 0 AND id > $seenId;',
+    );
+    _hasUnseenNotifications = _parseSqliteCount(output) > 0;
+  }
+
+  Future<void> markNotificationsSeen({BuildContext? context}) async {
+    if (_reviewerModeEnabled) {
+      _reviewerNotificationsSeen = true;
+      _hasUnseenNotifications = false;
+      notifyListeners();
+      return;
+    }
+    final storageKey = _notificationSeenStorageKey;
+    if (storageKey == null) return;
+    try {
+      final output = await _sqliteQueryOutput(
+        dbExpression: _notificationsDbExpression(),
+        sql:
+            'SELECT COALESCE(MAX(id), 0) FROM notifications WHERE "delete" = 0;',
+        context: context,
+      );
+      final maxId = _parseSqliteCount(output);
+      await _secureStorageService.writeValue(storageKey, maxId.toString());
+      _hasUnseenNotifications = false;
+      if (_dashboardData != null) {
+        _dashboardData = {
+          ..._dashboardData!,
+          '_lastUpdated': DateTime.now().millisecondsSinceEpoch,
+        };
+      }
+      notifyListeners();
+    } catch (error, stack) {
+      Logger.warning('Could not mark notifications as seen: $error');
+      Logger.debug('Notification seen update stack: $stack');
     }
   }
 
