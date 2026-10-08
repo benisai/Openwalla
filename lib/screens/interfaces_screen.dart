@@ -720,15 +720,14 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
 
   Future<void> _showEditWirelessSheet(String section) async {
     if (section.isEmpty) return;
-    final updated = await showModalBottomSheet<bool>(
+    await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) => _WirelessNetworkEditSheet(section: section),
     );
-    if (updated == true && mounted) {
-      await ref.read(appStateProvider).fetchDashboardData();
-    }
+    // A wireless apply can temporarily disconnect the phone from the router.
+    // Keep the current page stable and let reconnect/pull-to-refresh reload it.
   }
 
   Future<void> _showJoinWifiSheet() async {
@@ -5423,10 +5422,12 @@ class _WirelessNetworkEditSheetState
     setState(() => _isLoading = false);
   }
 
-  void _showError(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+  void _showValidationError(String message) {
+    context.showToastWarning(
+      'Check Wi-Fi settings',
+      subtitle: message,
+      actionKey: 'wifi-settings-save',
+    );
   }
 
   Future<void> _save() async {
@@ -5434,7 +5435,7 @@ class _WirelessNetworkEditSheetState
     if (current == null) return;
     final ssid = _ssidController.text.trim();
     if (ssid.isEmpty) {
-      _showError('SSID is required.');
+      _showValidationError('SSID is required.');
       return;
     }
     final password = _passwordController.text;
@@ -5447,13 +5448,13 @@ class _WirelessNetworkEditSheetState
         ? 'psk2'
         : (currentEncryption.isEmpty ? 'none' : currentEncryption);
     if (encryption != 'none' && encryption != 'owe' && password.length < 8) {
-      _showError('Wi-Fi password must be at least 8 characters.');
+      _showValidationError('Wi-Fi password must be at least 8 characters.');
       return;
     }
     final txText = _txPowerController.text.trim();
     final txPower = txText.isEmpty ? null : int.tryParse(txText);
     if (txText.isNotEmpty && (txPower == null || txPower < 0 || txPower > 40)) {
-      _showError('TX power must be a number from 0 to 40.');
+      _showValidationError('TX power must be a number from 0 to 40.');
       return;
     }
 
@@ -5472,11 +5473,20 @@ class _WirelessNetworkEditSheetState
           .read(appStateProvider)
           .saveWirelessNetworkConfig(next, context: context);
       if (!mounted) return;
+      context.showToastSuccess(
+        'Wi-Fi settings saved',
+        subtitle: 'The radio is restarting. Reconnect using the new password.',
+        actionKey: 'wifi-settings-save',
+      );
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
-      _showError('Failed to save Wi-Fi settings: $e');
       setState(() => _isSaving = false);
+      context.showToastError(
+        'Wi-Fi settings could not be saved',
+        subtitle: e.toString().replaceFirst('Bad state: ', ''),
+        actionKey: 'wifi-settings-save',
+      );
     }
   }
 

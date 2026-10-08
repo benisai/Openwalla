@@ -8525,58 +8525,48 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       throw ArgumentError('Wi-Fi password must be at least 8 characters.');
     }
 
-    final networkSetResult = await _apiService!.uciSet(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      config: 'wireless',
-      section: config.section,
-      values: {
-        'ssid': config.ssid.trim(),
-        'disabled': config.enabled ? '0' : '1',
-        'hidden': config.hidden ? '1' : '0',
-        'encryption': encryption,
-        'key': password,
-      },
-      context: context,
-    );
-    if (!_rpcCallSucceeded(networkSetResult)) {
-      throw StateError(
-        'The router did not allow the wireless network to be updated.',
-      );
-    }
-
-    if (config.radioSection.isNotEmpty) {
-      final radioSetResult = await _apiService!.uciSet(
+    var appliedWithLuci = false;
+    Object? luciError;
+    try {
+      final networkSetResult = await _apiService!.uciSet(
         router.ipAddress,
         sysauth,
         router.useHttps,
         config: 'wireless',
-        section: config.radioSection,
+        section: config.section,
         values: {
+          'ssid': config.ssid.trim(),
           'disabled': config.enabled ? '0' : '1',
-          if (config.txPower != null) 'txpower': config.txPower!.toString(),
+          'hidden': config.hidden ? '1' : '0',
+          'encryption': encryption,
+          'key': password,
         },
-        context: context?.mounted == true ? context : null,
+        context: context,
       );
-      if (!_rpcCallSucceeded(radioSetResult)) {
-        throw StateError('The router did not allow the radio to be updated.');
+      if (!_rpcCallSucceeded(networkSetResult)) {
+        throw StateError(
+          'The router did not allow the wireless network to be updated.',
+        );
       }
-    }
 
-    final commitResult = await _apiService!.uciCommit(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      config: 'wireless',
-      context: context?.mounted == true ? context : null,
-    );
-    if (!_rpcCallSucceeded(commitResult)) {
-      throw StateError('The router could not commit the wireless settings.');
-    }
+      if (config.radioSection.isNotEmpty) {
+        final radioSetResult = await _apiService!.uciSet(
+          router.ipAddress,
+          sysauth,
+          router.useHttps,
+          config: 'wireless',
+          section: config.radioSection,
+          values: {
+            'disabled': config.enabled ? '0' : '1',
+            if (config.txPower != null) 'txpower': config.txPower!.toString(),
+          },
+          context: context?.mounted == true ? context : null,
+        );
+        if (!_rpcCallSucceeded(radioSetResult)) {
+          throw StateError('The router did not allow the radio to be updated.');
+        }
+      }
 
-    var appliedWithLuci = false;
-    try {
       final applyResult = await _apiService!.call(
         router.ipAddress,
         sysauth,
@@ -8585,38 +8575,72 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         method: 'apply',
         params: const {'rollback': false},
         context: context?.mounted == true ? context : null,
+        receiveTimeout: const Duration(seconds: 30),
       );
       appliedWithLuci = _rpcCallSucceeded(applyResult);
       if (!appliedWithLuci) {
-        Logger.warning(
-          'LuCI UCI apply was rejected; falling forward to wifi reload: '
-          '$applyResult',
+        throw StateError(
+          'The router rejected the wireless configuration apply.',
         );
       }
+    } on DioException catch (error, stack) {
+      final connectionInterrupted =
+          error.response == null &&
+          (error.type == DioExceptionType.connectionError ||
+              error.type == DioExceptionType.receiveTimeout ||
+              error.type == DioExceptionType.unknown);
+      if (connectionInterrupted) {
+        Logger.info('Wi-Fi apply interrupted the router connection: $error');
+        Logger.debug('Wi-Fi apply connection stack: $stack');
+        appliedWithLuci = true;
+      } else {
+        luciError = error;
+        Logger.warning('LuCI Wi-Fi apply failed: $error');
+        Logger.debug('LuCI Wi-Fi apply stack: $stack');
+      }
     } catch (error, stack) {
+      luciError = error;
       Logger.warning(
-        'LuCI UCI apply was unavailable; falling forward to wifi reload: '
-        '$error',
+        'LuCI Wi-Fi update was unavailable; falling forward to SSH: $error',
       );
-      Logger.debug('LuCI UCI apply stack: $stack');
+      Logger.debug('LuCI Wi-Fi update stack: $stack');
     }
 
     if (!appliedWithLuci) {
-      final reloadResult = await _apiService!.systemExec(
-        router.ipAddress,
-        sysauth,
-        router.useHttps,
-        command: 'wifi reload',
-        context: context?.mounted == true ? context : null,
-      );
-      if (!_rpcCallSucceeded(reloadResult)) {
+      if (router.username.trim().isEmpty || router.password.isEmpty) {
         throw StateError(
-          'The settings were saved, but the router could not reload Wi-Fi. '
-          'Install the Openwalla RPC permissions and try again.',
+          'The router denied the Wi-Fi change and saved SSH credentials are '
+                  'not available. ${luciError ?? ''}'
+              .trim(),
         );
       }
+      final command = [
+        'uci set wireless.${config.section}.ssid=${_shellQuote(config.ssid.trim())}',
+        'uci set wireless.${config.section}.disabled=${config.enabled ? '0' : '1'}',
+        'uci set wireless.${config.section}.hidden=${config.hidden ? '1' : '0'}',
+        'uci set wireless.${config.section}.encryption=${_shellQuote(encryption)}',
+        'uci set wireless.${config.section}.key=${_shellQuote(password)}',
+        if (config.radioSection.isNotEmpty)
+          'uci set wireless.${config.radioSection}.disabled=${config.enabled ? '0' : '1'}',
+        if (config.radioSection.isNotEmpty && config.txPower != null)
+          'uci set wireless.${config.radioSection}.txpower=${config.txPower}',
+        'uci commit wireless',
+        'echo OPENWALLA_WIFI_SAVED',
+        '(sleep 1; wifi reload) >/dev/null 2>&1 </dev/null &',
+      ].join('; ');
+      final sshResult = await SshService().runCommand(
+        host: router.ipAddress,
+        username: router.username,
+        password: router.password,
+        command: command,
+        timeout: const Duration(seconds: 30),
+      );
+      if ((sshResult.exitCode != null && sshResult.exitCode != 0) ||
+          !sshResult.output.contains('OPENWALLA_WIFI_SAVED')) {
+        throw StateError('The router did not confirm the Wi-Fi change.');
+      }
     }
-    await fetchDashboardData();
+    notifyListeners();
   }
 
   Future<int> fetchNotificationCount({BuildContext? context}) async {
