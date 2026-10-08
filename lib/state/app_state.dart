@@ -6207,7 +6207,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       throw StateError('Unable to create port forward section');
     }
 
-    await _apiService!.uciSet(
+    final setResult = await _apiService!.uciSet(
       router.ipAddress,
       sysauth,
       router.useHttps,
@@ -6224,13 +6224,19 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         'target': 'DNAT',
       },
     );
-    await _apiService!.uciCommit(
+    if (!_rpcCallSucceeded(setResult)) {
+      throw StateError('The router rejected the new port forward.');
+    }
+    final commitResult = await _apiService!.uciCommit(
       router.ipAddress,
       sysauth,
       router.useHttps,
       config: 'firewall',
     );
-    await _reloadFirewall(router, sysauth);
+    if (!_rpcCallSucceeded(commitResult)) {
+      throw StateError('The router could not commit the new port forward.');
+    }
+    await _applyFirewallChangesNativeFirst(router, sysauth);
     notifyListeners();
   }
 
@@ -6255,7 +6261,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       throw StateError('No selected router connection is available');
     }
 
-    await _apiService!.uciSet(
+    final setResult = await _apiService!.uciSet(
       router.ipAddress,
       sysauth,
       router.useHttps,
@@ -6272,13 +6278,19 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         'target': 'DNAT',
       },
     );
-    await _apiService!.uciCommit(
+    if (!_rpcCallSucceeded(setResult)) {
+      throw StateError('The router rejected the port forward update.');
+    }
+    final commitResult = await _apiService!.uciCommit(
       router.ipAddress,
       sysauth,
       router.useHttps,
       config: 'firewall',
     );
-    await _reloadFirewall(router, sysauth);
+    if (!_rpcCallSucceeded(commitResult)) {
+      throw StateError('The router could not commit the port forward update.');
+    }
+    await _applyFirewallChangesNativeFirst(router, sysauth);
     notifyListeners();
   }
 
@@ -6294,7 +6306,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       throw StateError('No selected router connection is available');
     }
 
-    await _apiService!.call(
+    final deleteResult = await _apiService!.call(
       router.ipAddress,
       sysauth,
       router.useHttps,
@@ -6302,13 +6314,21 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       method: 'delete',
       params: {'config': 'firewall', 'section': forward.section},
     );
-    await _apiService!.uciCommit(
+    if (!_rpcCallSucceeded(deleteResult)) {
+      throw StateError('The router rejected the port forward deletion.');
+    }
+    final commitResult = await _apiService!.uciCommit(
       router.ipAddress,
       sysauth,
       router.useHttps,
       config: 'firewall',
     );
-    await _reloadFirewall(router, sysauth);
+    if (!_rpcCallSucceeded(commitResult)) {
+      throw StateError(
+        'The router could not commit the port forward deletion.',
+      );
+    }
+    await _applyFirewallChangesNativeFirst(router, sysauth);
     notifyListeners();
   }
 
@@ -6612,14 +6632,50 @@ done | sort -t "|" -k1,1nr | head -n ''' +
     notifyListeners();
   }
 
-  Future<void> _reloadFirewall(model.Router router, String sysauth) async {
-    await _apiService!.systemExec(
+  Future<void> _applyFirewallChangesNativeFirst(
+    model.Router router,
+    String sysauth,
+  ) async {
+    try {
+      final applyResult = await _apiService!.call(
+        router.ipAddress,
+        sysauth,
+        router.useHttps,
+        object: 'uci',
+        method: 'apply',
+        params: const {'rollback': false},
+      );
+      if (_rpcCallSucceeded(applyResult)) return;
+      Logger.warning(
+        'LuCI firewall apply was rejected; falling forward to the '
+        'Openwalla firewall reload: $applyResult',
+      );
+    } catch (error, stack) {
+      Logger.warning(
+        'LuCI firewall apply was unavailable; falling forward to the '
+        'Openwalla firewall reload: $error',
+      );
+      Logger.debug('LuCI firewall apply stack: $stack');
+    }
+
+    final reloaded = await _reloadFirewall(router, sysauth);
+    if (!reloaded) {
+      throw StateError(
+        'The firewall changes were saved, but the router could not apply '
+        'them. Install the Openwalla RPC permissions and try again.',
+      );
+    }
+  }
+
+  Future<bool> _reloadFirewall(model.Router router, String sysauth) async {
+    final result = await _apiService!.systemExec(
       router.ipAddress,
       sysauth,
       router.useHttps,
       command:
           '/etc/init.d/firewall reload 2>/dev/null || /etc/init.d/firewall restart 2>/dev/null || true',
     );
+    return _rpcCallSucceeded(result);
   }
 
   List<OpenwrtStaticRoute> _mockStaticRoutes() {
