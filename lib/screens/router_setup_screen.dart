@@ -209,6 +209,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
       console.setOutput(
         '${output.trimRight()}\n\nRefreshing the router connection...',
       );
+      appState.clearStatisticsPreload();
       await appState.retryDashboardConnection(context: context);
       if (!mounted) return;
       setState(() {

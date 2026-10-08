@@ -179,18 +179,24 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     final preload = appState.statisticsPreloadData;
     if (preload != null) {
       _bindPreloadData(preload);
-      return _preloadSupportFuture!;
+      if (preload.hasSupport) return _preloadSupportFuture!;
+      return _statisticsSupportFuture ??= appState.hasStatisticsSupport(
+        context: context,
+      );
     }
     final preloadFuture = appState.statisticsPreloadFuture;
     if (preloadFuture != null) {
       _bindPreloadFuture(preloadFuture);
-      return _preloadSupportFuture ??= preloadFuture.then(
-        (data) => data.hasSupport,
-      );
+      return _preloadSupportFuture ??= preloadFuture.then((data) async {
+        if (data.hasSupport) return true;
+        return appState.hasStatisticsSupport(
+          context: context.mounted ? context : null,
+        );
+      });
     }
-    return _statisticsSupportFuture ??= ref
-        .read(appStateProvider)
-        .hasStatisticsSupport(context: context);
+    return _statisticsSupportFuture ??= appState.hasStatisticsSupport(
+      context: context,
+    );
   }
 
   Future<List<NlbwDeviceUsage>> _topDevices() {
