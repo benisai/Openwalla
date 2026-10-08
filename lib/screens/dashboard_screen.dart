@@ -1585,7 +1585,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       appBar: LuciAppBar(
         centerTitle: true,
         leading: Transform.translate(
-          offset: const Offset(5, 0),
+          offset: const Offset(12, 0),
           child: IconButton(
             tooltip: 'Refresh dashboard',
             onPressed: _dashboardRefreshInFlight
@@ -1845,7 +1845,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
             : _buildTitleWithTimestamp(headerText, appState),
         actions: [
           Transform.translate(
-            offset: const Offset(-5, 0),
+            offset: const Offset(-12, 0),
             child: IconButton(
               tooltip: 'Notifications',
               onPressed: () {
