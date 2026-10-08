@@ -8820,29 +8820,6 @@ done | sort -t "|" -k1,1nr | head -n ''' +
     }
   }
 
-  Future<void> refreshDashboardFlowSummary({BuildContext? context}) async {
-    if (_dashboardData == null || !_dashboardPreferences.showFlowsCard) return;
-
-    final selectedProvider =
-        _dashboardPreferences.flowMode == DashboardFlowMode.simple
-        ? OpenwallaFlowProvider.conntrack
-        : OpenwallaFlowProvider.netify;
-    final flowSummary = await fetchOpenwallaFlowSummary(
-      provider: selectedProvider,
-      context: context,
-    );
-    if (_dashboardData == null) return;
-
-    _dashboardData = {
-      ..._dashboardData!,
-      'flowProvider': flowSummary.provider,
-      'flowSummary': flowSummary,
-      'netifyFlowCount': flowSummary.count,
-      '_lastUpdated': DateTime.now().millisecondsSinceEpoch,
-    };
-    notifyListeners();
-  }
-
   Future<List<OpenwallaNotification>> fetchNotifications({
     int limit = 200,
     bool includeArchived = false,

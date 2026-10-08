@@ -27,7 +27,6 @@ class DashboardPreferences {
   final List<String> shortcutOrder;
   final int liveThroughputRefreshSeconds;
   final int systemResourcesRefreshSeconds;
-  final int flowCardRefreshSeconds;
   final DashboardFlowMode flowMode;
 
   DashboardPreferences({
@@ -57,7 +56,6 @@ class DashboardPreferences {
     List<String>? shortcutOrder,
     this.liveThroughputRefreshSeconds = 3,
     this.systemResourcesRefreshSeconds = 5,
-    this.flowCardRefreshSeconds = 10,
     this.flowMode = DashboardFlowMode.detailed,
   }) : enabledWirelessInterfaces = enabledWirelessInterfaces ?? {},
        enabledWiredInterfaces = enabledWiredInterfaces ?? {},
@@ -109,7 +107,6 @@ class DashboardPreferences {
     List<String>? shortcutOrder,
     int? liveThroughputRefreshSeconds,
     int? systemResourcesRefreshSeconds,
-    int? flowCardRefreshSeconds,
     DashboardFlowMode? flowMode,
   }) {
     return DashboardPreferences(
@@ -156,8 +153,6 @@ class DashboardPreferences {
           liveThroughputRefreshSeconds ?? this.liveThroughputRefreshSeconds,
       systemResourcesRefreshSeconds:
           systemResourcesRefreshSeconds ?? this.systemResourcesRefreshSeconds,
-      flowCardRefreshSeconds:
-          flowCardRefreshSeconds ?? this.flowCardRefreshSeconds,
       flowMode: flowMode ?? this.flowMode,
     );
   }
@@ -211,7 +206,6 @@ class DashboardPreferences {
     'shortcutOrder': shortcutOrder,
     'liveThroughputRefreshSeconds': liveThroughputRefreshSeconds,
     'systemResourcesRefreshSeconds': systemResourcesRefreshSeconds,
-    'flowCardRefreshSeconds': flowCardRefreshSeconds,
     'flowMode': flowMode.name,
   };
 
@@ -257,9 +251,6 @@ class DashboardPreferences {
       systemResourcesRefreshSeconds: _parseSystemResourcesRefreshSeconds(
         json['systemResourcesRefreshSeconds'],
       ),
-      flowCardRefreshSeconds: _parseFlowCardRefreshSeconds(
-        json['flowCardRefreshSeconds'],
-      ),
       flowMode: DashboardFlowMode.values.firstWhere(
         (mode) => mode.name == json['flowMode']?.toString(),
         orElse: () => DashboardFlowMode.detailed,
@@ -280,11 +271,6 @@ class DashboardPreferences {
   static int _parseSystemResourcesRefreshSeconds(dynamic value) {
     final parsed = value is int ? value : int.tryParse(value?.toString() ?? '');
     return const {5, 10, 15, 30}.contains(parsed) ? parsed! : 5;
-  }
-
-  static int _parseFlowCardRefreshSeconds(dynamic value) {
-    final parsed = value is int ? value : int.tryParse(value?.toString() ?? '');
-    return const {5, 10, 15, 30, 60}.contains(parsed) ? parsed! : 10;
   }
 
   static List<String> _parseShortcutOrder(dynamic value) {
