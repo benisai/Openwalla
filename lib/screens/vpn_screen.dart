@@ -622,111 +622,158 @@ class _VpnScreenState extends ConsumerState<VpnScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _VpnPanelCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+        Stack(
+          children: [
+            _VpnPanelCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Text(
-                      'WireGuard Server',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'WireGuard Server',
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0,
+                              ),
+                        ),
                       ),
-                    ),
+                      _StatusPill(
+                        label: _settings.configured
+                            ? 'Configured'
+                            : 'Not configured',
+                        color: _settings.configured
+                            ? const Color(0xFF20CF70)
+                            : colorScheme.onSurfaceVariant,
+                      ),
+                    ],
                   ),
-                  _StatusPill(
-                    label: _settings.configured
-                        ? 'Configured'
-                        : 'Not configured',
-                    color: _settings.configured
-                        ? const Color(0xFF20CF70)
-                        : colorScheme.onSurfaceVariant,
+                  const SizedBox(height: 14),
+                  if (!_settings.installed)
+                    _WarningBox(
+                      message:
+                          'wireguard-tools is not installed. Install it from Router Setup or opkg before saving.',
+                    ),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Enable Server'),
+                    subtitle: Text(_settings.interfaceName),
+                    value: _settings.enabled,
+                    onChanged: _isSaving ? null : _updateEnabled,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _portController,
+                    decoration: const InputDecoration(
+                      labelText: 'Listen Port',
+                      helperText: 'The UDP port exposed on WAN.',
+                      prefixIcon: Icon(Icons.settings_ethernet_rounded),
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                    enabled: !_isSaving,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _vpnAddressController,
+                    decoration: const InputDecoration(
+                      labelText: 'VPN Address',
+                      helperText:
+                          'Server tunnel address, for example 10.8.0.1/24.',
+                      prefixIcon: Icon(Icons.vpn_key_rounded),
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.text,
+                    enabled: !_isSaving,
+                  ),
+                  const SizedBox(height: 14),
+                  _DetailRow(
+                    label: 'Interface',
+                    value: _settings.interfaceName,
+                  ),
+                  _DetailRow(label: 'Firewall zone', value: 'LAN'),
+                  _DetailRow(
+                    label: 'WAN access',
+                    value: 'UDP ${_portController.text.trim()}',
+                  ),
+                  _DetailRow(label: 'Public key', value: _settings.publicKey),
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _isSaving ? null : () => _saveServer(),
+                          icon: const Icon(Icons.save_rounded),
+                          label: const Text('Save Server'),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 14),
-              if (!_settings.installed)
-                _WarningBox(
-                  message:
-                      'wireguard-tools is not installed. Install it from Router Setup or opkg before saving.',
-                ),
-              SwitchListTile.adaptive(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Enable Server'),
-                subtitle: Text(_settings.interfaceName),
-                value: _settings.enabled,
-                onChanged: _isSaving ? null : _updateEnabled,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _portController,
-                decoration: const InputDecoration(
-                  labelText: 'Listen Port',
-                  helperText: 'The UDP port exposed on WAN.',
-                  prefixIcon: Icon(Icons.settings_ethernet_rounded),
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.number,
-                enabled: !_isSaving,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _vpnAddressController,
-                decoration: const InputDecoration(
-                  labelText: 'VPN Address',
-                  helperText: 'Server tunnel address, for example 10.8.0.1/24.',
-                  prefixIcon: Icon(Icons.vpn_key_rounded),
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.text,
-                enabled: !_isSaving,
-              ),
-              const SizedBox(height: 14),
-              _DetailRow(label: 'Interface', value: _settings.interfaceName),
-              _DetailRow(label: 'Firewall zone', value: 'LAN'),
-              _DetailRow(
-                label: 'WAN access',
-                value: 'UDP ${_portController.text.trim()}',
-              ),
-              _DetailRow(label: 'Public key', value: _settings.publicKey),
-              const SizedBox(height: 18),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _isSaving ? null : () => _saveServer(),
-                      icon: const Icon(Icons.save_rounded),
-                      label: const Text('Save Server'),
+            ),
+            if (!_settings.configured)
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: colorScheme.surface.withValues(alpha: 0.88),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: colorScheme.outlineVariant.withValues(alpha: 0.42),
                     ),
                   ),
-                  if (!_settings.configured) ...[
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: _isSaving
-                            ? null
-                            : () => _saveServer(setup: true),
-                        icon: _isSaving
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.build_circle_outlined),
-                        label: Text(_isSaving ? 'Setting Up' : 'Setup'),
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.vpn_key_rounded,
+                            size: 34,
+                            color: colorScheme.primary,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'WireGuard Server Setup',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w900),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Set up the server to unlock these settings.',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: colorScheme.onSurfaceVariant),
+                          ),
+                          const SizedBox(height: 18),
+                          FilledButton.icon(
+                            onPressed: _isSaving
+                                ? null
+                                : () => _saveServer(setup: true),
+                            icon: _isSaving
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.build_circle_outlined),
+                            label: Text(
+                              _isSaving ? 'Setting Up' : 'Setup Server',
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ],
+                  ),
+                ),
               ),
-            ],
-          ),
+          ],
         ),
         const SizedBox(height: 12),
         _VpnPanelCard(
@@ -745,7 +792,9 @@ class _VpnScreenState extends ConsumerState<VpnScreen> {
                     ),
                   ),
                   FilledButton.tonalIcon(
-                    onPressed: _isSaving ? null : _createServerProfile,
+                    onPressed: _isSaving || !_settings.configured
+                        ? null
+                        : _createServerProfile,
                     icon: const Icon(Icons.person_add_alt_1_rounded),
                     label: const Text('Add'),
                   ),
