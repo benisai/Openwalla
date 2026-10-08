@@ -7115,38 +7115,82 @@ done | sort -t "|" -k1,1nr | head -n ''' +
     }
 
     try {
-      final result = await _apiService!.call(
-        router.ipAddress,
-        sysauth,
-        router.useHttps,
-        object: 'uci',
-        method: 'get',
-        params: {'config': 'dhcp'},
+      return await _loadDnsHostEntries(
+        router: router,
+        sysauth: sysauth,
         context: context,
       );
-      final values = _extractUciValues(result);
-      final entries =
-          values.entries
-              .where((entry) => entry.value['.type']?.toString() == 'domain')
-              .map(
-                (entry) =>
-                    OpenwrtDnsHostEntry.fromUciSection(entry.key, entry.value),
-              )
-              .where(
-                (entry) =>
-                    entry.hostname.trim().isNotEmpty ||
-                    entry.ipAddress.trim().isNotEmpty,
-              )
-              .toList()
-            ..sort(
-              (a, b) =>
-                  a.hostname.toLowerCase().compareTo(b.hostname.toLowerCase()),
-            );
-      return entries;
     } catch (e, stack) {
       Logger.warning('Optional DNS host entries fetch failed: $e');
       Logger.debug('Optional DNS host entries stack: $stack');
       return const [];
+    }
+  }
+
+  Future<List<OpenwrtDnsHostEntry>> _loadDnsHostEntries({
+    required model.Router router,
+    required String sysauth,
+    BuildContext? context,
+  }) async {
+    final result = await _apiService!.call(
+      router.ipAddress,
+      sysauth,
+      router.useHttps,
+      object: 'uci',
+      method: 'get',
+      params: {'config': 'dhcp'},
+      context: context,
+    );
+    if (!_rpcCallSucceeded(result)) {
+      throw StateError('The router did not allow the DNS configuration read.');
+    }
+    final values = _extractUciValues(result);
+    final entries =
+        values.entries
+            .where((entry) => entry.value['.type']?.toString() == 'domain')
+            .map(
+              (entry) =>
+                  OpenwrtDnsHostEntry.fromUciSection(entry.key, entry.value),
+            )
+            .where(
+              (entry) =>
+                  entry.hostname.trim().isNotEmpty ||
+                  entry.ipAddress.trim().isNotEmpty,
+            )
+            .toList()
+          ..sort(
+            (a, b) =>
+                a.hostname.toLowerCase().compareTo(b.hostname.toLowerCase()),
+          );
+    return entries;
+  }
+
+  bool _dnsHostEntryMatches(
+    OpenwrtDnsHostEntry candidate,
+    OpenwrtDnsHostEntry expected,
+  ) {
+    final expectedSection = expected.section.trim();
+    return (expectedSection.isEmpty || candidate.section == expectedSection) &&
+        candidate.hostname.trim().toLowerCase() ==
+            expected.hostname.trim().toLowerCase() &&
+        candidate.ipAddress.trim() == expected.ipAddress.trim();
+  }
+
+  Future<void> _applyDnsUciChanges({
+    required model.Router router,
+    required String sysauth,
+  }) async {
+    final result = await _apiService!.call(
+      router.ipAddress,
+      sysauth,
+      router.useHttps,
+      object: 'uci',
+      method: 'apply',
+      params: const {'rollback': false},
+      receiveTimeout: const Duration(seconds: 30),
+    );
+    if (!_rpcCallSucceeded(result)) {
+      throw StateError('The router could not apply the DNS configuration.');
     }
   }
 
@@ -7162,40 +7206,101 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       throw StateError('No selected router connection is available');
     }
 
-    var section = entry.section.trim();
-    if (section.isEmpty) {
-      final addResult = await _apiService!.call(
+    var savedEntry = entry;
+    Object? luciError;
+    try {
+      var section = entry.section.trim();
+      if (section.isEmpty) {
+        final addResult = await _apiService!.call(
+          router.ipAddress,
+          sysauth,
+          router.useHttps,
+          object: 'uci',
+          method: 'add',
+          params: {'config': 'dhcp', 'type': 'domain'},
+        );
+        if (!_rpcCallSucceeded(addResult)) {
+          throw StateError('The router rejected the new DNS entry.');
+        }
+        section = _extractAddedSection(addResult) ?? '';
+        if (section.isEmpty) throw StateError('Unable to create DNS entry');
+        savedEntry = OpenwrtDnsHostEntry(
+          section: section,
+          hostname: entry.hostname,
+          ipAddress: entry.ipAddress,
+        );
+      }
+
+      final setResult = await _apiService!.uciSet(
         router.ipAddress,
         sysauth,
         router.useHttps,
-        object: 'uci',
-        method: 'add',
-        params: {'config': 'dhcp', 'type': 'domain'},
+        config: 'dhcp',
+        section: section,
+        values: {'name': entry.hostname.trim(), 'ip': entry.ipAddress.trim()},
       );
-      section = _extractAddedSection(addResult) ?? '';
-      if (section.isEmpty) throw StateError('Unable to create DNS entry');
+      if (!_rpcCallSucceeded(setResult)) {
+        throw StateError('The router rejected the DNS entry.');
+      }
+      await _applyDnsUciChanges(router: router, sysauth: sysauth);
+    } catch (error, stack) {
+      luciError = error;
+      Logger.warning('LuCI DNS save did not complete: $error');
+      Logger.debug('LuCI DNS save stack: $stack');
     }
 
-    await _apiService!.uciSet(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      config: 'dhcp',
-      section: section,
-      values: {'name': entry.hostname.trim(), 'ip': entry.ipAddress.trim()},
+    if (luciError == null) {
+      try {
+        final entries = await _loadDnsHostEntries(
+          router: router,
+          sysauth: sysauth,
+        );
+        if (entries.any(
+          (candidate) => _dnsHostEntryMatches(candidate, savedEntry),
+        )) {
+          notifyListeners();
+          return;
+        }
+      } catch (error) {
+        Logger.debug('DNS save verification through LuCI failed: $error');
+      }
+    }
+
+    if (router.username.trim().isEmpty || router.password.isEmpty) {
+      throw StateError(
+        'The router denied the DNS change and saved SSH credentials are '
+                'not available. ${luciError ?? ''}'
+            .trim(),
+      );
+    }
+    final section = entry.section.trim();
+    final command =
+        'HOST=${_shellQuote(entry.hostname.trim())}; '
+        'IP=${_shellQuote(entry.ipAddress.trim())}; '
+        'SECTION=${_shellQuote(section)}; '
+        'if [ -z "\$SECTION" ] || [ "\$(uci -q get dhcp.\$SECTION)" != "domain" ]; then '
+        'SECTION=""; '
+        'for candidate in \$(uci -q show dhcp | sed -n "s/^dhcp\\.\\([^.=]*\\)=domain\$/\\1/p"); do '
+        '[ "\$(uci -q get dhcp.\$candidate.name)" = "\$HOST" ] && SECTION="\$candidate" && break; '
+        'done; '
+        '[ -n "\$SECTION" ] || SECTION=\$(uci add dhcp domain); '
+        'fi; '
+        'uci set dhcp.\$SECTION.name="\$HOST"; '
+        'uci set dhcp.\$SECTION.ip="\$IP"; '
+        'uci commit dhcp; '
+        '/etc/init.d/dnsmasq restart >/dev/null 2>&1; '
+        'echo OPENWALLA_DNS_SAVED';
+    final sshResult = await SshService().runCommand(
+      host: router.ipAddress,
+      username: router.username,
+      password: router.password,
+      command: command,
+      timeout: const Duration(seconds: 30),
     );
-    await _apiService!.uciCommit(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      config: 'dhcp',
-    );
-    await _apiService!.systemExec(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      command: '/etc/init.d/dnsmasq restart 2>/dev/null || true',
-    );
+    if ((sshResult.exitCode != null && sshResult.exitCode != 0) ||
+        !sshResult.output.contains('OPENWALLA_DNS_SAVED')) {
+      throw StateError('The router did not confirm the DNS change.');
+    }
     notifyListeners();
   }
 
@@ -7211,26 +7316,63 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       throw StateError('No selected router connection is available');
     }
 
-    await _apiService!.call(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      object: 'uci',
-      method: 'delete',
-      params: {'config': 'dhcp', 'section': section},
+    Object? luciError;
+    try {
+      final deleteResult = await _apiService!.call(
+        router.ipAddress,
+        sysauth,
+        router.useHttps,
+        object: 'uci',
+        method: 'delete',
+        params: {'config': 'dhcp', 'section': section},
+      );
+      if (!_rpcCallSucceeded(deleteResult)) {
+        throw StateError('The router rejected the DNS entry removal.');
+      }
+      await _applyDnsUciChanges(router: router, sysauth: sysauth);
+    } catch (error, stack) {
+      luciError = error;
+      Logger.warning('LuCI DNS delete did not complete: $error');
+      Logger.debug('LuCI DNS delete stack: $stack');
+    }
+
+    if (luciError == null) {
+      try {
+        final entries = await _loadDnsHostEntries(
+          router: router,
+          sysauth: sysauth,
+        );
+        if (!entries.any((entry) => entry.section == section)) {
+          notifyListeners();
+          return;
+        }
+      } catch (error) {
+        Logger.debug('DNS delete verification through LuCI failed: $error');
+      }
+    }
+
+    if (router.username.trim().isEmpty || router.password.isEmpty) {
+      throw StateError(
+        'The router denied the DNS change and saved SSH credentials are '
+                'not available. ${luciError ?? ''}'
+            .trim(),
+      );
+    }
+    final sshResult = await SshService().runCommand(
+      host: router.ipAddress,
+      username: router.username,
+      password: router.password,
+      command:
+          'uci -q delete dhcp.${_shellQuote(section)}; '
+          'uci commit dhcp; '
+          '/etc/init.d/dnsmasq restart >/dev/null 2>&1; '
+          'echo OPENWALLA_DNS_DELETED',
+      timeout: const Duration(seconds: 30),
     );
-    await _apiService!.uciCommit(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      config: 'dhcp',
-    );
-    await _apiService!.systemExec(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      command: '/etc/init.d/dnsmasq restart 2>/dev/null || true',
-    );
+    if ((sshResult.exitCode != null && sshResult.exitCode != 0) ||
+        !sshResult.output.contains('OPENWALLA_DNS_DELETED')) {
+      throw StateError('The router did not confirm the DNS entry removal.');
+    }
     notifyListeners();
   }
 
@@ -8811,59 +8953,20 @@ done | sort -t "|" -k1,1nr | head -n ''' +
               : _extractRootDomain(exactDomain))
         : exactDomain;
 
-    final dhcp = await _apiService!.call(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      object: 'uci',
-      method: 'get',
-      params: {'config': 'dhcp'},
-    );
-    final values = _extractUciValues(dhcp);
+    final entries = await _loadDnsHostEntries(router: router, sysauth: sysauth);
     String? targetSection;
-    values.forEach((section, cfg) {
-      if (targetSection != null) return;
-      if (cfg['.type']?.toString() != 'domain') return;
-      if ((cfg['name']?.toString().trim().toLowerCase() ?? '') ==
-          targetDomain) {
-        targetSection = section;
+    for (final entry in entries) {
+      if (entry.hostname.trim().toLowerCase() == targetDomain) {
+        targetSection = entry.section;
+        break;
       }
-    });
-
-    if (targetSection == null) {
-      final addResult = await _apiService!.call(
-        router.ipAddress,
-        sysauth,
-        router.useHttps,
-        object: 'uci',
-        method: 'add',
-        params: {'config': 'dhcp', 'type': 'domain'},
-      );
-      targetSection = _extractAddedSection(addResult);
     }
-    if (targetSection == null || targetSection!.isEmpty) {
-      throw StateError('Unable to create custom DNS entry');
-    }
-
-    await _apiService!.uciSet(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      config: 'dhcp',
-      section: targetSection!,
-      values: {'name': targetDomain, 'ip': '127.0.0.1'},
-    );
-    await _apiService!.uciCommit(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      config: 'dhcp',
-    );
-    await _apiService!.systemExec(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      command: '/etc/init.d/dnsmasq restart',
+    await saveDnsHostEntry(
+      OpenwrtDnsHostEntry(
+        section: targetSection ?? '',
+        hostname: targetDomain,
+        ipAddress: '127.0.0.1',
+      ),
     );
     return targetDomain;
   }
