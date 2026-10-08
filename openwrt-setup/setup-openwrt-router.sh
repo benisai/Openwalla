@@ -5,8 +5,101 @@
 
 set -u
 
+OPENWALLA_INSTALL_LOG_DIR="${OPENWALLA_INSTALL_LOG_DIR:-/root/openwalla/install-logs}"
+
+# Re-run once through tee so package-manager and nested installer output is
+# retained on the router as well as streamed to the app's SSH console.
+if [ "${OPENWALLA_INSTALL_LOG_ACTIVE:-0}" != "1" ] && command -v tee >/dev/null 2>&1; then
+	mkdir -p "$OPENWALLA_INSTALL_LOG_DIR"
+	install_started="$(date '+%Y%m%d-%H%M%S' 2>/dev/null || date +%s)"
+	install_log="$OPENWALLA_INSTALL_LOG_DIR/install-$install_started.log"
+	install_status="/tmp/openwalla-install-status-$$"
+	: >"$install_log"
+	ls -1t "$OPENWALLA_INSTALL_LOG_DIR"/install-*.log 2>/dev/null |
+		sed -n '11,$p' |
+		while IFS= read -r old_log; do
+			rm -f "$old_log"
+		done
+	export OPENWALLA_INSTALL_LOG_ACTIVE=1
+	export OPENWALLA_INSTALL_LOG="$install_log"
+	(
+		sh "$0" "$@"
+		printf '%s\n' "$?" >"$install_status"
+	) 2>&1 | tee -a "$install_log"
+	install_rc=1
+	if [ -f "$install_status" ]; then
+		read -r install_rc <"$install_status"
+		rm -f "$install_status"
+	fi
+	exit "$install_rc"
+fi
+
 log() {
-	echo "[openwalla-setup] $*"
+	printf '[openwalla-setup] %s\n' "$*"
+}
+
+phase() {
+	printf '\n[openwalla-setup] === %s ===\n' "$*"
+}
+
+feature_label() {
+	case "$1" in
+	standard) echo "Core router packages" ;;
+	usage) echo "Usage statistics" ;;
+	network-monitor) echo "Network monitoring" ;;
+	dns) echo "DNS monitoring" ;;
+	speedtest) echo "Speed testing" ;;
+	notifications) echo "Notifications" ;;
+	devices) echo "Device inventory" ;;
+	device-speed) echo "Live device traffic" ;;
+	bandwidth) echo "Device bandwidth history" ;;
+	blocking) echo "Internet blocking" ;;
+	scheduler) echo "Device schedules" ;;
+	conntrack) echo "Simple network flows" ;;
+	netify) echo "Detailed network flows" ;;
+	quarantine) echo "Device quarantine" ;;
+	state-sync) echo "State backup and sync" ;;
+	wireguard) echo "WireGuard" ;;
+	adblock) echo "Ad blocking" ;;
+	ddns) echo "Dynamic DNS" ;;
+	banip) echo "Geo-blocking" ;;
+	pbr) echo "Policy-based routing" ;;
+	qos) echo "Smart Queue Management" ;;
+	tor) echo "Tor" ;;
+	tailscale) echo "Tailscale" ;;
+	mwan3) echo "Multi-WAN" ;;
+	*) echo "$1" ;;
+	esac
+}
+
+installer_label() {
+	case "$1" in
+	install-standard-apps.sh) feature_label standard ;;
+	install-usage-monitoring.sh) feature_label usage ;;
+	install-network-monitor.sh) feature_label network-monitor ;;
+	install-dns-monitor.sh) feature_label dns ;;
+	install-speedtest-monitor.sh) feature_label speedtest ;;
+	install-notifications-db.sh) feature_label notifications ;;
+	install-devices-collector.sh) feature_label devices ;;
+	install-device-speed.sh) feature_label device-speed ;;
+	install-device-bandwidth.sh) feature_label bandwidth ;;
+	install-internet-blocking.sh) feature_label blocking ;;
+	install-scheduler.sh) feature_label scheduler ;;
+	install-conntrack.sh) feature_label conntrack ;;
+	install-netify.sh) feature_label netify ;;
+	install-quarantine.sh) feature_label quarantine ;;
+	install-state-sync.sh) feature_label state-sync ;;
+	install-wireguard.sh) feature_label wireguard ;;
+	install-adblock.sh) feature_label adblock ;;
+	install-ddns.sh) feature_label ddns ;;
+	install-banip.sh) feature_label banip ;;
+	install-pbr.sh) feature_label pbr ;;
+	install-qos-scripts.sh) feature_label qos ;;
+	install-tor.sh) feature_label tor ;;
+	install-tailscale.sh) feature_label tailscale ;;
+	install-mwan3.sh) feature_label mwan3 ;;
+	*) echo "$1" ;;
+	esac
 }
 
 have_cmd() {
@@ -160,7 +253,7 @@ feature_to_installer() {
 
 canonical_feature() {
 	case "$1" in
-	apps|packages|standard-apps) echo "standard" ;;
+	standard|apps|packages|standard-apps) echo "standard" ;;
 	usage|statistics|stats|vnstat|nlbwmon) echo "usage" ;;
 	network|network-monitor) echo "network-monitor" ;;
 	dns|dns-test|dns-monitor) echo "dns" ;;
@@ -343,11 +436,11 @@ update_package_feeds_once() {
 	pkg_mgr="$(detect_package_manager)"
 	case "$pkg_mgr" in
 	opkg)
-		log "Updating opkg package feeds"
+		log "Refreshing the opkg package catalog..."
 		opkg update
 		;;
 	apk)
-		log "Updating apk package indexes"
+		log "Refreshing the apk package catalog..."
 		apk update
 		;;
 	*)
@@ -370,12 +463,20 @@ resolve_installers() {
 }
 
 run_installers() {
+	installer_total=0
 	for installer in $INSTALLERS; do
-		log "Running $installer"
+		installer_total=$((installer_total + 1))
+	done
+	installer_number=0
+	for installer in $INSTALLERS; do
+		installer_number=$((installer_number + 1))
+		component_name="$(installer_label "$installer")"
+		log "[$installer_number/$installer_total] Installing $component_name..."
 		if ! OPENWALLA_PACKAGE_FEEDS_UPDATED=1 sh "$STANDALONE_DIR/$installer"; then
-			echo "[openwalla-setup] Installer failed: $installer" >&2
+			log "ERROR: $component_name could not be installed."
 			exit 1
 		fi
+		log "[$installer_number/$installer_total] $component_name finished."
 	done
 }
 
@@ -677,13 +778,18 @@ if [ "$ACTION" = "install" ]; then
 	resolve_installers
 fi
 
-log "Selected action: $ACTION"
-log "Selected features:$FEATURES"
+phase "Openwalla Router Setup"
+log "Started: $(date '+%Y-%m-%d %H:%M:%S %Z' 2>/dev/null || date)"
+log "Action: $ACTION"
+[ -n "${OPENWALLA_INSTALL_LOG:-}" ] && log "Install log: $OPENWALLA_INSTALL_LOG"
+log "Selected features:"
+for feature in $FEATURES; do
+	log "  - $(feature_label "$feature")"
+done
 if [ "$ACTION" = "install" ]; then
-	log "Installer order:$INSTALLERS"
 	case " $FEATURES " in
 	*" netify "*|*" conntrack "*)
-		log "WARNING: Flow collectors can be heavy. Routers with less than 512 MB RAM or fewer than 4 CPU cores may slow down or crash."
+		log "Note: Flow collectors can increase CPU and memory usage on smaller routers."
 		;;
 	esac
 fi
@@ -698,18 +804,27 @@ if [ "$(id -u)" != "0" ]; then
 fi
 
 if [ "$ACTION" = "uninstall" ]; then
+	phase "Removing Components"
 	run_uninstallers
+	log "Uninstall complete."
 	exit 0
 fi
 
+phase "Preparing Packages"
 update_package_feeds_once
+
+phase "Preparing Installers"
 load_component_version
 download_standalone_runtime
+
+phase "Installing Components"
 run_installers
 
+phase "Finalizing Setup"
 uci -q get openwalla.core >/dev/null 2>&1 || uci set openwalla.core='core'
 uci set openwalla.core.component_version="$OPENWALLA_COMPONENT_VERSION"
 uci commit openwalla
 
 log "Setup complete."
-log "Installed feature bundles:$FEATURES"
+log "Component version: $OPENWALLA_COMPONENT_VERSION"
+[ -n "${OPENWALLA_INSTALL_LOG:-}" ] && log "Saved install log: $OPENWALLA_INSTALL_LOG"
