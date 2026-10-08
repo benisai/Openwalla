@@ -170,6 +170,9 @@ if [ "$ACTION" = "update" ] && [ "$FAILED" -eq 0 ]; then
 		[ -x "/etc/init.d/$service" ] || continue
 		/etc/init.d/"$service" restart >/dev/null 2>&1 || true
 	done
+	if [ -x /usr/bin/openwalla-netify-collector ]; then
+		/usr/bin/openwalla-netify-collector --install-prune-cron >/dev/null 2>&1 || true
+	fi
 	migrate_speedtest_schedule
 	uci -q get openwalla.core >/dev/null 2>&1 || uci set openwalla.core='core'
 	uci set openwalla.core.component_version="$COMPONENT_VERSION"

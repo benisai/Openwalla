@@ -58,6 +58,7 @@ if [ -f "$NETIFYD_CONF" ]; then
 fi
 
 /usr/bin/openwalla-netify-collector --init-db || true
+/usr/bin/openwalla-netify-collector --install-prune-cron || true
 
 if ! have_cmd nc; then
 	log "WARNING: nc command not found; netify collector will not ingest flows."

@@ -16,6 +16,8 @@ DEFAULT_EXCLUDE_PROTOCOLS="MDNS,DNS,QUIC,DHCPv6,ICMP"
 RECONNECT_DELAY="3"
 LOG_FILE="/tmp/openwalla-netify-collector.log"
 FLOW_STATS_WORK_DIR="/tmp/openwalla-netify-stats-work"
+PRUNE_CRON_MARKER="# OPENWALLA_NETIFY_PRUNE"
+CRON_PATH="/etc/crontabs/root"
 
 NETIFY_HOST="$DEFAULT_HOST"
 NETIFY_PORT="$DEFAULT_PORT"
@@ -314,6 +316,52 @@ prune_db() {
 			END
 			FROM flow_raw
 		);"
+}
+
+reload_cron() {
+	if [ -x /etc/init.d/cron ]; then
+		/etc/init.d/cron enable >/dev/null 2>&1 || true
+		/etc/init.d/cron restart >/dev/null 2>&1 || /etc/init.d/cron start >/dev/null 2>&1 || true
+		return 0
+	fi
+	if [ -x /etc/init.d/crond ]; then
+		/etc/init.d/crond enable >/dev/null 2>&1 || true
+		/etc/init.d/crond restart >/dev/null 2>&1 || /etc/init.d/crond start >/dev/null 2>&1 || true
+		return 0
+	fi
+	killall -HUP crond 2>/dev/null || true
+}
+
+install_prune_cron() {
+	local enabled tmp
+	tmp="/tmp/.openwalla_netify_prune_cron.$$"
+	enabled="$(uci -q get openwalla.collector.enabled 2>/dev/null || echo 0)"
+	mkdir -p "$(dirname "$CRON_PATH")"
+	if [ -f "$CRON_PATH" ]; then
+		grep -v "$PRUNE_CRON_MARKER" "$CRON_PATH" >"$tmp" 2>/dev/null || : >"$tmp"
+	else
+		: >"$tmp"
+	fi
+	if [ "$enabled" = "1" ]; then
+		echo "0 0 * * * /usr/bin/openwalla-netify-collector --scheduled-prune $PRUNE_CRON_MARKER" >>"$tmp"
+	fi
+	cp "$tmp" "$CRON_PATH"
+	rm -f "$tmp"
+	reload_cron
+	if [ "$enabled" = "1" ]; then
+		log "installed daily Netify prune schedule at 00:00"
+	else
+		log "removed daily Netify prune schedule because the collector is disabled"
+	fi
+}
+
+scheduled_prune() {
+	log "starting scheduled Netify database prune"
+	[ -x /etc/init.d/openwalla-netify-collector ] && /etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || true
+	trap '[ -x /etc/init.d/openwalla-netify-collector ] && /etc/init.d/openwalla-netify-collector start >/dev/null 2>&1 || true' EXIT
+	refresh_runtime_config
+	prune_db
+	log "scheduled Netify database prune complete"
 }
 
 is_flow_event() {
@@ -704,8 +752,7 @@ insert_flow() {
 }
 
 consume_stream() {
-	local line counter
-	counter=0
+	local line
 
 	nc -w "$STREAM_TIMEOUT" "$NETIFY_HOST" "$NETIFY_PORT" | while IFS= read -r line; do
 		[ -n "$line" ] || continue
@@ -718,16 +765,11 @@ consume_stream() {
 		fi
 
 		insert_flow "$line" || continue
-		counter=$((counter + 1))
-		if [ $((counter % 200)) -eq 0 ]; then
-			prune_db || true
-		fi
 	done
 }
 
 run_forever() {
 	refresh_runtime_config
-	prune_db || true
 	local stats_pid
 	stats_pid=""
 	if [ "$FLOW_STATS_ENABLED" = "1" ]; then
@@ -747,7 +789,18 @@ run_forever() {
 
 main() {
 	init_logging
+	case "${1:-}" in
+		--install-prune-cron)
+			install_prune_cron
+			exit 0
+			;;
+	esac
+
 	require_dependencies
+	if [ "${1:-}" = "--scheduled-prune" ]; then
+		scheduled_prune
+		exit 0
+	fi
 	refresh_runtime_config
 
 	case "${1:-}" in
