@@ -8743,11 +8743,29 @@ done | sort -t "|" -k1,1nr | head -n ''' +
   Future<void> refreshDashboardSummaryCounts({BuildContext? context}) async {
     if (_reviewerModeEnabled) {
       if (_dashboardData != null) {
+        final selectedFlowProvider =
+            _dashboardPreferences.flowMode == DashboardFlowMode.simple
+            ? OpenwallaFlowProvider.conntrack
+            : OpenwallaFlowProvider.netify;
+        final flowSummary = selectedFlowProvider == OpenwallaFlowProvider.netify
+            ? const OpenwallaFlowSummary(
+                provider: OpenwallaFlowProvider.netify,
+                count: 315188,
+              )
+            : const OpenwallaFlowSummary(
+                provider: OpenwallaFlowProvider.conntrack,
+                count: 1704,
+              );
         _dashboardData = {
           ..._dashboardData!,
           'notificationCount': 2,
           'rulesCount':
               _mockFirewallRules().length + _mockPortForwards().length,
+          if (_dashboardPreferences.showFlowsCard) ...{
+            'flowProvider': flowSummary.provider,
+            'flowSummary': flowSummary,
+            'netifyFlowCount': flowSummary.count,
+          },
           '_lastUpdated': DateTime.now().millisecondsSinceEpoch,
         };
         notifyListeners();
@@ -8763,6 +8781,14 @@ done | sort -t "|" -k1,1nr | head -n ''' +
     final notificationCountFuture = fetchNotificationCount(context: context);
     final rulesCountFuture = fetchFirewallRuleCount();
     final deviceRecordsFuture = fetchDeviceRecords(context: context);
+    final flowSummaryFuture = _dashboardPreferences.showFlowsCard
+        ? fetchOpenwallaFlowSummary(
+            provider: _dashboardPreferences.flowMode == DashboardFlowMode.simple
+                ? OpenwallaFlowProvider.conntrack
+                : OpenwallaFlowProvider.netify,
+            context: context,
+          )
+        : Future<OpenwallaFlowSummary?>.value(null);
 
     try {
       final dhcpResult = await _apiService!.call(
@@ -8808,12 +8834,18 @@ done | sort -t "|" -k1,1nr | head -n ''' +
 
     final notificationCount = await notificationCountFuture;
     final rulesCount = await rulesCountFuture;
+    final flowSummary = await flowSummaryFuture;
     if (_dashboardData != null) {
       _dashboardData = {
         ..._dashboardData!,
         if (deviceCount != null) 'deviceCount': deviceCount,
         'notificationCount': notificationCount,
         'rulesCount': rulesCount,
+        if (flowSummary != null) ...{
+          'flowProvider': flowSummary.provider,
+          'flowSummary': flowSummary,
+          'netifyFlowCount': flowSummary.count,
+        },
         '_lastUpdated': DateTime.now().millisecondsSinceEpoch,
       };
       notifyListeners();
