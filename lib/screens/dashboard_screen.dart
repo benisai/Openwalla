@@ -1584,17 +1584,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     return Scaffold(
       appBar: LuciAppBar(
         centerTitle: true,
-        leading: IconButton(
-          tooltip: 'Refresh dashboard',
-          onPressed: _dashboardRefreshInFlight
-              ? null
-              : () => unawaited(_loadDashboardAndWarmStatistics(force: true)),
-          icon: _dashboardRefreshInFlight
-              ? const SizedBox.square(
-                  dimension: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.refresh_rounded),
+        leading: Transform.translate(
+          offset: const Offset(5, 0),
+          child: IconButton(
+            tooltip: 'Refresh dashboard',
+            onPressed: _dashboardRefreshInFlight
+                ? null
+                : () => unawaited(_loadDashboardAndWarmStatistics(force: true)),
+            icon: _dashboardRefreshInFlight
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh_rounded),
+          ),
         ),
         title: null, // Always use titleWidget now
         titleWidget: routers.isNotEmpty
@@ -1841,20 +1844,23 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
               )
             : _buildTitleWithTimestamp(headerText, appState),
         actions: [
-          IconButton(
-            tooltip: 'Notifications',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const NotificationsScreen(),
-                ),
-              );
-            },
-            icon: Icon(
-              Icons.notifications_none_rounded,
-              color: appState.hasUnseenNotifications
-                  ? Theme.of(context).colorScheme.error
-                  : Theme.of(context).colorScheme.onSurface,
+          Transform.translate(
+            offset: const Offset(-5, 0),
+            child: IconButton(
+              tooltip: 'Notifications',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const NotificationsScreen(),
+                  ),
+                );
+              },
+              icon: Icon(
+                Icons.notifications_none_rounded,
+                color: appState.hasUnseenNotifications
+                    ? Theme.of(context).colorScheme.error
+                    : Theme.of(context).colorScheme.onSurface,
+              ),
             ),
           ),
         ],
