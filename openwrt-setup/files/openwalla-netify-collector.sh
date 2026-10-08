@@ -10,6 +10,7 @@ DEFAULT_PORT="7150"
 DEFAULT_DB="/tmp/openwalla-netify.sqlite"
 DEFAULT_FLOW_STATS_DB="/tmp/openwalla-netify-flow-stats.sqlite"
 DEFAULT_RETENTION_ROWS="500000"
+DEFAULT_RETENTION_HOURS="24"
 DEFAULT_STREAM_TIMEOUT="45"
 DEFAULT_EXCLUDE_PROTOCOLS="MDNS,DNS,QUIC,DHCPv6,ICMP"
 RECONNECT_DELAY="3"
@@ -21,6 +22,7 @@ NETIFY_PORT="$DEFAULT_PORT"
 NETIFY_DB="$DEFAULT_DB"
 FLOW_STATS_DB="$DEFAULT_FLOW_STATS_DB"
 RETENTION_ROWS="$DEFAULT_RETENTION_ROWS"
+RETENTION_HOURS="$DEFAULT_RETENTION_HOURS"
 STREAM_TIMEOUT="$DEFAULT_STREAM_TIMEOUT"
 EXCLUDE_PROTOCOLS="$DEFAULT_EXCLUDE_PROTOCOLS"
 FLOW_STATS_ENABLED="0"
@@ -131,6 +133,10 @@ load_config() {
 		value="$(sanitize_text "$value")"
 		[ -n "$value" ] && RETENTION_ROWS="$value"
 
+		value="$(uci -q get openwalla.collector.retention_hours 2>/dev/null || true)"
+		value="$(sanitize_text "$value")"
+		[ -n "$value" ] && RETENTION_HOURS="$value"
+
 		# Backward compatibility with older key.
 		value="$(uci -q get openwalla.collector.max_lines 2>/dev/null || true)"
 		value="$(sanitize_text "$value")"
@@ -220,6 +226,11 @@ refresh_runtime_config() {
 	load_config
 	refresh_router_lan_ipv4s
 	RETENTION_ROWS="$(sanitize_int "$RETENTION_ROWS" "$DEFAULT_RETENTION_ROWS")"
+	RETENTION_HOURS="$(sanitize_int "$RETENTION_HOURS" "$DEFAULT_RETENTION_HOURS")"
+	case "$RETENTION_HOURS" in
+		24 | 48 | 72 | 96 | 120) ;;
+		*) RETENTION_HOURS="$DEFAULT_RETENTION_HOURS" ;;
+	esac
 	STREAM_TIMEOUT="$(sanitize_int "$STREAM_TIMEOUT" "$DEFAULT_STREAM_TIMEOUT")"
 	FLOW_STATS_POLL_SECONDS="$(sanitize_int "$FLOW_STATS_POLL_SECONDS" "5")"
 	[ "$FLOW_STATS_POLL_SECONDS" -lt 2 ] && FLOW_STATS_POLL_SECONDS=2
@@ -290,9 +301,12 @@ init_db() {
 }
 
 prune_db() {
-	local keep
+	local keep retention_seconds
 	keep="$(sanitize_int "$RETENTION_ROWS" "$DEFAULT_RETENTION_ROWS")"
+	retention_seconds=$((RETENTION_HOURS * 3600))
 	sql_exec "DELETE FROM flow_raw
+		WHERE timeinsert < (strftime('%s','now') - $retention_seconds);
+		DELETE FROM flow_raw
 		WHERE id <= (
 			SELECT CASE
 				WHEN MAX(id) > $keep THEN MAX(id) - $keep
@@ -713,6 +727,7 @@ consume_stream() {
 
 run_forever() {
 	refresh_runtime_config
+	prune_db || true
 	local stats_pid
 	stats_pid=""
 	if [ "$FLOW_STATS_ENABLED" = "1" ]; then
@@ -720,7 +735,7 @@ run_forever() {
 		stats_pid=$!
 		trap '[ -n "$stats_pid" ] && kill "$stats_pid" 2>/dev/null || true; rm -rf "$FLOW_STATS_WORK_DIR.$$"; exit 0' INT TERM EXIT
 	fi
-	log "starting netify collector host=$NETIFY_HOST port=$NETIFY_PORT db=$NETIFY_DB timeout=${STREAM_TIMEOUT}s flow_stats=$FLOW_STATS_ENABLED flow_stats_db=$FLOW_STATS_DB"
+	log "starting netify collector host=$NETIFY_HOST port=$NETIFY_PORT db=$NETIFY_DB timeout=${STREAM_TIMEOUT}s retention=${RETENTION_HOURS}h flow_stats=$FLOW_STATS_ENABLED flow_stats_db=$FLOW_STATS_DB"
 	while true; do
 		refresh_runtime_config
 		log "connecting to netify stream at $NETIFY_HOST:$NETIFY_PORT"

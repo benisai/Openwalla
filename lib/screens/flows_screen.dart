@@ -432,40 +432,66 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
     if (!mounted) return;
     var enabled = settings.enabled;
     var pollSeconds = settings.pollSeconds;
+    var retentionHours = settings.retentionHours;
     final saved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('Flow Settings'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SwitchListTile.adaptive(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Usage statistics'),
-                subtitle: const Text('Higher router CPU usage'),
-                value: enabled,
-                onChanged: (value) => setDialogState(() => enabled = value),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Expanded(child: Text('Polling interval')),
-                  Text('$pollSeconds seconds'),
-                ],
-              ),
-              Slider(
-                min: 2,
-                max: 10,
-                divisions: 8,
-                value: pollSeconds.toDouble(),
-                onChanged: enabled
-                    ? (value) => setDialogState(
-                        () => pollSeconds = value.round().clamp(2, 10),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Usage statistics'),
+                  subtitle: const Text('Higher router CPU usage'),
+                  value: enabled,
+                  onChanged: (value) => setDialogState(() => enabled = value),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Expanded(child: Text('Polling interval')),
+                    Text('$pollSeconds seconds'),
+                  ],
+                ),
+                Slider(
+                  min: 2,
+                  max: 10,
+                  divisions: 8,
+                  value: pollSeconds.toDouble(),
+                  onChanged: enabled
+                      ? (value) => setDialogState(
+                          () => pollSeconds = value.round().clamp(2, 10),
+                        )
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<int>(
+                  initialValue: retentionHours,
+                  decoration: const InputDecoration(
+                    labelText: 'Keep flow history',
+                    helperText: 'Older detailed flow records are deleted',
+                    prefixIcon: Icon(Icons.history_rounded),
+                  ),
+                  items: const [24, 48, 72, 96, 120]
+                      .map(
+                        (hours) => DropdownMenuItem<int>(
+                          value: hours,
+                          child: Text(
+                            hours == 24 ? '1 day' : '${hours ~/ 24} days',
+                          ),
+                        ),
                       )
-                    : null,
-              ),
-            ],
+                      .toList(),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setDialogState(() => retentionHours = value);
+                  },
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -483,7 +509,11 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
     if (saved != true || !mounted) return;
     try {
       await appState.saveFlowStatsSettings(
-        FlowStatsSettings(enabled: enabled, pollSeconds: pollSeconds),
+        FlowStatsSettings(
+          enabled: enabled,
+          pollSeconds: pollSeconds,
+          retentionHours: retentionHours,
+        ),
         context: context,
       );
       if (!mounted) return;

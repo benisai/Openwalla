@@ -1618,8 +1618,13 @@ enum OpenwallaFlowProvider { none, netify, conntrack }
 class FlowStatsSettings {
   final bool enabled;
   final int pollSeconds;
+  final int retentionHours;
 
-  const FlowStatsSettings({required this.enabled, required this.pollSeconds});
+  const FlowStatsSettings({
+    required this.enabled,
+    required this.pollSeconds,
+    required this.retentionHours,
+  });
 }
 
 class FlowStatsDeviceUsage {
@@ -2859,11 +2864,19 @@ class AppState extends ChangeNotifier {
     BuildContext? context,
   }) async {
     if (_reviewerModeEnabled) {
-      return const FlowStatsSettings(enabled: false, pollSeconds: 5);
+      return const FlowStatsSettings(
+        enabled: false,
+        pollSeconds: 5,
+        retentionHours: 24,
+      );
     }
     try {
       final values = await _fetchOpenwallaUciValues(context: context);
       final section = values is Map ? values['flow_stats'] : null;
+      final collector = values is Map ? values['collector'] : null;
+      final parsedRetentionHours = int.tryParse(
+        collector is Map ? collector['retention_hours']?.toString() ?? '' : '',
+      );
       return FlowStatsSettings(
         enabled: section is Map && section['enabled']?.toString() == '1',
         pollSeconds:
@@ -2872,11 +2885,19 @@ class AppState extends ChangeNotifier {
                     ) ??
                     5)
                 .clamp(2, 10),
+        retentionHours:
+            const {24, 48, 72, 96, 120}.contains(parsedRetentionHours)
+            ? parsedRetentionHours!
+            : 24,
       );
     } catch (e, stack) {
       Logger.warning('Failed to fetch flow stats settings: $e');
       Logger.debug('Flow stats settings stack: $stack');
-      return const FlowStatsSettings(enabled: false, pollSeconds: 5);
+      return const FlowStatsSettings(
+        enabled: false,
+        pollSeconds: 5,
+        retentionHours: 24,
+      );
     }
   }
 
@@ -2893,17 +2914,25 @@ class AppState extends ChangeNotifier {
 
     final expectedEnabled = settings.enabled ? '1' : '0';
     final expectedPoll = settings.pollSeconds.clamp(2, 10).toString();
+    final expectedRetentionHours =
+        const {24, 48, 72, 96, 120}.contains(settings.retentionHours)
+        ? settings.retentionHours.toString()
+        : '24';
     final saveOutput = await runRouterSetupCommand(
       "uci -q get openwalla.flow_stats >/dev/null 2>&1 || "
       "uci set openwalla.flow_stats=flow_stats; "
+      "uci -q get openwalla.collector >/dev/null 2>&1 || "
+      "uci set openwalla.collector=netify; "
       "uci set openwalla.flow_stats.enabled='$expectedEnabled' && "
       "uci set openwalla.flow_stats.db_path='/tmp/openwalla-netify-flow-stats.sqlite' && "
       "uci set openwalla.flow_stats.poll='$expectedPoll' && "
       "uci set openwalla.flow_stats.bucket_seconds='300' && "
       "uci set openwalla.flow_stats.retention_seconds='2592000' && "
+      "uci set openwalla.collector.retention_hours='$expectedRetentionHours' && "
       "uci commit openwalla && "
       "[ \"\$(uci -q get openwalla.flow_stats.enabled)\" = '$expectedEnabled' ] && "
       "[ \"\$(uci -q get openwalla.flow_stats.poll)\" = '$expectedPoll' ] && "
+      "[ \"\$(uci -q get openwalla.collector.retention_hours)\" = '$expectedRetentionHours' ] && "
       "echo FLOW_STATS_SAVED",
       context: context,
     );
@@ -2913,7 +2942,8 @@ class AppState extends ChangeNotifier {
 
     final saved = await fetchFlowStatsSettings();
     if (saved.enabled != settings.enabled ||
-        saved.pollSeconds != int.parse(expectedPoll)) {
+        saved.pollSeconds != int.parse(expectedPoll) ||
+        saved.retentionHours != int.parse(expectedRetentionHours)) {
       throw StateError('Flow usage settings could not be verified');
     }
 
