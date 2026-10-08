@@ -8059,6 +8059,41 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         'ifup "\$NET" >/dev/null 2>&1 || true; '
         'echo "OPENWALLA_REPEATER_CONFIGURED \$SSID \$NET"';
 
+    if (router.username.trim().isNotEmpty && router.password.isNotEmpty) {
+      try {
+        final sshResult = await SshService().runCommand(
+          host: router.ipAddress,
+          username: router.username,
+          password: router.password,
+          command: command,
+          timeout: const Duration(seconds: 60),
+        );
+        final sshOutput = sshResult.output.trim();
+        if ((sshResult.exitCode == null || sshResult.exitCode == 0) &&
+            sshOutput.contains('OPENWALLA_REPEATER_CONFIGURED')) {
+          try {
+            await fetchDashboardData();
+          } catch (error) {
+            Logger.debug(
+              'Dashboard refresh is waiting for the SSH repeater reload: '
+              '$error',
+            );
+          }
+          return;
+        }
+        Logger.warning(
+          'SSH repeater setup was not confirmed '
+          '(exit ${sshResult.exitCode ?? 'unknown'}): $sshOutput',
+        );
+      } catch (error, stack) {
+        Logger.warning(
+          'SSH repeater setup was unavailable; trying the Openwalla RPC '
+          'command: $error',
+        );
+        Logger.debug('SSH repeater setup stack: $stack');
+      }
+    }
+
     final result = await _apiService!.call(
       router.ipAddress,
       sysauth,
