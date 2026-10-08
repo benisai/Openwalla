@@ -114,7 +114,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
     ].join(' && ');
     return '$preparation && { '
         'echo "[openwalla-app] Installer started."; '
-        'sh ./setup-openwrt-router.sh $features & OPENWALLA_SETUP_PID=\$!; '
+        'sh ./setup-openwrt-router.sh --force $features & OPENWALLA_SETUP_PID=\$!; '
         'while kill -0 "\$OPENWALLA_SETUP_PID" 2>/dev/null; do '
         'sleep 15; '
         'if kill -0 "\$OPENWALLA_SETUP_PID" 2>/dev/null; then '

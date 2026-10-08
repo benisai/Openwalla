@@ -2086,6 +2086,7 @@ class AppState extends ChangeNotifier {
 
   // Dashboard preferences state
   DashboardPreferences _dashboardPreferences = DashboardPreferences();
+  bool _dashboardPreferencesLoadedFromLocal = false;
   DashboardPreferences get dashboardPreferences => _dashboardPreferences;
   StatisticsPreloadData? _statisticsPreloadData;
   Future<StatisticsPreloadData>? _statisticsPreloadFuture;
@@ -2115,10 +2116,26 @@ class AppState extends ChangeNotifier {
     if (_reviewerModeEnabled) return false;
     final routerId = _routerService?.selectedRouter?.id;
     if (routerId == null || routerId.isEmpty) return false;
-    return await _secureStorageService.readValue(
-          _welcomeSetupSeenKey(routerId),
-        ) !=
+    final locallySeen =
+        await _secureStorageService.readValue(_welcomeSetupSeenKey(routerId)) ==
         'true';
+    if (locallySeen) return false;
+
+    try {
+      final values = await _fetchOpenwallaUciValues();
+      final core = values?['core'];
+      final setupComplete =
+          core is Map &&
+          (core['setup_complete']?.toString() == '1' ||
+              (core['component_version']?.toString().isNotEmpty ?? false));
+      if (setupComplete) {
+        await markWelcomeSetupSeen();
+        return false;
+      }
+    } catch (error) {
+      Logger.debug('Router setup state check failed: $error');
+    }
+    return true;
   }
 
   Future<void> markWelcomeSetupSeen() async {
@@ -2347,13 +2364,117 @@ class AppState extends ChangeNotifier {
       }
       if (json != null && json.isNotEmpty) {
         _dashboardPreferences = DashboardPreferences.fromJson(jsonDecode(json));
+        _dashboardPreferencesLoadedFromLocal = true;
       } else {
         _dashboardPreferences = DashboardPreferences();
+        _dashboardPreferencesLoadedFromLocal = false;
       }
       notifyListeners();
     } catch (e, stack) {
       Logger.exception('Failed to load dashboard preferences', e, stack);
       _dashboardPreferences = DashboardPreferences();
+      _dashboardPreferencesLoadedFromLocal = false;
+    }
+  }
+
+  Future<void> _restoreDashboardPreferencesFromRouter() async {
+    if (_reviewerModeEnabled) return;
+    try {
+      final values = await _fetchOpenwallaUciValues();
+      if (values == null) return;
+      final dashboard = values['dashboard'];
+      final encoded = dashboard is Map
+          ? dashboard['app_preferences']?.toString() ?? ''
+          : '';
+      DashboardPreferences? restored;
+      if (encoded.isNotEmpty) {
+        final decoded = utf8.decode(base64Decode(encoded));
+        final json = jsonDecode(decoded);
+        if (json is Map<String, dynamic>) {
+          restored = DashboardPreferences.fromJson(json);
+        } else if (json is Map) {
+          restored = DashboardPreferences.fromJson(
+            Map<String, dynamic>.from(json),
+          );
+        }
+      }
+
+      if (restored == null) {
+        if (_dashboardPreferencesLoadedFromLocal) {
+          await _saveDashboardPreferencesToRouter(_dashboardPreferences);
+          return;
+        }
+        final core = values['core'];
+        final setupComplete =
+            core is Map &&
+            (core['setup_complete']?.toString() == '1' ||
+                (core['component_version']?.toString().isNotEmpty ?? false));
+        if (!setupComplete) return;
+        final products = values['products'];
+        bool installed(String name) =>
+            products is Map && products[name]?.toString() == '1';
+        final hasNetify =
+            installed('netify') ||
+            (values['features'] is Map &&
+                (values['features'] as Map)['netify']?.toString() == '1');
+        final hasConntrack = installed('conntrack');
+        restored = _dashboardPreferences.copyWith(
+          showNetworkPerformanceCard:
+              installed('network_monitor') || values['ping_monitor'] is Map,
+          showStatisticsTab: installed('usage') || dashboard is Map,
+          showFlowsCard: hasNetify || hasConntrack,
+          flowMode: hasNetify
+              ? DashboardFlowMode.detailed
+              : hasConntrack
+              ? DashboardFlowMode.simple
+              : _dashboardPreferences.flowMode,
+        );
+      }
+
+      _dashboardPreferences = restored;
+      _dashboardPreferencesLoadedFromLocal = true;
+      final routerId = _routerService?.selectedRouter?.id;
+      if (routerId != null) {
+        await _secureStorageService.writeValue(
+          'dashboard_preferences:$routerId',
+          jsonEncode(restored.toJson()),
+        );
+      }
+      await _saveDashboardPreferencesToRouter(restored);
+      notifyListeners();
+    } catch (error, stack) {
+      Logger.warning('Could not restore router dashboard profile: $error');
+      Logger.debug('Router dashboard profile restore stack: $stack');
+    }
+  }
+
+  Future<void> _saveDashboardPreferencesToRouter(
+    DashboardPreferences prefs,
+  ) async {
+    if (_reviewerModeEnabled) return;
+    final router = _routerService?.selectedRouter;
+    final sysauth = _authService?.sysauth;
+    if (router == null || sysauth == null || _apiService == null) return;
+    final encoded = base64Encode(utf8.encode(jsonEncode(prefs.toJson())));
+    final setResult = await _apiService!.uciSet(
+      router.ipAddress,
+      sysauth,
+      router.useHttps,
+      config: 'openwalla',
+      section: 'dashboard',
+      values: {'app_preferences_schema': '1', 'app_preferences': encoded},
+    );
+    if (!_rpcCallSucceeded(setResult)) {
+      throw StateError('Router rejected the dashboard profile');
+    }
+    final commitResult = await _apiService!.uciCommit(
+      router.ipAddress,
+      sysauth,
+      router.useHttps,
+      config: 'openwalla',
+    );
+    if (!_rpcCallSucceeded(commitResult)) {
+      throw StateError('Router did not commit the dashboard profile');
     }
   }
 
@@ -2362,11 +2483,18 @@ class AppState extends ChangeNotifier {
       final previousRefreshSeconds =
           _dashboardPreferences.liveThroughputRefreshSeconds;
       _dashboardPreferences = prefs;
+      _dashboardPreferencesLoadedFromLocal = true;
       final routerId = _routerService?.selectedRouter?.id;
       final key = routerId != null
           ? 'dashboard_preferences:$routerId'
           : 'dashboard_preferences';
       await _secureStorageService.writeValue(key, jsonEncode(prefs.toJson()));
+      try {
+        await _saveDashboardPreferencesToRouter(prefs);
+      } catch (error, stack) {
+        Logger.warning('Could not sync dashboard profile to router: $error');
+        Logger.debug('Dashboard profile sync stack: $stack');
+      }
       if (previousRefreshSeconds != prefs.liveThroughputRefreshSeconds &&
           _throughputTimer != null) {
         _startThroughputTimer();
@@ -3892,6 +4020,7 @@ class AppState extends ChangeNotifier {
       _isClientsLoading = false;
       _parentalPausedMacs.clear();
       _dashboardPreferences = DashboardPreferences();
+      _dashboardPreferencesLoadedFromLocal = false;
       _hasUnseenNotifications = false;
     }
 
@@ -4015,6 +4144,7 @@ class AppState extends ChangeNotifier {
             );
           }
         }
+        await _restoreDashboardPreferencesFromRouter();
         await fetchDashboardData();
         _startThroughputTimer();
         warmStatisticsData();
@@ -4081,6 +4211,7 @@ class AppState extends ChangeNotifier {
         await updateRouter(router.copyWith(useHttps: actualUseHttps));
       }
 
+      await _restoreDashboardPreferencesFromRouter();
       await fetchDashboardData();
       warmStatisticsData();
     } catch (e) {

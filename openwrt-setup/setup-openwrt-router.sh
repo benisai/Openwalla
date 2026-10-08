@@ -119,6 +119,7 @@ FEATURES=""
 INSTALLERS=""
 INSTALL_PROFILE=""
 DRY_RUN=0
+FORCE_REINSTALL=0
 USED_FEATURE_ARGS=0
 WITH_ADBLOCK=""
 WITH_PBR=""
@@ -186,6 +187,7 @@ Compatibility options:
   --with-pbr          Add PBR to the selected profile/group
   --without-pbr       Remove PBR from the selected profile/group
   --dry-run           Show what would run without installing
+  --force             Reinstall packages and reapply selected components
   --help              Show this help
 
 Environment:
@@ -472,7 +474,7 @@ run_installers() {
 		installer_number=$((installer_number + 1))
 		component_name="$(installer_label "$installer")"
 		log "[$installer_number/$installer_total] Installing $component_name..."
-		if ! OPENWALLA_PACKAGE_FEEDS_UPDATED=1 sh "$STANDALONE_DIR/$installer"; then
+		if ! OPENWALLA_PACKAGE_FEEDS_UPDATED=1 OPENWALLA_FORCE_REINSTALL="$FORCE_REINSTALL" sh "$STANDALONE_DIR/$installer"; then
 			log "ERROR: $component_name could not be installed."
 			exit 1
 		fi
@@ -689,6 +691,9 @@ uninstall_feature() {
 		return 1
 		;;
 	esac
+	product_key="$(printf '%s' "$feature" | tr '-' '_')"
+	uci -q get openwalla.products >/dev/null 2>&1 || uci set openwalla.products='products'
+	uci set "openwalla.products.$product_key=0"
 	uci commit openwalla >/dev/null 2>&1 || true
 }
 
@@ -696,6 +701,11 @@ run_uninstallers() {
 	for feature in $FEATURES; do
 		uninstall_feature "$feature"
 	done
+	if ! uci -q show openwalla.products 2>/dev/null | grep -q "='1'"; then
+		uci -q get openwalla.core >/dev/null 2>&1 || uci set openwalla.core='core'
+		uci set openwalla.core.setup_complete='0'
+		uci commit openwalla >/dev/null 2>&1 || true
+	fi
 	log "Uninstall complete."
 }
 
@@ -727,6 +737,9 @@ while [ "$#" -gt 0 ]; do
 		;;
 	--dry-run)
 		DRY_RUN=1
+		;;
+	--force)
+		FORCE_REINSTALL=1
 		;;
 	--help|-h)
 		usage
@@ -782,6 +795,7 @@ fi
 phase "Openwalla Router Setup"
 log "Started: $(date '+%Y-%m-%d %H:%M:%S %Z' 2>/dev/null || date)"
 log "Action: $ACTION"
+[ "$FORCE_REINSTALL" = "1" ] && log "Mode: force reinstall"
 [ -n "${OPENWALLA_INSTALL_LOG:-}" ] && log "Install log: $OPENWALLA_INSTALL_LOG"
 log "Selected features:"
 for feature in $FEATURES; do
@@ -823,7 +837,16 @@ run_installers
 
 phase "Finalizing Setup"
 uci -q get openwalla.core >/dev/null 2>&1 || uci set openwalla.core='core'
+uci -q get openwalla.products >/dev/null 2>&1 || uci set openwalla.products='products'
 uci set openwalla.core.component_version="$OPENWALLA_COMPONENT_VERSION"
+uci set openwalla.core.setup_complete='1'
+uci set openwalla.core.profile_schema='1'
+uci set openwalla.core.last_install_epoch="$(date +%s)"
+uci set openwalla.products.schema_version='1'
+for feature in $FEATURES; do
+	product_key="$(printf '%s' "$feature" | tr '-' '_')"
+	uci set "openwalla.products.$product_key=1"
+done
 uci commit openwalla
 
 log "Setup complete."

@@ -111,6 +111,11 @@ install_pkg_if_available() {
 	case "$PKG_MGR" in
 	opkg)
 		if opkg list-installed | grep -q "^$pkg -"; then
+			if [ "${OPENWALLA_FORCE_REINSTALL:-0}" = "1" ]; then
+				opkg install --force-reinstall "$pkg" && log "Reinstalled package: $pkg" && return 0
+				log "Failed to reinstall package: $pkg"
+				return 1
+			fi
 			log "Package already installed: $pkg"
 			return 0
 		fi
@@ -124,6 +129,11 @@ install_pkg_if_available() {
 		;;
 	apk)
 		if apk info -e "$pkg" >/dev/null 2>&1; then
+			if [ "${OPENWALLA_FORCE_REINSTALL:-0}" = "1" ]; then
+				apk fix "$pkg" && log "Reinstalled package: $pkg" && return 0
+				log "Failed to reinstall package: $pkg"
+				return 1
+			fi
 			log "Package already installed: $pkg"
 			return 0
 		fi
