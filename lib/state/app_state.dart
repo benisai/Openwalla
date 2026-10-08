@@ -6207,7 +6207,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       throw StateError('Unable to create port forward section');
     }
 
-    final setResult = await _apiService!.uciSet(
+    await _apiService!.uciSet(
       router.ipAddress,
       sysauth,
       router.useHttps,
@@ -6224,19 +6224,13 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         'target': 'DNAT',
       },
     );
-    if (!_rpcCallSucceeded(setResult)) {
-      throw StateError('The router rejected the new port forward.');
-    }
-    final commitResult = await _apiService!.uciCommit(
+    await _apiService!.uciCommit(
       router.ipAddress,
       sysauth,
       router.useHttps,
       config: 'firewall',
     );
-    if (!_rpcCallSucceeded(commitResult)) {
-      throw StateError('The router could not commit the new port forward.');
-    }
-    await _applyFirewallChangesNativeFirst(router, sysauth);
+    await _reloadFirewall(router, sysauth);
     notifyListeners();
   }
 
@@ -6261,7 +6255,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       throw StateError('No selected router connection is available');
     }
 
-    final setResult = await _apiService!.uciSet(
+    await _apiService!.uciSet(
       router.ipAddress,
       sysauth,
       router.useHttps,
@@ -6278,19 +6272,13 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         'target': 'DNAT',
       },
     );
-    if (!_rpcCallSucceeded(setResult)) {
-      throw StateError('The router rejected the port forward update.');
-    }
-    final commitResult = await _apiService!.uciCommit(
+    await _apiService!.uciCommit(
       router.ipAddress,
       sysauth,
       router.useHttps,
       config: 'firewall',
     );
-    if (!_rpcCallSucceeded(commitResult)) {
-      throw StateError('The router could not commit the port forward update.');
-    }
-    await _applyFirewallChangesNativeFirst(router, sysauth);
+    await _reloadFirewall(router, sysauth);
     notifyListeners();
   }
 
@@ -6306,7 +6294,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       throw StateError('No selected router connection is available');
     }
 
-    final deleteResult = await _apiService!.call(
+    await _apiService!.call(
       router.ipAddress,
       sysauth,
       router.useHttps,
@@ -6314,21 +6302,13 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       method: 'delete',
       params: {'config': 'firewall', 'section': forward.section},
     );
-    if (!_rpcCallSucceeded(deleteResult)) {
-      throw StateError('The router rejected the port forward deletion.');
-    }
-    final commitResult = await _apiService!.uciCommit(
+    await _apiService!.uciCommit(
       router.ipAddress,
       sysauth,
       router.useHttps,
       config: 'firewall',
     );
-    if (!_rpcCallSucceeded(commitResult)) {
-      throw StateError(
-        'The router could not commit the port forward deletion.',
-      );
-    }
-    await _applyFirewallChangesNativeFirst(router, sysauth);
+    await _reloadFirewall(router, sysauth);
     notifyListeners();
   }
 
@@ -6632,50 +6612,14 @@ done | sort -t "|" -k1,1nr | head -n ''' +
     notifyListeners();
   }
 
-  Future<void> _applyFirewallChangesNativeFirst(
-    model.Router router,
-    String sysauth,
-  ) async {
-    try {
-      final applyResult = await _apiService!.call(
-        router.ipAddress,
-        sysauth,
-        router.useHttps,
-        object: 'uci',
-        method: 'apply',
-        params: const {'rollback': false},
-      );
-      if (_rpcCallSucceeded(applyResult)) return;
-      Logger.warning(
-        'LuCI firewall apply was rejected; falling forward to the '
-        'Openwalla firewall reload: $applyResult',
-      );
-    } catch (error, stack) {
-      Logger.warning(
-        'LuCI firewall apply was unavailable; falling forward to the '
-        'Openwalla firewall reload: $error',
-      );
-      Logger.debug('LuCI firewall apply stack: $stack');
-    }
-
-    final reloaded = await _reloadFirewall(router, sysauth);
-    if (!reloaded) {
-      throw StateError(
-        'The firewall changes were saved, but the router could not apply '
-        'them. Install the Openwalla RPC permissions and try again.',
-      );
-    }
-  }
-
-  Future<bool> _reloadFirewall(model.Router router, String sysauth) async {
-    final result = await _apiService!.systemExec(
+  Future<void> _reloadFirewall(model.Router router, String sysauth) async {
+    await _apiService!.systemExec(
       router.ipAddress,
       sysauth,
       router.useHttps,
       command:
           '/etc/init.d/firewall reload 2>/dev/null || /etc/init.d/firewall restart 2>/dev/null || true',
     );
-    return _rpcCallSucceeded(result);
   }
 
   List<OpenwrtStaticRoute> _mockStaticRoutes() {
@@ -7972,40 +7916,6 @@ done | sort -t "|" -k1,1nr | head -n ''' +
     final staSection =
         'owrt_sta_${radioDevice.replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_')}';
     final bssid = network.bssid.trim();
-
-    var configuredWithLuci = false;
-    try {
-      await _connectWirelessWwanWithLuciRpc(
-        router: router,
-        sysauth: sysauth,
-        radioDevice: radioDevice,
-        wwanName: wwanName,
-        staSection: staSection,
-        ssid: cleanSsid,
-        encryption: encryption,
-        password: password,
-        bssid: bssid,
-        context: context,
-      );
-      configuredWithLuci = true;
-    } catch (error, stack) {
-      Logger.warning(
-        'LuCI repeater setup was unavailable; falling forward to the '
-        'Openwalla setup command: $error',
-      );
-      Logger.debug('LuCI repeater setup stack: $stack');
-    }
-    if (configuredWithLuci) {
-      try {
-        await fetchDashboardData();
-      } catch (error) {
-        Logger.debug(
-          'Dashboard refresh is waiting for the repeater reload: $error',
-        );
-      }
-      return;
-    }
-
     final command =
         'RADIO=${_shellQuote(radioDevice)}; '
         'NET=${_shellQuote(wwanName)}; '
@@ -8058,7 +7968,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         'command': '/bin/sh',
         'params': ['-c', command],
       },
-      context: context?.mounted == true ? context : null,
+      context: context,
       receiveTimeout: const Duration(seconds: 60),
     );
     if (!_rpcCallSucceeded(result)) {
@@ -8079,225 +7989,6 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       );
     }
     await fetchDashboardData();
-  }
-
-  Future<void> _connectWirelessWwanWithLuciRpc({
-    required model.Router router,
-    required String sysauth,
-    required String radioDevice,
-    required String wwanName,
-    required String staSection,
-    required String ssid,
-    required String encryption,
-    required String password,
-    required String bssid,
-    BuildContext? context,
-  }) async {
-    void requireSuccess(dynamic result, String message) {
-      if (!_rpcCallSucceeded(result)) throw StateError(message);
-    }
-
-    final wirelessResult = await _apiService!.call(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      object: 'uci',
-      method: 'get',
-      params: const {'config': 'wireless'},
-      context: context,
-    );
-    requireSuccess(
-      wirelessResult,
-      'The router did not allow the wireless configuration to be read.',
-    );
-    final wirelessValues = _extractUciValues(wirelessResult);
-    final radioValues = wirelessValues[radioDevice];
-    if (radioValues?['.type']?.toString() != 'wifi-device') {
-      throw StateError('Wireless radio not found: $radioDevice');
-    }
-    if (radioValues?['disabled']?.toString() == '1') {
-      throw StateError(
-        'Enable $radioDevice before joining another Wi-Fi network.',
-      );
-    }
-
-    final firewallResult = await _apiService!.call(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      object: 'uci',
-      method: 'get',
-      params: const {'config': 'firewall'},
-      context: context?.mounted == true ? context : null,
-    );
-    requireSuccess(
-      firewallResult,
-      'The router did not allow the firewall configuration to be read.',
-    );
-    final firewallValues = _extractUciValues(firewallResult);
-    String? wanZoneSection;
-    List<String> wanNetworks = const [];
-    for (final entry in firewallValues.entries) {
-      final values = entry.value;
-      if (values['.type']?.toString() != 'zone' ||
-          values['name']?.toString() != 'wan') {
-        continue;
-      }
-      wanZoneSection = entry.key;
-      final rawNetworks = values['network'];
-      wanNetworks = rawNetworks is List
-          ? rawNetworks.map((value) => value.toString()).toList()
-          : rawNetworks
-                    ?.toString()
-                    .split(RegExp(r'\s+'))
-                    .where((value) => value.isNotEmpty)
-                    .toList() ??
-                const [];
-      break;
-    }
-
-    final networkSetResult = await _apiService!.call(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      object: 'uci',
-      method: 'set',
-      params: {
-        'config': 'network',
-        'section': wwanName,
-        'type': 'interface',
-        'values': const {'proto': 'dhcp'},
-      },
-      context: context?.mounted == true ? context : null,
-    );
-    requireSuccess(
-      networkSetResult,
-      'The router rejected the repeater network configuration.',
-    );
-
-    if (wanZoneSection != null && !wanNetworks.contains(wwanName)) {
-      final firewallSetResult = await _apiService!.call(
-        router.ipAddress,
-        sysauth,
-        router.useHttps,
-        object: 'uci',
-        method: 'set',
-        params: {
-          'config': 'firewall',
-          'section': wanZoneSection,
-          'values': {
-            'network': [...wanNetworks, wwanName],
-          },
-        },
-        context: context?.mounted == true ? context : null,
-      );
-      requireSuccess(
-        firewallSetResult,
-        'The router rejected the repeater firewall configuration.',
-      );
-    }
-
-    if (wirelessValues.containsKey(staSection)) {
-      final deleteResult = await _apiService!.call(
-        router.ipAddress,
-        sysauth,
-        router.useHttps,
-        object: 'uci',
-        method: 'delete',
-        params: {'config': 'wireless', 'section': staSection},
-        context: context?.mounted == true ? context : null,
-      );
-      requireSuccess(
-        deleteResult,
-        'The router could not replace the existing repeater connection.',
-      );
-    }
-
-    final wirelessSetResult = await _apiService!.call(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      object: 'uci',
-      method: 'set',
-      params: {
-        'config': 'wireless',
-        'section': staSection,
-        'type': 'wifi-iface',
-        'values': {
-          'device': radioDevice,
-          'mode': 'sta',
-          'network': wwanName,
-          'ssid': ssid,
-          'encryption': encryption,
-          if (encryption != 'none' && encryption != 'owe') 'key': password,
-          if (bssid.isNotEmpty) 'bssid': bssid,
-        },
-      },
-      context: context?.mounted == true ? context : null,
-    );
-    requireSuccess(
-      wirelessSetResult,
-      'The router rejected the repeater Wi-Fi configuration.',
-    );
-
-    for (final config in [
-      'network',
-      if (wanZoneSection != null) 'firewall',
-      'wireless',
-    ]) {
-      final commitResult = await _apiService!.uciCommit(
-        router.ipAddress,
-        sysauth,
-        router.useHttps,
-        config: config,
-        context: context?.mounted == true ? context : null,
-      );
-      requireSuccess(
-        commitResult,
-        'The router could not commit the $config configuration.',
-      );
-    }
-
-    try {
-      final applyResult = await _apiService!.call(
-        router.ipAddress,
-        sysauth,
-        router.useHttps,
-        object: 'uci',
-        method: 'apply',
-        params: const {'rollback': false},
-        context: context?.mounted == true ? context : null,
-        receiveTimeout: const Duration(seconds: 30),
-      );
-      requireSuccess(
-        applyResult,
-        'The router could not apply the repeater configuration.',
-      );
-    } on DioException catch (error, stack) {
-      final connectionInterrupted =
-          error.response == null &&
-          (error.type == DioExceptionType.connectionError ||
-              error.type == DioExceptionType.receiveTimeout ||
-              error.type == DioExceptionType.unknown);
-      if (!connectionInterrupted) rethrow;
-      Logger.info('Repeater apply interrupted the router connection: $error');
-      Logger.debug('Repeater apply connection stack: $stack');
-      return;
-    }
-
-    try {
-      await _apiService!.call(
-        router.ipAddress,
-        sysauth,
-        router.useHttps,
-        object: 'network.interface.$wwanName',
-        method: 'up',
-        params: const {},
-        context: context?.mounted == true ? context : null,
-      );
-    } catch (error) {
-      Logger.debug('Optional $wwanName interface start failed: $error');
-    }
   }
 
   Future<void> saveWirelessNetworkConfig(
