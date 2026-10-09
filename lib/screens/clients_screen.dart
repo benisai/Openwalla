@@ -23,6 +23,8 @@ class ClientsScreen extends ConsumerStatefulWidget {
 
 enum ClientFilter { online, blocked, offline }
 
+enum _DeviceSort { hostname, ipAddress }
+
 enum _DeviceRemovalAction { hide, delete }
 
 class _DeviceIconOption {
@@ -74,6 +76,7 @@ IconData _clientIconData(Client client) {
 
 class _ClientsScreenState extends ConsumerState<ClientsScreen> {
   String _searchQuery = '';
+  _DeviceSort _deviceSort = _DeviceSort.hostname;
   ClientFilter _currentFilter = ClientFilter.online;
   late TextEditingController _searchController;
   bool _aggregateAllRouters = true;
@@ -326,11 +329,11 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
                       return client.hostname.toLowerCase().contains(query) ||
                           client.ipAddress.toLowerCase().contains(query) ||
                           client.macAddress.toLowerCase().contains(query) ||
-                          (client.vendor != null &&
-                              client.vendor!.toLowerCase().contains(query)) ||
-                          (client.dnsName != null &&
-                              client.dnsName!.toLowerCase().contains(query));
-                    }).toList();
+                          (client.vendor?.toLowerCase().contains(query) ??
+                              false) ||
+                          (client.dnsName?.toLowerCase().contains(query) ??
+                              false);
+                    }).toList()..sort(_compareClients);
 
                     String emptyTitle;
                     String emptyMessage;
@@ -444,6 +447,40 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildSearchField(context),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Text(
+                'Sort by',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SegmentedButton<_DeviceSort>(
+                  segments: const [
+                    ButtonSegment(
+                      value: _DeviceSort.hostname,
+                      icon: Icon(Icons.sort_by_alpha_rounded),
+                      label: Text('Name'),
+                    ),
+                    ButtonSegment(
+                      value: _DeviceSort.ipAddress,
+                      icon: Icon(Icons.lan_rounded),
+                      label: Text('IP address'),
+                    ),
+                  ],
+                  selected: {_deviceSort},
+                  showSelectedIcon: false,
+                  onSelectionChanged: (selection) {
+                    setState(() => _deviceSort = selection.first);
+                  },
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 18),
           Row(
             children: [
@@ -487,6 +524,31 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
         ],
       ),
     );
+  }
+
+  int _compareClients(Client left, Client right) {
+    final result = switch (_deviceSort) {
+      _DeviceSort.hostname => left.displayName.toLowerCase().compareTo(
+        right.displayName.toLowerCase(),
+      ),
+      _DeviceSort.ipAddress => _ipv4SortValue(
+        left.ipAddress,
+      ).compareTo(_ipv4SortValue(right.ipAddress)),
+    };
+    if (result != 0) return result;
+    return left.macAddress.compareTo(right.macAddress);
+  }
+
+  int _ipv4SortValue(String address) {
+    final octets = address.trim().split('.');
+    if (octets.length != 4) return 0x100000000;
+    var value = 0;
+    for (final octet in octets) {
+      final parsed = int.tryParse(octet);
+      if (parsed == null || parsed < 0 || parsed > 255) return 0x100000000;
+      value = (value << 8) | parsed;
+    }
+    return value;
   }
 
   Widget _buildSearchField(BuildContext context) {
