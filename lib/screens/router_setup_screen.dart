@@ -7,6 +7,7 @@ import 'package:openwalla/main.dart';
 import 'package:openwalla/models/dashboard_preferences.dart';
 import 'package:openwalla/screens/router_components_screen.dart';
 import 'package:openwalla/screens/ssh_terminal_screen.dart';
+import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/utils/router_setup_commands.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
 import 'package:openwalla/widgets/ssh_console_sheet.dart';
@@ -82,6 +83,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
   String? _lastOutput;
   final Set<String> _customInstallFeatures = {};
   final Set<String> _uninstallFeatures = {};
+  FlowStatsSettings? _everythingFlowSettings;
 
   List<String> get _selectedFeatures {
     if (widget.netifyOnly) return const ['netify'];
@@ -154,6 +156,12 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
   }
 
   Future<void> _runSetup() async {
+    if (_selectedProfile == _SetupProfile.everything) {
+      final flowSettings = await _showEverythingFlowDialog();
+      if (flowSettings == null || !mounted) return;
+      _everythingFlowSettings = flowSettings;
+    }
+
     final command = _setupCommand;
     if (command.isEmpty) {
       _showSnack('Choose at least one setup option first.');
@@ -204,6 +212,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
           'The SSH command ended before the router confirmed setup completion.',
         );
       }
+      await _applyEverythingFlowSettings(appState);
       await _enableDashboardCardsForInstalledFeatures();
       if (!mounted) return;
       console.setOutput(
@@ -241,6 +250,151 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
       console.complete();
       if (mounted) setState(() => _isInstalling = false);
     }
+  }
+
+  Future<FlowStatsSettings?> _showEverythingFlowDialog() async {
+    final appState = ref.read(appStateProvider);
+    final current = await appState.fetchFlowStatsSettings(
+      context: mounted ? context : null,
+    );
+    if (!mounted) return null;
+
+    var mode = current.collectorMode;
+    final serverUrlController = TextEditingController(text: current.serverUrl);
+    final apiTokenController = TextEditingController(text: current.apiToken);
+    String? validationMessage;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          icon: const Icon(Icons.account_tree_rounded),
+          title: const Text('Detailed Flow Storage'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Everything installs Netify on the router. Choose where Openwalla should collect and store its flow data.',
+                ),
+                const SizedBox(height: 16),
+                RadioGroup<NetifyCollectorMode>(
+                  groupValue: mode,
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setDialogState(() {
+                      mode = value;
+                      validationMessage = null;
+                    });
+                  },
+                  child: const Column(
+                    children: [
+                      RadioListTile<NetifyCollectorMode>(
+                        value: NetifyCollectorMode.local,
+                        title: Text('Local router'),
+                        subtitle: Text(
+                          'Store flow data in SQLite on this router.',
+                        ),
+                      ),
+                      RadioListTile<NetifyCollectorMode>(
+                        value: NetifyCollectorMode.external,
+                        title: Text('Openwalla Server'),
+                        subtitle: Text(
+                          'Send the Netify stream to a server on your LAN.',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (mode == NetifyCollectorMode.external) ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: serverUrlController,
+                    keyboardType: TextInputType.url,
+                    autocorrect: false,
+                    decoration: const InputDecoration(
+                      labelText: 'Openwalla Server URL',
+                      hintText: 'http://192.168.1.10:8080',
+                      prefixIcon: Icon(Icons.dns_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: apiTokenController,
+                    obscureText: true,
+                    autocorrect: false,
+                    decoration: const InputDecoration(
+                      labelText: 'API token (optional)',
+                      prefixIcon: Icon(Icons.key_rounded),
+                    ),
+                  ),
+                ],
+                if (validationMessage != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    validationMessage!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (mode == NetifyCollectorMode.external) {
+                  final uri = Uri.tryParse(serverUrlController.text.trim());
+                  if (uri == null ||
+                      !{'http', 'https'}.contains(uri.scheme) ||
+                      uri.host.isEmpty) {
+                    setDialogState(() {
+                      validationMessage = 'Enter a valid Openwalla Server URL.';
+                    });
+                    return;
+                  }
+                }
+                Navigator.pop(dialogContext, true);
+              },
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final serverUrl = serverUrlController.text;
+    final apiToken = apiTokenController.text;
+    serverUrlController.dispose();
+    apiTokenController.dispose();
+    if (confirmed != true) return null;
+    return FlowStatsSettings(
+      enabled: mode == NetifyCollectorMode.local && current.enabled,
+      pollSeconds: current.pollSeconds,
+      retentionHours: current.retentionHours,
+      collectorMode: mode,
+      serverUrl: serverUrl,
+      apiToken: apiToken,
+    );
+  }
+
+  Future<void> _applyEverythingFlowSettings(AppState appState) async {
+    final settings = _everythingFlowSettings;
+    if (_selectedProfile != _SetupProfile.everything || settings == null) {
+      return;
+    }
+    await appState.refreshRouterAuthenticationAfterSetup(
+      context: mounted ? context : null,
+    );
+    await appState.saveFlowStatsSettings(
+      settings,
+      context: mounted ? context : null,
+    );
   }
 
   Future<void> _showSetupSuccessDialog() async {
