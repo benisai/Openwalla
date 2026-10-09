@@ -180,6 +180,30 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
             title: 'Devices',
             showBack: true,
             actions: [
+              PopupMenuButton<_DeviceSort>(
+                tooltip: 'Sort devices',
+                initialValue: _deviceSort,
+                onSelected: (sort) => setState(() => _deviceSort = sort),
+                icon: const Icon(Icons.sort_rounded),
+                itemBuilder: (context) => const [
+                  PopupMenuItem(
+                    value: _DeviceSort.hostname,
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.sort_by_alpha_rounded),
+                      title: Text('Name'),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: _DeviceSort.ipAddress,
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.lan_rounded),
+                      title: Text('IP address'),
+                    ),
+                  ),
+                ],
+              ),
               Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: IconButton(
@@ -198,229 +222,239 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
           ),
           body: Stack(
             children: [
-              LuciPullToRefresh(
-                onRefresh: _refreshClients,
-                child: Builder(
-                  builder: (context) {
-                    final appState = ref.watch(appStateProvider);
-                    final isLoading =
-                        snapshot.connectionState == ConnectionState.waiting &&
-                        (aggregatedClients.isEmpty);
-                    final dashboardError = appState.dashboardError;
+              Builder(
+                builder: (context) {
+                  final appState = ref.watch(appStateProvider);
+                  final isLoading =
+                      snapshot.connectionState == ConnectionState.waiting &&
+                      (aggregatedClients.isEmpty);
+                  final dashboardError = appState.dashboardError;
 
-                    if (isLoading) {
-                      return SafeArea(
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: LuciSpacing.md,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(height: LuciSpacing.lg),
-                              LuciSkeleton(
-                                width: 230,
-                                height: 34,
-                                borderRadius: BorderRadius.circular(
-                                  LuciSpacing.sm,
-                                ),
+                  if (isLoading) {
+                    return SafeArea(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: LuciSpacing.md,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(height: LuciSpacing.lg),
+                            LuciSkeleton(
+                              width: 230,
+                              height: 34,
+                              borderRadius: BorderRadius.circular(
+                                LuciSpacing.sm,
                               ),
-                              SizedBox(height: LuciSpacing.sm),
-                              LuciSkeleton(
-                                width: 210,
-                                height: 18,
-                                borderRadius: BorderRadius.circular(
-                                  LuciSpacing.xs,
-                                ),
+                            ),
+                            SizedBox(height: LuciSpacing.sm),
+                            LuciSkeleton(
+                              width: 210,
+                              height: 18,
+                              borderRadius: BorderRadius.circular(
+                                LuciSpacing.xs,
                               ),
-                              SizedBox(height: LuciSpacing.lg),
-                              LuciSkeleton(
-                                width: double.infinity,
-                                height: 56,
-                                borderRadius: BorderRadius.circular(
-                                  LuciSpacing.sm,
-                                ),
+                            ),
+                            SizedBox(height: LuciSpacing.lg),
+                            LuciSkeleton(
+                              width: double.infinity,
+                              height: 56,
+                              borderRadius: BorderRadius.circular(
+                                LuciSpacing.sm,
                               ),
-                              SizedBox(height: LuciSpacing.md),
-                              Row(
-                                children: List.generate(
-                                  3,
-                                  (index) => Expanded(
-                                    child: Padding(
-                                      padding: EdgeInsets.only(
-                                        right: index == 2 ? 0 : LuciSpacing.md,
-                                      ),
-                                      child: AspectRatio(
-                                        aspectRatio: 1,
-                                        child: LuciSkeleton(
-                                          width: double.infinity,
-                                          height: double.infinity,
-                                          borderRadius: BorderRadius.circular(
-                                            LuciSpacing.sm,
-                                          ),
+                            ),
+                            SizedBox(height: LuciSpacing.md),
+                            Row(
+                              children: List.generate(
+                                3,
+                                (index) => Expanded(
+                                  child: Padding(
+                                    padding: EdgeInsets.only(
+                                      right: index == 2 ? 0 : LuciSpacing.md,
+                                    ),
+                                    child: AspectRatio(
+                                      aspectRatio: 1,
+                                      child: LuciSkeleton(
+                                        width: double.infinity,
+                                        height: double.infinity,
+                                        borderRadius: BorderRadius.circular(
+                                          LuciSpacing.sm,
                                         ),
                                       ),
                                     ),
                                   ),
                                 ),
                               ),
-                              SizedBox(height: LuciSpacing.md),
-                              Expanded(
-                                child: ListView.separated(
-                                  itemCount: 6,
-                                  separatorBuilder: (context, index) =>
-                                      SizedBox(height: LuciSpacing.sm),
-                                  itemBuilder: (context, index) =>
-                                      LuciListItemSkeleton(
-                                        showLeading: true,
-                                        showTrailing: true,
-                                      ),
-                                ),
+                            ),
+                            SizedBox(height: LuciSpacing.md),
+                            Expanded(
+                              child: ListView.separated(
+                                itemCount: 6,
+                                separatorBuilder: (context, index) =>
+                                    SizedBox(height: LuciSpacing.sm),
+                                itemBuilder: (context, index) =>
+                                    LuciListItemSkeleton(
+                                      showLeading: true,
+                                      showTrailing: true,
+                                    ),
                               ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  if (dashboardError != null && aggregatedClients.isEmpty) {
+                    return LuciErrorDisplay(
+                      title: 'Failed to Load Clients',
+                      message:
+                          'Could not connect to the router. Please check your network connection and the router\'s IP address.',
+                      actionLabel: 'Retry',
+                      onAction: () => ref
+                          .read(appStateProvider)
+                          .retryDashboardConnection(context: context),
+                      icon: Icons.wifi_off_rounded,
+                    );
+                  }
+
+                  final clients = aggregatedClients;
+                  final blockedClients = clients
+                      .where((client) => client.isBlocked)
+                      .toList();
+                  final offlineClients = clients
+                      .where((client) => !client.isBlocked && client.isOffline)
+                      .toList();
+                  final onlineClients = clients
+                      .where((client) => !client.isBlocked && !client.isOffline)
+                      .toList();
+
+                  final blockedCount = blockedClients.length;
+                  final offlineCount = offlineClients.length;
+                  final onlineCount = onlineClients.length;
+
+                  final activeCategoryClients = switch (_currentFilter) {
+                    ClientFilter.online => onlineClients,
+                    ClientFilter.blocked => blockedClients,
+                    ClientFilter.offline => offlineClients,
+                  };
+
+                  final filteredClients = activeCategoryClients.where((client) {
+                    final query = _searchQuery.toLowerCase();
+                    if (query.isEmpty) return true;
+                    return client.hostname.toLowerCase().contains(query) ||
+                        client.ipAddress.toLowerCase().contains(query) ||
+                        client.macAddress.toLowerCase().contains(query) ||
+                        (client.vendor?.toLowerCase().contains(query) ??
+                            false) ||
+                        (client.dnsName?.toLowerCase().contains(query) ??
+                            false);
+                  }).toList()..sort(_compareClients);
+
+                  String emptyTitle;
+                  String emptyMessage;
+                  IconData emptyIcon;
+
+                  if (_searchQuery.isNotEmpty) {
+                    emptyTitle = 'No Matching Clients';
+                    emptyMessage =
+                        'No clients match your search criteria. Try a different search term.';
+                    emptyIcon = Icons.search_off_rounded;
+                  } else {
+                    switch (_currentFilter) {
+                      case ClientFilter.online:
+                        emptyTitle = 'No Online Clients Found';
+                        emptyMessage =
+                            'No clients are currently connected to the router. Pull down to refresh the list.';
+                        emptyIcon = Icons.wifi_off_rounded;
+                        break;
+                      case ClientFilter.blocked:
+                        emptyTitle = 'No Blocked Clients';
+                        emptyMessage =
+                            'No devices are currently blocked from accessing the internet.';
+                        emptyIcon = Icons.shield_outlined;
+                        break;
+                      case ClientFilter.offline:
+                        emptyTitle = 'No Offline Clients';
+                        emptyMessage =
+                            'No offline clients found in recent device history.';
+                        emptyIcon = Icons.cloud_off_outlined;
+                        break;
+                    }
+                  }
+
+                  final stats = SafeArea(
+                    top: false,
+                    bottom: false,
+                    child: _buildClientStats(
+                      context,
+                      onlineCount: onlineCount,
+                      blockedCount: blockedCount,
+                      offlineCount: offlineCount,
+                      currentFilter: _currentFilter,
+                      onFilterChanged: (filter) {
+                        setState(() {
+                          _currentFilter = filter;
+                        });
+                      },
+                    ),
+                  );
+
+                  return Column(
+                    children: [
+                      SafeArea(
+                        top: false,
+                        bottom: false,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
+                          child: _buildSearchField(context),
+                        ),
+                      ),
+                      Expanded(
+                        child: LuciPullToRefresh(
+                          onRefresh: _refreshClients,
+                          child: ListView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.only(bottom: 16),
+                            children: [
+                              stats,
+                              if (filteredClients.isEmpty)
+                                SizedBox(
+                                  height:
+                                      MediaQuery.sizeOf(context).height * 0.45,
+                                  child: LuciEmptyState(
+                                    title: emptyTitle,
+                                    message: emptyMessage,
+                                    icon: emptyIcon,
+                                  ),
+                                )
+                              else
+                                for (final client in filteredClients)
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      16,
+                                      8,
+                                      16,
+                                      12,
+                                    ),
+                                    child: _UnifiedClientCard(
+                                      client: client,
+                                      isPaused: appState.isInternetPaused(
+                                        client.macAddress,
+                                      ),
+                                      onOpenSettings: () =>
+                                          _showDeviceSettingsSheet(client),
+                                      onLongPress: () =>
+                                          _showDeleteDeviceSheet(client),
+                                    ),
+                                  ),
                             ],
                           ),
                         ),
-                      );
-                    }
-
-                    if (dashboardError != null && aggregatedClients.isEmpty) {
-                      return LuciErrorDisplay(
-                        title: 'Failed to Load Clients',
-                        message:
-                            'Could not connect to the router. Please check your network connection and the router\'s IP address.',
-                        actionLabel: 'Retry',
-                        onAction: () => ref
-                            .read(appStateProvider)
-                            .retryDashboardConnection(context: context),
-                        icon: Icons.wifi_off_rounded,
-                      );
-                    }
-
-                    final clients = aggregatedClients;
-                    final blockedClients = clients
-                        .where((client) => client.isBlocked)
-                        .toList();
-                    final offlineClients = clients
-                        .where(
-                          (client) => !client.isBlocked && client.isOffline,
-                        )
-                        .toList();
-                    final onlineClients = clients
-                        .where(
-                          (client) => !client.isBlocked && !client.isOffline,
-                        )
-                        .toList();
-
-                    final blockedCount = blockedClients.length;
-                    final offlineCount = offlineClients.length;
-                    final onlineCount = onlineClients.length;
-
-                    final activeCategoryClients = switch (_currentFilter) {
-                      ClientFilter.online => onlineClients,
-                      ClientFilter.blocked => blockedClients,
-                      ClientFilter.offline => offlineClients,
-                    };
-
-                    final filteredClients = activeCategoryClients.where((
-                      client,
-                    ) {
-                      final query = _searchQuery.toLowerCase();
-                      if (query.isEmpty) return true;
-                      return client.hostname.toLowerCase().contains(query) ||
-                          client.ipAddress.toLowerCase().contains(query) ||
-                          client.macAddress.toLowerCase().contains(query) ||
-                          (client.vendor?.toLowerCase().contains(query) ??
-                              false) ||
-                          (client.dnsName?.toLowerCase().contains(query) ??
-                              false);
-                    }).toList()..sort(_compareClients);
-
-                    String emptyTitle;
-                    String emptyMessage;
-                    IconData emptyIcon;
-
-                    if (_searchQuery.isNotEmpty) {
-                      emptyTitle = 'No Matching Clients';
-                      emptyMessage =
-                          'No clients match your search criteria. Try a different search term.';
-                      emptyIcon = Icons.search_off_rounded;
-                    } else {
-                      switch (_currentFilter) {
-                        case ClientFilter.online:
-                          emptyTitle = 'No Online Clients Found';
-                          emptyMessage =
-                              'No clients are currently connected to the router. Pull down to refresh the list.';
-                          emptyIcon = Icons.wifi_off_rounded;
-                          break;
-                        case ClientFilter.blocked:
-                          emptyTitle = 'No Blocked Clients';
-                          emptyMessage =
-                              'No devices are currently blocked from accessing the internet.';
-                          emptyIcon = Icons.shield_outlined;
-                          break;
-                        case ClientFilter.offline:
-                          emptyTitle = 'No Offline Clients';
-                          emptyMessage =
-                              'No offline clients found in recent device history.';
-                          emptyIcon = Icons.cloud_off_outlined;
-                          break;
-                      }
-                    }
-
-                    return Column(
-                      children: [
-                        SafeArea(
-                          top: false,
-                          bottom: false,
-                          child: _buildClientsHeader(
-                            context,
-                            onlineCount: onlineCount,
-                            blockedCount: blockedCount,
-                            offlineCount: offlineCount,
-                            currentFilter: _currentFilter,
-                            onFilterChanged: (filter) {
-                              setState(() {
-                                _currentFilter = filter;
-                              });
-                            },
-                          ),
-                        ),
-                        Expanded(
-                          child: filteredClients.isEmpty
-                              ? LuciEmptyState(
-                                  title: emptyTitle,
-                                  message: emptyMessage,
-                                  icon: emptyIcon,
-                                )
-                              : ListView(
-                                  padding: const EdgeInsets.only(bottom: 16),
-                                  children: [
-                                    for (final client in filteredClients)
-                                      Padding(
-                                        padding: const EdgeInsets.fromLTRB(
-                                          16,
-                                          8,
-                                          16,
-                                          12,
-                                        ),
-                                        child: _UnifiedClientCard(
-                                          client: client,
-                                          isPaused: appState.isInternetPaused(
-                                            client.macAddress,
-                                          ),
-                                          onOpenSettings: () =>
-                                              _showDeviceSettingsSheet(client),
-                                          onLongPress: () =>
-                                              _showDeleteDeviceSheet(client),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ],
           ),
@@ -431,7 +465,7 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
 
   String normalizeMac(String mac) => mac.toUpperCase().replaceAll('-', ':');
 
-  Widget _buildClientsHeader(
+  Widget _buildClientStats(
     BuildContext context, {
     required int onlineCount,
     required int blockedCount,
@@ -442,84 +476,43 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+      child: Row(
         children: [
-          _buildSearchField(context),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Text(
-                'Sort by',
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: SegmentedButton<_DeviceSort>(
-                  segments: const [
-                    ButtonSegment(
-                      value: _DeviceSort.hostname,
-                      icon: Icon(Icons.sort_by_alpha_rounded),
-                      label: Text('Name'),
-                    ),
-                    ButtonSegment(
-                      value: _DeviceSort.ipAddress,
-                      icon: Icon(Icons.lan_rounded),
-                      label: Text('IP address'),
-                    ),
-                  ],
-                  selected: {_deviceSort},
-                  showSelectedIcon: false,
-                  onSelectionChanged: (selection) {
-                    setState(() => _deviceSort = selection.first);
-                  },
-                ),
-              ),
-            ],
+          Expanded(
+            child: _buildClientStatCard(
+              context,
+              icon: Icons.wifi_rounded,
+              count: onlineCount,
+              label: 'Online',
+              color: const Color(0xFF22C55E),
+              isSelected: currentFilter == ClientFilter.online,
+              onTap: () => onFilterChanged(ClientFilter.online),
+            ),
           ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: _buildClientStatCard(
-                  context,
-                  icon: Icons.wifi_rounded,
-                  count: onlineCount,
-                  label: 'Online',
-                  color: const Color(0xFF22C55E),
-                  isSelected: currentFilter == ClientFilter.online,
-                  onTap: () => onFilterChanged(ClientFilter.online),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildClientStatCard(
-                  context,
-                  icon: Icons.block_rounded,
-                  count: blockedCount,
-                  label: 'Blocked',
-                  color: const Color(0xFFFF4D5A),
-                  isSelected: currentFilter == ClientFilter.blocked,
-                  onTap: () => onFilterChanged(ClientFilter.blocked),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildClientStatCard(
-                  context,
-                  icon: Icons.cloud_off_outlined,
-                  count: offlineCount,
-                  label: 'Offline',
-                  color: colorScheme.onSurfaceVariant,
-                  isSelected: currentFilter == ClientFilter.offline,
-                  onTap: () => onFilterChanged(ClientFilter.offline),
-                ),
-              ),
-            ],
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildClientStatCard(
+              context,
+              icon: Icons.block_rounded,
+              count: blockedCount,
+              label: 'Blocked',
+              color: const Color(0xFFFF4D5A),
+              isSelected: currentFilter == ClientFilter.blocked,
+              onTap: () => onFilterChanged(ClientFilter.blocked),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildClientStatCard(
+              context,
+              icon: Icons.cloud_off_outlined,
+              count: offlineCount,
+              label: 'Offline',
+              color: colorScheme.onSurfaceVariant,
+              isSelected: currentFilter == ClientFilter.offline,
+              onTap: () => onFilterChanged(ClientFilter.offline),
+            ),
           ),
         ],
       ),
