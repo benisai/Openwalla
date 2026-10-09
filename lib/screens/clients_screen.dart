@@ -454,7 +454,7 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
                                         client.macAddress,
                                       ),
                                       onOpenSettings: () =>
-                                          _showDeviceSettingsSheet(client),
+                                          _openDeviceDetails(client),
                                       onLongPress: () =>
                                           _showDeleteDeviceSheet(client),
                                     ),
@@ -710,44 +710,38 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
     }
   }
 
-  Future<void> _showDeviceSettingsSheet(Client client) async {
-    await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      useSafeArea: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => _DeviceSettingsSheet(
-        client: client,
-        onIdentityUpdated:
-            ({
-              required hostname,
-              required deviceIcon,
-              required staticIpAddress,
-            }) {
-              if (!mounted) return;
-              _applyCachedClientIdentity(
-                client.macAddress,
-                hostname: hostname,
-                deviceIcon: deviceIcon,
-                staticIpAddress: staticIpAddress,
-              );
-            },
-        onToggleInternetPause: (paused) async {
-          final success = await ref
-              .read(appStateProvider)
-              .pauseClientInternet(
-                client.macAddress,
-                pause: paused,
-                context: context,
-              );
-          if (!success) throw StateError('Unable to update internet access');
-        },
-        onToggleInternetBlock: (blocked) =>
-            _setClientInternetBlocked(client, blocked),
+  Future<void> _openDeviceDetails(Client client) async {
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (context) => _DeviceDetailsPage(
+          client: client,
+          onIdentityUpdated:
+              ({
+                required hostname,
+                required deviceIcon,
+                required staticIpAddress,
+              }) {
+                if (!mounted) return;
+                _applyCachedClientIdentity(
+                  client.macAddress,
+                  hostname: hostname,
+                  deviceIcon: deviceIcon,
+                  staticIpAddress: staticIpAddress,
+                );
+              },
+          onToggleInternetPause: (paused) async {
+            final success = await ref
+                .read(appStateProvider)
+                .pauseClientInternet(
+                  client.macAddress,
+                  pause: paused,
+                  context: context,
+                );
+            if (!success) throw StateError('Unable to update internet access');
+          },
+          onToggleInternetBlock: (blocked) =>
+              _setClientInternetBlocked(client, blocked),
+        ),
       ),
     );
   }
@@ -1003,7 +997,7 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
   }
 }
 
-class _DeviceSettingsSheet extends ConsumerStatefulWidget {
+class _DeviceDetailsPage extends ConsumerStatefulWidget {
   final Client client;
   final void Function({
     required String hostname,
@@ -1014,7 +1008,7 @@ class _DeviceSettingsSheet extends ConsumerStatefulWidget {
   final Future<void> Function(bool paused) onToggleInternetPause;
   final Future<void> Function(bool blocked) onToggleInternetBlock;
 
-  const _DeviceSettingsSheet({
+  const _DeviceDetailsPage({
     required this.client,
     required this.onIdentityUpdated,
     required this.onToggleInternetPause,
@@ -1022,11 +1016,10 @@ class _DeviceSettingsSheet extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<_DeviceSettingsSheet> createState() =>
-      _DeviceSettingsSheetState();
+  ConsumerState<_DeviceDetailsPage> createState() => _DeviceDetailsPageState();
 }
 
-class _DeviceSettingsSheetState extends ConsumerState<_DeviceSettingsSheet> {
+class _DeviceDetailsPageState extends ConsumerState<_DeviceDetailsPage> {
   final _nameController = TextEditingController();
   final _ipController = TextEditingController();
   final _nameFocusNode = FocusNode();
@@ -1483,17 +1476,18 @@ class _DeviceSettingsSheetState extends ConsumerState<_DeviceSettingsSheet> {
     final selectedIcon = _deviceIconOptionFor(_selectedIconKey).icon;
     final isIdentityBusy =
         _isSaving || _isSavingName || _isBlocking || _isPausing;
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          18,
-          0,
-          18,
-          MediaQuery.of(context).viewInsets.bottom + 18,
-        ),
+    return Scaffold(
+      appBar: const LuciAppBar(title: 'Device Details', showBack: true),
+      body: SafeArea(
+        top: false,
         child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            18,
+            18,
+            18,
+            MediaQuery.of(context).viewInsets.bottom + 24,
+          ),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
@@ -1607,13 +1601,6 @@ class _DeviceSettingsSheetState extends ConsumerState<_DeviceSettingsSheet> {
                       ],
                     ),
                   ),
-                  IconButton(
-                    tooltip: 'Close',
-                    onPressed: isIdentityBusy
-                        ? null
-                        : () => Navigator.of(context).pop(_hasSavedChanges),
-                    icon: const Icon(Icons.close_rounded),
-                  ),
                 ],
               ),
               const SizedBox(height: 18),
@@ -1653,6 +1640,25 @@ class _DeviceSettingsSheetState extends ConsumerState<_DeviceSettingsSheet> {
                   hintText: 'MAC address',
                 ),
               ),
+              if (widget.client.vendor?.trim().isNotEmpty == true) ...[
+                const SizedBox(height: 18),
+                Text(
+                  'Vendor',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  initialValue: widget.client.vendor!.trim(),
+                  enabled: false,
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.business_rounded),
+                    hintText: 'Device vendor',
+                  ),
+                ),
+              ],
               const SizedBox(height: 20),
               Row(
                 children: [
