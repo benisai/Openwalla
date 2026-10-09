@@ -18,7 +18,7 @@ PATH="/usr/sbin:/usr/bin:/sbin:/bin"
 export PATH
 
 DEFAULT_DB="/tmp/openwalla-devices.sqlite"
-DEFAULT_POLL_SECONDS="15"
+DEFAULT_POLL_SECONDS="60"
 DEFAULT_OFFLINE_AFTER_SECONDS="90"
 DEFAULT_LAN_NETWORK="lan"
 DEFAULT_LAN_DEVICE="br-lan"
