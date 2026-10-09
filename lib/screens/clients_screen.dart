@@ -185,6 +185,17 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
                 initialValue: _deviceSort,
                 onSelected: (sort) => setState(() => _deviceSort = sort),
                 icon: const Icon(Icons.sort_rounded),
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                elevation: 12,
+                shadowColor: Colors.black.withValues(alpha: 0.45),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.outline.withValues(alpha: 0.65),
+                  ),
+                ),
                 itemBuilder: (context) => const [
                   PopupMenuItem(
                     value: _DeviceSort.hostname,
