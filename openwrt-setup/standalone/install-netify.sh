@@ -31,6 +31,8 @@ install_rpcd_acl
 
 set_uci openwalla.features.netify "1"
 set_uci openwalla.collector.enabled "1"
+set_uci_default openwalla.collector.mode "local"
+set_uci_default openwalla.collector.server_url ""
 set_uci openwalla.collector.host "127.0.0.1"
 set_uci openwalla.collector.port "7150"
 set_uci openwalla.collector.db_path "/tmp/openwalla-netify.sqlite"
@@ -47,14 +49,20 @@ set_uci_default openwalla.flow_stats.retention_seconds "2592000"
 uci commit openwalla
 
 NETIFYD_CONF="/etc/netifyd.conf"
+COLLECTOR_MODE="$(uci -q get openwalla.collector.mode 2>/dev/null || echo local)"
+NETIFY_LISTEN="127.0.0.1"
+if [ "$COLLECTOR_MODE" = "external" ]; then
+	NETIFY_LISTEN="$(uci -q get network.lan.ipaddr 2>/dev/null || true)"
+	[ -n "$NETIFY_LISTEN" ] || NETIFY_LISTEN="127.0.0.1"
+fi
 if [ -f "$NETIFYD_CONF" ]; then
 	if grep -q "^listen_address\[0\]" "$NETIFYD_CONF"; then
-		sed -i "s|^listen_address\[0\].*|listen_address[0] = 127.0.0.1|" "$NETIFYD_CONF"
+		sed -i "s|^listen_address\[0\].*|listen_address[0] = $NETIFY_LISTEN|" "$NETIFYD_CONF"
 	else
 		grep -q "^\[socket\]" "$NETIFYD_CONF" || echo "[socket]" >>"$NETIFYD_CONF"
-		sed -i "/^\[socket\]/a listen_address[0] = 127.0.0.1" "$NETIFYD_CONF"
+		sed -i "/^\[socket\]/a listen_address[0] = $NETIFY_LISTEN" "$NETIFYD_CONF"
 	fi
-	log "Updated netifyd listen_address[0] to 127.0.0.1"
+	log "Updated netifyd listen_address[0] to $NETIFY_LISTEN"
 fi
 
 /usr/bin/openwalla-netify-collector --init-db || true
@@ -68,6 +76,10 @@ if ! have_cmd sqlite3 && ! have_cmd sqlite3-cli; then
 fi
 
 enable_restart_service netifyd
-enable_restart_service openwalla-netify-collector
+if [ "$COLLECTOR_MODE" = "external" ]; then
+	/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || true
+else
+	enable_restart_service openwalla-netify-collector
+fi
 
 log "Netify support installed."

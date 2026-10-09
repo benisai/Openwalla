@@ -1,0 +1,15 @@
+services:
+  openwalla-server:
+    build: .
+    container_name: openwalla-server
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      OPENWALLA_NETIFY_HOST: "192.168.1.1"
+      OPENWALLA_NETIFY_PORT: "7150"
+      OPENWALLA_ROUTER_LAN_IP: "192.168.1.1"
+      OPENWALLA_RETENTION_HOURS: "24"
+      OPENWALLA_API_TOKEN: ""
+    volumes:
+      - ./data:/data

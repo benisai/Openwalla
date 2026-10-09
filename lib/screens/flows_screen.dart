@@ -433,6 +433,9 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
     var enabled = settings.enabled;
     var pollSeconds = settings.pollSeconds;
     var retentionHours = settings.retentionHours;
+    var collectorMode = settings.collectorMode;
+    final serverUrlController = TextEditingController(text: settings.serverUrl);
+    final apiTokenController = TextEditingController(text: settings.apiToken);
     final saved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -442,12 +445,63 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                DropdownButtonFormField<NetifyCollectorMode>(
+                  initialValue: collectorMode,
+                  decoration: const InputDecoration(
+                    labelText: 'Flow data source',
+                    prefixIcon: Icon(Icons.storage_rounded),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: NetifyCollectorMode.local,
+                      child: Text('Local router'),
+                    ),
+                    DropdownMenuItem(
+                      value: NetifyCollectorMode.external,
+                      child: Text('Openwalla Server'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setDialogState(() => collectorMode = value);
+                  },
+                ),
+                if (collectorMode == NetifyCollectorMode.external) ...[
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: serverUrlController,
+                    keyboardType: TextInputType.url,
+                    autocorrect: false,
+                    decoration: const InputDecoration(
+                      labelText: 'Server URL',
+                      hintText: 'http://192.168.1.10:8080',
+                      prefixIcon: Icon(Icons.dns_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: apiTokenController,
+                    obscureText: true,
+                    autocorrect: false,
+                    decoration: const InputDecoration(
+                      labelText: 'API token (optional)',
+                      prefixIcon: Icon(Icons.key_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Usage statistics'),
-                  subtitle: const Text('Higher router CPU usage'),
+                  subtitle: Text(
+                    collectorMode == NetifyCollectorMode.local
+                        ? 'Higher router CPU usage'
+                        : 'Managed by Openwalla Server',
+                  ),
                   value: enabled,
-                  onChanged: (value) => setDialogState(() => enabled = value),
+                  onChanged: collectorMode == NetifyCollectorMode.local
+                      ? (value) => setDialogState(() => enabled = value)
+                      : null,
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -461,7 +515,8 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
                   max: 10,
                   divisions: 8,
                   value: pollSeconds.toDouble(),
-                  onChanged: enabled
+                  onChanged:
+                      enabled && collectorMode == NetifyCollectorMode.local
                       ? (value) => setDialogState(
                           () => pollSeconds = value.round().clamp(2, 10),
                         )
@@ -485,10 +540,12 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
                         ),
                       )
                       .toList(),
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setDialogState(() => retentionHours = value);
-                  },
+                  onChanged: collectorMode == NetifyCollectorMode.local
+                      ? (value) {
+                          if (value == null) return;
+                          setDialogState(() => retentionHours = value);
+                        }
+                      : null,
                 ),
               ],
             ),
@@ -506,6 +563,10 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
         ),
       ),
     );
+    final serverUrl = serverUrlController.text;
+    final apiToken = apiTokenController.text;
+    serverUrlController.dispose();
+    apiTokenController.dispose();
     if (saved != true || !mounted) return;
     try {
       await appState.saveFlowStatsSettings(
@@ -513,12 +574,19 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
           enabled: enabled,
           pollSeconds: pollSeconds,
           retentionHours: retentionHours,
+          collectorMode: collectorMode,
+          serverUrl: serverUrl,
+          apiToken: apiToken,
         ),
         context: context,
       );
       if (!mounted) return;
       context.showToastSuccess(
-        enabled ? 'Flow usage enabled' : 'Flow usage disabled',
+        collectorMode == NetifyCollectorMode.external
+            ? 'Openwalla Server enabled'
+            : enabled
+            ? 'Flow usage enabled'
+            : 'Local flow collection enabled',
       );
     } catch (error) {
       if (!mounted) return;

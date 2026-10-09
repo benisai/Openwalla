@@ -1615,15 +1615,23 @@ class ProcessCpuUsage {
 
 enum OpenwallaFlowProvider { none, netify, conntrack }
 
+enum NetifyCollectorMode { local, external }
+
 class FlowStatsSettings {
   final bool enabled;
   final int pollSeconds;
   final int retentionHours;
+  final NetifyCollectorMode collectorMode;
+  final String serverUrl;
+  final String apiToken;
 
   const FlowStatsSettings({
     required this.enabled,
     required this.pollSeconds,
     required this.retentionHours,
+    this.collectorMode = NetifyCollectorMode.local,
+    this.serverUrl = '',
+    this.apiToken = '',
   });
 }
 
@@ -2928,10 +2936,17 @@ class AppState extends ChangeNotifier {
   Future<bool> hasNetifySupport({BuildContext? context}) async {
     if (_reviewerModeEnabled) return true;
 
+    try {
+      if (await _externalNetifySettings() != null) return true;
+    } catch (e, stack) {
+      Logger.debug('Optional Openwalla Server config check failed: $e');
+      Logger.debug('Optional Openwalla Server config stack: $stack');
+    }
+
     final hasNetifyTable = await _sqliteTableExists(
       dbExpression: _netifyDbExpression(),
       tableName: 'flow_raw',
-      context: context,
+      context: context?.mounted == true ? context : null,
     );
     if (hasNetifyTable) return true;
 
@@ -2964,6 +2979,9 @@ class AppState extends ChangeNotifier {
       final values = await _fetchOpenwallaUciValues();
       final collector = values?['collector'];
       if (collector is! Map) return false;
+      if (collector['mode']?.toString() == 'external') {
+        return collector['server_url']?.toString().trim().isNotEmpty == true;
+      }
       final enabled = collector['enabled']?.toString().trim().toLowerCase();
       return !{'0', 'false', 'off', 'disabled'}.contains(enabled);
     } catch (e, stack) {
@@ -3005,6 +3023,13 @@ class AppState extends ChangeNotifier {
       final parsedRetentionHours = int.tryParse(
         collector is Map ? collector['retention_hours']?.toString() ?? '' : '',
       );
+      final routerId = _routerService?.selectedRouter?.id;
+      final apiToken = routerId == null
+          ? ''
+          : await _secureStorageService.readValue(
+                  'netify_server_token:$routerId',
+                ) ??
+                '';
       return FlowStatsSettings(
         enabled: section is Map && section['enabled']?.toString() == '1',
         pollSeconds:
@@ -3017,6 +3042,14 @@ class AppState extends ChangeNotifier {
             const {24, 48, 72, 96, 120}.contains(parsedRetentionHours)
             ? parsedRetentionHours!
             : 24,
+        collectorMode:
+            collector is Map && collector['mode']?.toString() == 'external'
+            ? NetifyCollectorMode.external
+            : NetifyCollectorMode.local,
+        serverUrl: collector is Map
+            ? collector['server_url']?.toString() ?? ''
+            : '',
+        apiToken: apiToken,
       );
     } catch (e, stack) {
       Logger.warning('Failed to fetch flow stats settings: $e');
@@ -3046,6 +3079,29 @@ class AppState extends ChangeNotifier {
         const {24, 48, 72, 96, 120}.contains(settings.retentionHours)
         ? settings.retentionHours.toString()
         : '24';
+    final expectedMode = settings.collectorMode.name;
+    final serverUrl = settings.serverUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    if (settings.collectorMode == NetifyCollectorMode.external) {
+      final uri = Uri.tryParse(serverUrl);
+      if (uri == null ||
+          !{'http', 'https'}.contains(uri.scheme) ||
+          uri.host.isEmpty) {
+        throw ArgumentError('Enter a valid Openwalla Server URL');
+      }
+    }
+    final routerId = _routerService?.selectedRouter?.id;
+    if (routerId != null) {
+      if (settings.apiToken.trim().isEmpty) {
+        await _secureStorageService.deleteValue(
+          'netify_server_token:$routerId',
+        );
+      } else {
+        await _secureStorageService.writeValue(
+          'netify_server_token:$routerId',
+          settings.apiToken.trim(),
+        );
+      }
+    }
     final saveOutput = await runRouterSetupCommand(
       "uci -q get openwalla.flow_stats >/dev/null 2>&1 || "
       "uci set openwalla.flow_stats=flow_stats; "
@@ -3057,12 +3113,15 @@ class AppState extends ChangeNotifier {
       "uci set openwalla.flow_stats.bucket_seconds='300' && "
       "uci set openwalla.flow_stats.retention_seconds='2592000' && "
       "uci set openwalla.collector.retention_hours='$expectedRetentionHours' && "
+      "uci set openwalla.collector.mode=${_shellQuote(expectedMode)} && "
+      "uci set openwalla.collector.server_url=${_shellQuote(serverUrl)} && "
       "uci commit openwalla && "
       "[ \"\$(uci -q get openwalla.flow_stats.enabled)\" = '$expectedEnabled' ] && "
       "[ \"\$(uci -q get openwalla.flow_stats.poll)\" = '$expectedPoll' ] && "
       "[ \"\$(uci -q get openwalla.collector.retention_hours)\" = '$expectedRetentionHours' ] && "
+      "[ \"\$(uci -q get openwalla.collector.mode)\" = '$expectedMode' ] && "
       "echo FLOW_STATS_SAVED",
-      context: context,
+      context: context?.mounted == true ? context : null,
     );
     if (!saveOutput.contains('FLOW_STATS_SAVED')) {
       throw StateError('Router could not save the flow usage settings');
@@ -3071,16 +3130,31 @@ class AppState extends ChangeNotifier {
     final saved = await fetchFlowStatsSettings();
     if (saved.enabled != settings.enabled ||
         saved.pollSeconds != int.parse(expectedPoll) ||
-        saved.retentionHours != int.parse(expectedRetentionHours)) {
+        saved.retentionHours != int.parse(expectedRetentionHours) ||
+        saved.collectorMode != settings.collectorMode ||
+        saved.serverUrl != serverUrl) {
       throw StateError('Flow usage settings could not be verified');
     }
 
-    await runRouterSetupCommand(
-      'if [ -x /etc/init.d/openwalla-netify-collector ]; then '
-      '/etc/init.d/openwalla-netify-collector restart >/dev/null 2>&1 || '
-      '/etc/init.d/openwalla-netify-collector start >/dev/null 2>&1; '
-      'fi',
-    );
+    final external = settings.collectorMode == NetifyCollectorMode.external;
+    final listenAddress = external
+        ? r'$(uci -q get network.lan.ipaddr)'
+        : '127.0.0.1';
+    await runRouterSetupCommand('''
+CONF=/etc/netifyd.conf
+LISTEN=$listenAddress
+[ -n "\$LISTEN" ] || LISTEN=127.0.0.1
+if [ -f "\$CONF" ]; then
+  if grep -q '^listen_address\\[0\\]' "\$CONF"; then
+    sed -i "s|^listen_address\\[0\\].*|listen_address[0] = \$LISTEN|" "\$CONF"
+  else
+    grep -q '^\\[socket\\]' "\$CONF" || echo '[socket]' >> "\$CONF"
+    sed -i "/^\\[socket\\]/a listen_address[0] = \$LISTEN" "\$CONF"
+  fi
+fi
+${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || true' : '/etc/init.d/openwalla-netify-collector restart >/dev/null 2>&1 || /etc/init.d/openwalla-netify-collector start >/dev/null 2>&1 || true'}
+/etc/init.d/netifyd restart >/dev/null 2>&1 || /etc/init.d/netifyd start >/dev/null 2>&1 || true
+''');
   }
 
   Future<FlowStatsUsageSummary> fetchFlowStatsUsage({
@@ -6021,6 +6095,66 @@ done | sort -t "|" -k1,1nr | head -n ''' +
     return conditions.isEmpty ? '' : 'WHERE ${conditions.join(' AND ')}';
   }
 
+  Future<FlowStatsSettings?> _externalNetifySettings() async {
+    final settings = await fetchFlowStatsSettings();
+    if (settings.collectorMode != NetifyCollectorMode.external ||
+        settings.serverUrl.trim().isEmpty) {
+      return null;
+    }
+    return settings;
+  }
+
+  Uri _openwallaServerUri(
+    String serverUrl,
+    String path, [
+    Map<String, dynamic>? query,
+  ]) {
+    final base = Uri.parse(serverUrl.trim().replaceAll(RegExp(r'/+$'), ''));
+    final basePath = base.path == '/' ? '' : base.path;
+    return base.replace(
+      path: '$basePath$path',
+      queryParameters: query?.map(
+        (key, value) => MapEntry(key, value.toString()),
+      ),
+    );
+  }
+
+  Future<dynamic> _openwallaServerGet(
+    FlowStatsSettings settings,
+    String path, {
+    Map<String, dynamic>? query,
+  }) async {
+    final uri = _openwallaServerUri(settings.serverUrl, path, query);
+    final client = _httpClientManager.getClient(
+      uri.authority,
+      uri.scheme == 'https',
+    );
+    final response = await client.getUri(
+      uri,
+      options: Options(
+        headers: settings.apiToken.isEmpty
+            ? null
+            : {'Authorization': 'Bearer ${settings.apiToken}'},
+      ),
+    );
+    return response.data;
+  }
+
+  Map<String, dynamic> _netifyServerQuery({
+    String? protocolFilter,
+    String? deviceMac,
+    String? searchQuery,
+    int? hoursBack,
+  }) {
+    return {
+      if (protocolFilter?.trim().isNotEmpty == true)
+        'protocol': protocolFilter!.trim(),
+      if (deviceMac?.trim().isNotEmpty == true) 'mac': deviceMac!.trim(),
+      if (searchQuery?.trim().isNotEmpty == true) 'search': searchQuery!.trim(),
+      if (hoursBack != null) 'hours': hoursBack.clamp(1, 168),
+    };
+  }
+
   Future<int> fetchNetifyFlowCount({
     String? protocolFilter,
     String? deviceMac,
@@ -6039,6 +6173,27 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       return flows.length;
     }
 
+    try {
+      final external = await _externalNetifySettings();
+      if (external != null) {
+        final data = await _openwallaServerGet(
+          external,
+          '/api/v1/flows/count',
+          query: _netifyServerQuery(
+            protocolFilter: protocolFilter,
+            deviceMac: deviceMac,
+            searchQuery: searchQuery,
+            hoursBack: hoursBack,
+          ),
+        );
+        return data is Map ? _asInt(data['count']) : 0;
+      }
+    } catch (e, stack) {
+      Logger.warning('Openwalla Server flow count failed: $e');
+      Logger.debug('Openwalla Server flow count stack: $stack');
+      return 0;
+    }
+
     final router = _routerService?.selectedRouter;
     final sysauth = _authService?.sysauth;
     if (router == null || sysauth == null || _apiService == null) return 0;
@@ -6048,7 +6203,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         dbExpression: _netifyDbExpression(),
         sql:
             'SELECT COUNT(*) FROM flow_raw ${_netifyRawWhereClause(protocolFilter, deviceMac: deviceMac, searchQuery: searchQuery, hoursBack: hoursBack)};',
-        context: context,
+        context: context?.mounted == true ? context : null,
       );
       return _parseSqliteCount(output);
     } catch (e, stack) {
@@ -6063,10 +6218,13 @@ done | sort -t "|" -k1,1nr | head -n ''' +
   }) async {
     if (_reviewerModeEnabled) return OpenwallaFlowProvider.netify;
 
+    final external = await _externalNetifySettings();
+    if (external != null) return OpenwallaFlowProvider.netify;
+
     final hasNetify = await _sqliteTableExists(
       dbExpression: _netifyDbExpression(),
       tableName: 'flow_raw',
-      context: context,
+      context: context?.mounted == true ? context : null,
     );
     if (hasNetify) return OpenwallaFlowProvider.netify;
 
@@ -6091,12 +6249,16 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         provider ?? await detectFlowProvider(context: context);
     switch (selectedProvider) {
       case OpenwallaFlowProvider.netify:
-        final hasNetify = _reviewerModeEnabled
-            ? true
-            : await _sqliteTableExists(
-                dbExpression: _netifyDbExpression(),
-                tableName: 'flow_raw',
-              );
+        final external = _reviewerModeEnabled
+            ? null
+            : await _externalNetifySettings();
+        final hasNetify =
+            _reviewerModeEnabled ||
+            external != null ||
+            await _sqliteTableExists(
+              dbExpression: _netifyDbExpression(),
+              tableName: 'flow_raw',
+            );
         if (!hasNetify) return OpenwallaFlowSummary.none;
         return OpenwallaFlowSummary(
           provider: selectedProvider,
@@ -6135,7 +6297,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         dbExpression: _connectionFlowsDbExpression(),
         sql:
             'SELECT COUNT(*) FROM connection_flows ${_connectionFlowWhereClause(protocolFilter)};',
-        context: context,
+        context: context?.mounted == true ? context : null,
       );
       return _parseSqliteCount(output);
     } catch (e, stack) {
@@ -9356,6 +9518,33 @@ done | sort -t "|" -k1,1nr | head -n ''' +
     int? hoursBack,
     BuildContext? context,
   }) async {
+    try {
+      final external = await _externalNetifySettings();
+      if (external != null) {
+        final query = _netifyServerQuery(
+          protocolFilter: protocolFilter,
+          deviceMac: deviceMac,
+          searchQuery: searchQuery,
+          hoursBack: hoursBack,
+        )..addAll({'limit': limit, 'offset': offset});
+        final data = await _openwallaServerGet(
+          external,
+          '/api/v1/flows',
+          query: query,
+        );
+        final items = data is Map ? data['items'] : null;
+        if (items is! List) return const [];
+        return items
+            .map((item) => NetifyFlow.fromJsonLine(jsonEncode(item)))
+            .whereType<NetifyFlow>()
+            .toList();
+      }
+    } catch (e, stack) {
+      Logger.warning('Openwalla Server flow fetch failed: $e');
+      Logger.debug('Openwalla Server flow fetch stack: $stack');
+      return const [];
+    }
+
     final router = _routerService?.selectedRouter;
     final sysauth = _authService?.sysauth;
     if (router == null || sysauth == null || _apiService == null) {
@@ -9367,7 +9556,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         dbExpression: _netifyDbExpression(),
         sql:
             'SELECT json FROM flow_raw ${_netifyRawWhereClause(protocolFilter, deviceMac: deviceMac, searchQuery: searchQuery, hoursBack: hoursBack)} ORDER BY id DESC LIMIT $limit OFFSET $offset;',
-        context: context,
+        context: context?.mounted == true ? context : null,
       );
       return output
           .split('\n')
