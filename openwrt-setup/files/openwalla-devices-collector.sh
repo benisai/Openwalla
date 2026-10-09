@@ -25,7 +25,6 @@ DEFAULT_LAN_DEVICE="br-lan"
 DEFAULT_RULE_PREFIX="openwalla_quarantine_"
 DEFAULT_STATE_FILE="/tmp/openwalla-quarantine-known.txt"
 DEFAULT_NOTIFICATIONS_DB="/tmp/openwalla-notifications.sqlite"
-DEFAULT_VENDOR_DB="/usr/share/openwalla/openwalla-mac-vendors.txt"
 LOG_FILE="/tmp/openwalla-devices-collector.log"
 LOCK_DIR="/tmp/openwalla-devices-collector.lock"
 
@@ -37,7 +36,6 @@ LAN_DEVICE="$DEFAULT_LAN_DEVICE"
 RULE_PREFIX="$DEFAULT_RULE_PREFIX"
 STATE_FILE="$DEFAULT_STATE_FILE"
 NOTIFICATIONS_DB="$DEFAULT_NOTIFICATIONS_DB"
-VENDOR_DB="$DEFAULT_VENDOR_DB"
 QUARANTINE_ENABLED="0"
 SQLITE_BIN=""
 
@@ -381,32 +379,6 @@ collect_totals() {
 	'
 }
 
-collect_vendors() {
-	local candidates="$1"
-	[ -r "$VENDOR_DB" ] || return 0
-	awk -F'|' '
-		NR == FNR {
-			mac=toupper($1)
-			gsub(/:/, "", mac)
-			prefix=substr(mac, 1, 6)
-			if (prefix ~ /^[[:xdigit:]][[:xdigit:]][[:xdigit:]][[:xdigit:]][[:xdigit:]][[:xdigit:]]$/)
-				wanted[prefix]=1
-			next
-		}
-		{
-			tab=index($0, "\t")
-			if (tab == 0) next
-			prefix=toupper(substr($0, 1, tab - 1))
-			if (wanted[prefix]) {
-				vendor=substr($0, tab + 1)
-				sub(/\t.*$/, "", vendor)
-				gsub(/^[[:space:]]+|[[:space:]]+$/, "", vendor)
-				if (vendor != "") print prefix "|" vendor
-				delete wanted[prefix]
-			}
-		}' "$candidates" "$VENDOR_DB"
-}
-
 collect_quarantined() {
 	uci -q show firewall 2>/dev/null | awk -F'[.=]' -v prefix="$RULE_PREFIX" '
 		$1 == "firewall" && $3 == "name" && index($0, prefix) > 0 {
@@ -540,17 +512,15 @@ EOF
 }
 
 collect_once() {
-	local now cutoff candidates totals vendors quarantined sql mac ip host active_now rx tx vendor prefix is_quarantined esc_mac esc_ip esc_host esc_vendor changed fresh_state
+	local now cutoff candidates totals quarantined sql mac ip host active_now rx tx is_quarantined esc_mac esc_ip esc_host changed fresh_state
 	now="$(date +%s)"
 	cutoff=$((now - OFFLINE_AFTER_SECONDS))
 	candidates="/tmp/.openwalla-devices-candidates.$$"
 	totals="/tmp/.openwalla-devices-totals.$$"
-	vendors="/tmp/.openwalla-devices-vendors.$$"
 	quarantined="/tmp/.openwalla-devices-quarantined.$$"
 
 	collect_candidates >"$candidates"
 	collect_totals >"$totals"
-	collect_vendors "$candidates" >"$vendors"
 	cleanup_excluded_devices
 
 	fresh_state=0
@@ -582,8 +552,6 @@ collect_once() {
 		tx="$(awk -F'|' -v m="$mac" '$1 == m { print $3; found=1; exit } END { if (!found) print 0 }' "$totals")"
 		case "$rx" in '' | *[!0-9]*) rx=0 ;; esac
 		case "$tx" in '' | *[!0-9]*) tx=0 ;; esac
-		prefix="$(printf '%s' "$mac" | tr -d ':' | tr '[:lower:]' '[:upper:]' | cut -c1-6)"
-		vendor="$(awk -F'|' -v p="$prefix" '$1 == p { sub(/^[^|]*\|/, ""); print; exit }' "$vendors")"
 		if grep -qx "$mac" "$quarantined" 2>/dev/null; then
 			is_quarantined=1
 		else
@@ -593,11 +561,10 @@ collect_once() {
 		esc_mac="$(sql_escape "$mac")"
 		esc_ip="$(sql_escape "$ip")"
 		esc_host="$(sql_escape "$host")"
-		esc_vendor="$(sql_escape "$vendor")"
 		if [ "$active_now" = "1" ]; then
-			sql="INSERT INTO devices (mac, ip, hostname, vendor, quarantined, last_seen, total_up, total_down, status) VALUES ('$esc_mac', '$esc_ip', '$esc_host', '$esc_vendor', $is_quarantined, $now, $tx, $rx, 'online') ON CONFLICT(mac) DO UPDATE SET ip=CASE WHEN excluded.ip != '' THEN excluded.ip ELSE devices.ip END, hostname=CASE WHEN devices.hostname = '' AND excluded.hostname != '' THEN excluded.hostname ELSE devices.hostname END, vendor=CASE WHEN devices.vendor = '' AND excluded.vendor != '' THEN excluded.vendor ELSE devices.vendor END, quarantined=excluded.quarantined, last_seen=excluded.last_seen, total_up=excluded.total_up, total_down=excluded.total_down, status=CASE WHEN devices.scheduled_block=1 THEN 'block-scheduled' ELSE excluded.status END;"
+			sql="INSERT INTO devices (mac, ip, hostname, vendor, quarantined, last_seen, total_up, total_down, status) VALUES ('$esc_mac', '$esc_ip', '$esc_host', '', $is_quarantined, $now, $tx, $rx, 'online') ON CONFLICT(mac) DO UPDATE SET ip=CASE WHEN excluded.ip != '' THEN excluded.ip ELSE devices.ip END, hostname=CASE WHEN devices.hostname = '' AND excluded.hostname != '' THEN excluded.hostname ELSE devices.hostname END, quarantined=excluded.quarantined, last_seen=excluded.last_seen, total_up=excluded.total_up, total_down=excluded.total_down, status=CASE WHEN devices.scheduled_block=1 THEN 'block-scheduled' ELSE excluded.status END;"
 		else
-			sql="INSERT INTO devices (mac, ip, hostname, vendor, quarantined, last_seen, total_up, total_down, status) VALUES ('$esc_mac', '$esc_ip', '$esc_host', '$esc_vendor', $is_quarantined, 0, $tx, $rx, 'offline') ON CONFLICT(mac) DO UPDATE SET ip=CASE WHEN excluded.ip != '' THEN excluded.ip ELSE devices.ip END, hostname=CASE WHEN devices.hostname = '' AND excluded.hostname != '' THEN excluded.hostname ELSE devices.hostname END, vendor=CASE WHEN devices.vendor = '' AND excluded.vendor != '' THEN excluded.vendor ELSE devices.vendor END, quarantined=excluded.quarantined, total_up=excluded.total_up, total_down=excluded.total_down;"
+			sql="INSERT INTO devices (mac, ip, hostname, vendor, quarantined, last_seen, total_up, total_down, status) VALUES ('$esc_mac', '$esc_ip', '$esc_host', '', $is_quarantined, 0, $tx, $rx, 'offline') ON CONFLICT(mac) DO UPDATE SET ip=CASE WHEN excluded.ip != '' THEN excluded.ip ELSE devices.ip END, hostname=CASE WHEN devices.hostname = '' AND excluded.hostname != '' THEN excluded.hostname ELSE devices.hostname END, quarantined=excluded.quarantined, total_up=excluded.total_up, total_down=excluded.total_down;"
 		fi
 		sql_exec "$sql" || true
 	done <"$candidates"
@@ -611,7 +578,7 @@ collect_once() {
 	sql_exec "UPDATE devices SET status='offline' WHERE last_seen < $cutoff AND quarantined = 0 AND scheduled_block = 0;"
 	sql_exec "UPDATE devices SET status='blocked' WHERE quarantined = 1;"
 
-	rm -f "$candidates" "$totals" "$vendors" "$quarantined"
+	rm -f "$candidates" "$totals" "$quarantined"
 }
 
 handle_event() {

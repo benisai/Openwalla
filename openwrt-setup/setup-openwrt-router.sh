@@ -573,7 +573,8 @@ uninstall_feature() {
 		;;
 	devices)
 		stop_disable_service openwalla-devices-collector
-		rm -f /usr/bin/openwalla-devices-collector /etc/init.d/openwalla-devices-collector /usr/share/openwalla/openwalla-mac-vendors.txt
+		remove_cron_marker "OPENWALLA_1HR_RUN"
+		rm -f /usr/bin/openwalla-devices-collector /etc/init.d/openwalla-devices-collector /usr/share/openwalla/openwalla-mac-vendors.txt /usr/bin/Openwalla-1hr-run.sh
 		clear_openwalla_section devices
 		;;
 	bandwidth)
