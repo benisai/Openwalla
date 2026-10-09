@@ -235,7 +235,7 @@ dedupe_devices() {
 collect_dhcp() {
 	[ -f /tmp/dhcp.leases ] || return 0
 	awk '{
-		if ($2 ~ /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/) {
+		if ($2 ~ /^[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]$/) {
 			mac=tolower($2)
 			ip=$3
 			host=$4
@@ -245,13 +245,45 @@ collect_dhcp() {
 	}' /tmp/dhcp.leases
 }
 
+collect_static_dhcp() {
+	command -v uci >/dev/null 2>&1 || return 0
+	uci -q show dhcp 2>/dev/null | awk -F= '
+		function unquote(value) {
+			sub(/^\047/, "", value)
+			sub(/\047$/, "", value)
+			sub(/^"/, "", value)
+			sub(/"$/, "", value)
+			return value
+		}
+		$1 ~ /^dhcp\..*\.mac$/ || $1 ~ /^dhcp\..*\.name$/ || $1 ~ /^dhcp\..*\.ip$/ {
+			key=$1
+			value=unquote(substr($0, index($0, "=") + 1))
+			section=key
+			sub(/\.[^.]+$/, "", section)
+			option=key
+			sub(/^.*\./, "", option)
+			values[section, option]=value
+			sections[section]=1
+		}
+		END {
+			for (section in sections) {
+				count=split(values[section, "mac"], macs, /[ ,]+/)
+				for (i=1; i<=count; i++) {
+					mac=tolower(macs[i])
+					if (mac ~ /^[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]$/)
+						print mac "|" values[section, "ip"] "|" values[section, "name"] "|0"
+				}
+			}
+		}'
+}
+
 collect_arp() {
 	if [ -r /proc/net/arp ]; then
 		awk -v dev="$LAN_DEVICE" 'NR>1 {
 			ip=$1
 			mac=tolower($4)
 			ifname=$6
-			if (ifname == dev && mac ~ /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/ && mac != "00:00:00:00:00:00")
+			if (ifname == dev && mac ~ /^[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]$/ && mac != "00:00:00:00:00:00")
 				print mac "|" ip "||" ($3 == "0x2" ? 1 : 0)
 		}' /proc/net/arp
 	fi
@@ -268,7 +300,7 @@ collect_ip_neigh() {
 		for (i=1; i<=NF; i++) {
 			if ($i == "REACHABLE" || $i == "DELAY" || $i == "PROBE" || $i == "PERMANENT") active=1
 		}
-		if (mac ~ /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/)
+		if (mac ~ /^[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]$/)
 			print tolower(mac) "|" ip "||" active
 	}'
 }
@@ -276,7 +308,7 @@ collect_ip_neigh() {
 collect_bridge_fdb() {
 	command -v bridge >/dev/null 2>&1 || return 0
 	bridge fdb show br "$LAN_DEVICE" 2>/dev/null | awk '
-		$1 ~ /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/ && $0 !~ / self/ && $0 !~ / permanent/ {
+		$1 ~ /^[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]$/ && $0 !~ / self/ && $0 !~ / permanent/ {
 			print tolower($1) "|||1"
 		}'
 }
@@ -297,6 +329,7 @@ collect_wireless() {
 collect_candidates() {
 	{
 		collect_dhcp
+		collect_static_dhcp
 		collect_arp
 		collect_ip_neigh
 		collect_bridge_fdb
@@ -307,7 +340,7 @@ collect_candidates() {
 			ip=$2
 			host=$3
 			active_now=$4 + 0
-			if (mac ~ /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/) {
+			if (mac ~ /^[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]$/) {
 				seen[mac]=1
 				if (ip != "" && ip_by_mac[mac] == "") ip_by_mac[mac]=ip
 				if (host != "" && host_by_mac[mac] == "") host_by_mac[mac]=host
@@ -323,17 +356,25 @@ collect_candidates() {
 
 collect_totals() {
 	command -v nlbw >/dev/null 2>&1 || return 0
-	nlbw -c csv -g mac -o mac -q 2>/dev/null | awk '
+	nlbw -c csv -g mac -o mac -s "|" -q 2>/dev/null | awk -F'|' '
 		NR == 1 {
-			for (i = 1; i <= NF; i++) idx[$i] = i
+			for (i = 1; i <= NF; i++) {
+				gsub(/^[[:space:]]+|[[:space:]]+$/, "", $i)
+				idx[$i] = i
+			}
 			next
 		}
 		NF > 0 {
 			mac = tolower($idx["mac"])
-			rx = $idx["rx_bytes"] + 0
-			tx = $idx["tx_bytes"] + 0
-			if (mac ~ /^([0-9a-f][0-9a-f]:){5}[0-9a-f][0-9a-f]$/ && mac != "00:00:00:00:00:00")
-				print mac "|" rx "|" tx
+			gsub(/^[[:space:]]+|[[:space:]]+$/, "", mac)
+			if (mac ~ /^[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]$/ && mac != "00:00:00:00:00:00") {
+				rx[mac] += $idx["rx_bytes"] + 0
+				tx[mac] += $idx["tx_bytes"] + 0
+			}
+		}
+		END {
+			for (mac in rx)
+				printf "%s|%.0f|%.0f\n", mac, rx[mac], tx[mac]
 		}
 	'
 }
@@ -350,7 +391,7 @@ collect_quarantined() {
 			sub(/^[^=]*=/, "", value)
 			gsub(/\047/, "", value)
 			gsub(/"/, "", value)
-			if (quarantine[section] && value ~ /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/)
+			if (quarantine[section] && value ~ /^[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]$/)
 				print tolower(value)
 		}
 	' | sort -u

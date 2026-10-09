@@ -130,18 +130,26 @@ prune_db() {
 }
 
 parse_nlbw_csv() {
-	nlbw -c csv -g mac -o mac -q 2>/dev/null | awk '
+	nlbw -c csv -g mac -o mac -s "|" -q 2>/dev/null | awk -F'|' '
 		BEGIN { OFS="\t" }
 		NR == 1 {
-			for (i = 1; i <= NF; i++) idx[$i] = i
+			for (i = 1; i <= NF; i++) {
+				gsub(/^[[:space:]]+|[[:space:]]+$/, "", $i)
+				idx[$i] = i
+			}
 			next
 		}
 		NF > 0 {
 			mac = tolower($idx["mac"])
-			rx = $idx["rx_bytes"] + 0
-			tx = $idx["tx_bytes"] + 0
-			if (mac ~ /^([0-9a-f][0-9a-f]:){5}[0-9a-f][0-9a-f]$/ && mac != "00:00:00:00:00:00")
-				print mac, rx, tx
+			gsub(/^[[:space:]]+|[[:space:]]+$/, "", mac)
+			if (mac ~ /^[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]$/ && mac != "00:00:00:00:00:00") {
+				rx[mac] += $idx["rx_bytes"] + 0
+				tx[mac] += $idx["tx_bytes"] + 0
+			}
+		}
+		END {
+			for (mac in rx)
+				printf "%s\t%.0f\t%.0f\n", mac, rx[mac], tx[mac]
 		}
 	'
 }
