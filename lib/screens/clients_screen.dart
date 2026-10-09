@@ -12,7 +12,6 @@ import 'package:openwalla/widgets/luci_loading_states.dart';
 import 'package:openwalla/widgets/openwalla_toast.dart';
 import 'package:openwalla/widgets/luci_toast.dart';
 import 'package:openwalla/widgets/luci_refresh_components.dart';
-import 'package:openwalla/widgets/luci_animation_system.dart';
 import 'package:openwalla/utils/self_device_guard.dart';
 
 class ClientsScreen extends ConsumerStatefulWidget {
@@ -390,22 +389,16 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
                                   message: emptyMessage,
                                   icon: emptyIcon,
                                 )
-                              : ListView.separated(
+                              : ListView(
                                   padding: const EdgeInsets.only(bottom: 16),
-                                  separatorBuilder: (context, idx) =>
-                                      const SizedBox(height: 4),
-                                  itemCount: filteredClients.length,
-                                  itemBuilder: (context, index) {
-                                    final client = filteredClients[index];
-
-                                    return LuciSlideTransition(
-                                      direction: LuciSlideDirection.up,
-                                      delay: Duration(milliseconds: index * 50),
-                                      distance: 30,
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 16.0,
-                                          vertical: 8.0,
+                                  children: [
+                                    for (final client in filteredClients)
+                                      Padding(
+                                        padding: const EdgeInsets.fromLTRB(
+                                          16,
+                                          8,
+                                          16,
+                                          12,
                                         ),
                                         child: _UnifiedClientCard(
                                           client: client,
@@ -418,8 +411,7 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
                                               _showDeleteDeviceSheet(client),
                                         ),
                                       ),
-                                    );
-                                  },
+                                  ],
                                 ),
                         ),
                       ],
