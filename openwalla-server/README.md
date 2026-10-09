@@ -10,7 +10,17 @@ Netify must listen on the router LAN address instead of only `127.0.0.1`. Openwa
 
 ## Start
 
-Edit `compose.yaml` and set `OPENWALLA_NETIFY_HOST` and `OPENWALLA_ROUTER_LAN_IP` to the router LAN address, then run:
+Run the bootstrap installer from the directory where Openwalla Server should be installed:
+
+```sh
+wget -qO openwalla-server-install.sh https://raw.githubusercontent.com/benisai/Openwalla/main/openwalla-server/install.sh
+chmod +x openwalla-server-install.sh
+./openwalla-server-install.sh
+```
+
+The installer downloads the current runtime files into `./openwalla-server`, creates a persistent `.env`, and runs `docker compose up -d --build`. Edit `openwalla-server/.env` to set the router LAN address and optional API token, then rerun the installer to apply the settings.
+
+For a manual installation, copy `.env.example` to `.env`, update the values, then run:
 
 ```sh
 docker compose up -d --build

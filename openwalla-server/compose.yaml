@@ -4,12 +4,12 @@ services:
     container_name: openwalla-server
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "${OPENWALLA_API_PORT:-8080}:8080"
     environment:
-      OPENWALLA_NETIFY_HOST: "192.168.1.1"
-      OPENWALLA_NETIFY_PORT: "7150"
-      OPENWALLA_ROUTER_LAN_IP: "192.168.1.1"
-      OPENWALLA_RETENTION_HOURS: "24"
-      OPENWALLA_API_TOKEN: ""
+      OPENWALLA_NETIFY_HOST: "${OPENWALLA_NETIFY_HOST:-192.168.1.1}"
+      OPENWALLA_NETIFY_PORT: "${OPENWALLA_NETIFY_PORT:-7150}"
+      OPENWALLA_ROUTER_LAN_IP: "${OPENWALLA_ROUTER_LAN_IP:-192.168.1.1}"
+      OPENWALLA_RETENTION_HOURS: "${OPENWALLA_RETENTION_HOURS:-24}"
+      OPENWALLA_API_TOKEN: "${OPENWALLA_API_TOKEN:-}"
     volumes:
       - ./data:/data
