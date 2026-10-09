@@ -146,6 +146,7 @@ files/openwalla-speedtest-monitor.sh|/usr/bin/openwalla-speedtest-monitor|0755|
 files/openwalla-notifications-db.sh|/usr/bin/openwalla-notifications-db|0755|
 files/openwalla-devices-collector.sh|/usr/bin/openwalla-devices-collector|0755|openwalla-devices-collector
 files/openwalla-devices-collector.init|/etc/init.d/openwalla-devices-collector|0755|openwalla-devices-collector
+files/oui/openwalla-mac-vendors.txt|/usr/share/openwalla/openwalla-mac-vendors.txt|0644|openwalla-devices-collector
 files/openwalla-device-bandwidth-collector.sh|/usr/bin/openwalla-device-bandwidth-collector|0755|openwalla-device-bandwidth-collector
 files/openwalla-device-bandwidth-collector.init|/etc/init.d/openwalla-device-bandwidth-collector|0755|openwalla-device-bandwidth-collector
 files/openwalla-device-traffic-summary.sh|/usr/bin/openwalla-device-traffic-summary|0755|

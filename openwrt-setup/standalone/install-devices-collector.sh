@@ -12,6 +12,7 @@ log "Installing Openwalla devices collector"
 
 require_file "$FILES_DIR/openwalla-devices-collector.sh"
 require_file "$FILES_DIR/openwalla-devices-collector.init"
+require_file "$FILES_DIR/oui/openwalla-mac-vendors.txt"
 require_file "$FILES_DIR/openwalla.config"
 require_file "$RPCD_ACL"
 
@@ -24,6 +25,7 @@ ensure_uci_section devices devices
 
 install_file "$FILES_DIR/openwalla-devices-collector.sh" /usr/bin/openwalla-devices-collector 0755
 install_file "$FILES_DIR/openwalla-devices-collector.init" /etc/init.d/openwalla-devices-collector 0755
+install_file "$FILES_DIR/oui/openwalla-mac-vendors.txt" /usr/share/openwalla/openwalla-mac-vendors.txt 0644
 install_rpcd_acl
 
 set_uci_default openwalla.devices.enabled "1"

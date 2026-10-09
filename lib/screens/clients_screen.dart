@@ -2364,10 +2364,10 @@ class _UnifiedClientCard extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            client.hostname,
+                            _deviceDisplayName(client),
                             style: LuciTextStyles.cardTitle(context),
                             semanticsLabel:
-                                'Client hostname: ${client.hostname}',
+                                'Client hostname: ${_deviceDisplayName(client)}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -2437,6 +2437,16 @@ class _UnifiedClientCard extends StatelessWidget {
     } else {
       return shown;
     }
+  }
+
+  String _deviceDisplayName(Client client) {
+    final hostname = client.hostname.trim();
+    final vendor = client.vendor?.trim() ?? '';
+    if ((hostname.isEmpty || hostname.toLowerCase() == 'unknown') &&
+        vendor.isNotEmpty) {
+      return 'Unknown ($vendor)';
+    }
+    return hostname.isEmpty ? 'Unknown' : hostname;
   }
 }
 

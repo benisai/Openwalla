@@ -573,7 +573,7 @@ uninstall_feature() {
 		;;
 	devices)
 		stop_disable_service openwalla-devices-collector
-		rm -f /usr/bin/openwalla-devices-collector /etc/init.d/openwalla-devices-collector
+		rm -f /usr/bin/openwalla-devices-collector /etc/init.d/openwalla-devices-collector /usr/share/openwalla/openwalla-mac-vendors.txt
 		clear_openwalla_section devices
 		;;
 	bandwidth)

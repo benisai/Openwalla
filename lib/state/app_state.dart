@@ -1292,6 +1292,7 @@ class OpenwallaDeviceRecord {
   final String mac;
   final String ip;
   final String hostname;
+  final String vendor;
   final int totalUploadBytes;
   final int totalDownloadBytes;
   final String staticIpAddress;
@@ -1306,6 +1307,7 @@ class OpenwallaDeviceRecord {
     required this.mac,
     required this.ip,
     required this.hostname,
+    this.vendor = '',
     required this.totalUploadBytes,
     required this.totalDownloadBytes,
     required this.staticIpAddress,
@@ -5522,10 +5524,14 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       final scheduledBlock = parts.length > 9 && parts[9].trim() == '1';
       final scheduleUntil = parts.length > 10 ? parts[10].trim() : '';
       final hidden = parts.length > 11 && parts[11].trim() == '1';
+      final vendor = parts.length > 12
+          ? parts.sublist(12).join('|').trim()
+          : '';
       final record = OpenwallaDeviceRecord(
         mac: mac,
         ip: ip,
         hostname: hostname,
+        vendor: vendor,
         totalUploadBytes: totalUp,
         totalDownloadBytes: totalDown,
         staticIpAddress: staticIp,
@@ -5562,6 +5568,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       mac: live.mac,
       ip: live.ip.isNotEmpty ? live.ip : custom.ip,
       hostname: custom.hostname.isNotEmpty ? custom.hostname : live.hostname,
+      vendor: custom.vendor.isNotEmpty ? custom.vendor : live.vendor,
       totalUploadBytes: live.totalUploadBytes,
       totalDownloadBytes: live.totalDownloadBytes,
       staticIpAddress: custom.staticIpAddress.isNotEmpty
@@ -5611,7 +5618,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
           ? " WHERE status != 'offline' OR quarantined = 1"
           : "";
       final sqlWithHidden =
-          "SELECT mac, ip, hostname, total_up, total_down, static_ip, status, quarantined, icon, scheduled_block, schedule_until, hidden FROM devices$where ORDER BY last_seen DESC;";
+          "SELECT mac, ip, hostname, total_up, total_down, static_ip, status, quarantined, icon, scheduled_block, schedule_until, hidden, vendor FROM devices$where ORDER BY last_seen DESC;";
       final sqlWithStatic =
           "SELECT mac, ip, hostname, total_up, total_down, static_ip, status, quarantined, icon, scheduled_block, schedule_until FROM devices$where ORDER BY last_seen DESC;";
       final sqlWithoutSchedule =
@@ -5784,6 +5791,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
             ipAddress: ip.isEmpty ? 'N/A' : ip,
             macAddress: record.mac,
             hostname: hostname.isEmpty ? 'Unknown' : hostname,
+            vendor: record.vendor.isEmpty ? null : record.vendor,
             connectionType: ConnectionType.unknown,
             isBlocked:
                 record.quarantined ||
@@ -13225,6 +13233,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
           record.quarantined || record.status == 'blocked' || isScheduled;
       yield client.copyWith(
         hostname: hostname.isEmpty ? client.hostname : hostname,
+        vendor: record.vendor.isEmpty ? client.vendor : record.vendor,
         isBlocked: isBlocked,
         isQuarantined: record.quarantined,
         totalUploadBytes: record.totalUploadBytes,
