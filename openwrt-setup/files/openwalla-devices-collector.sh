@@ -493,6 +493,14 @@ process_new_device() {
 	return 1
 }
 
+mark_device_active() {
+	local mac="$1" ip="$2" host="$3" esc_mac esc_ip esc_host
+	esc_mac="$(sql_escape "$mac")"
+	esc_ip="$(sql_escape "$ip")"
+	esc_host="$(sql_escape "$host")"
+	sql_exec "INSERT INTO devices (mac, ip, hostname, last_seen, status) VALUES ('$esc_mac', '$esc_ip', '$esc_host', CAST(strftime('%s','now') AS INTEGER), 'online') ON CONFLICT(mac) DO UPDATE SET ip=CASE WHEN excluded.ip!='' THEN excluded.ip ELSE devices.ip END, hostname=CASE WHEN devices.hostname='' AND excluded.hostname!='' THEN excluded.hostname ELSE devices.hostname END, last_seen=excluded.last_seen, status=CASE WHEN devices.quarantined=1 THEN 'blocked' WHEN devices.scheduled_block=1 THEN 'block-scheduled' ELSE 'online' END;" || true
+}
+
 cleanup_excluded_devices() {
 	local mac esc_mac changed
 	changed=0
@@ -593,6 +601,7 @@ handle_event() {
 	[ -n "$ip" ] && is_ipv4 "$ip" || return 0
 	is_router_mac "$mac" && return 0
 	is_hidden_mac "$mac" && return 0
+	mark_device_active "$mac" "$ip" "$host"
 
 	fresh_state=0
 	[ -f "$STATE_FILE" ] || fresh_state=1
@@ -638,6 +647,23 @@ run_locked() {
 	return "$result"
 }
 
+run_event_locked() {
+	local attempts result
+	attempts=0
+	while ! mkdir "$LOCK_DIR" 2>/dev/null; do
+		attempts=$((attempts + 1))
+		if [ "$attempts" -ge 5 ]; then
+			log "collector busy; event will be reconciled by the next scan"
+			return 0
+		fi
+		sleep 1
+	done
+	handle_event "$@"
+	result=$?
+	rmdir "$LOCK_DIR" 2>/dev/null || true
+	return "$result"
+}
+
 run_daemon() {
 	log "starting devices collector db=$DB_PATH poll=${POLL_SECONDS}s offline_after=${OFFLINE_AFTER_SECONDS}s"
 	while true; do
@@ -665,7 +691,7 @@ case "${1:---daemon}" in
 	;;
 --event)
 	ensure_db_file
-	run_locked handle_event "${2:-}" "${3:-}" "${4:-}"
+	run_event_locked "${2:-}" "${3:-}" "${4:-}"
 	;;
 --hide)
 	ensure_db_file

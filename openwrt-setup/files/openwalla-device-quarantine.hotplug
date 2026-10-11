@@ -1,15 +1,30 @@
 #!/bin/sh
 
-# Trigger an immediate quarantine check for new DHCP leases and LAN neighbors.
+# Mark DHCP/neighbor clients online immediately and check new-device quarantine.
 
 [ "${ACTION:-}" = "add" ] || [ "${ACTION:-}" = "update" ] || exit 0
 [ -x /usr/bin/openwalla-devices-collector ] || exit 0
 
-mac="${MACADDR:-${MAC:-}}"
-ip="${IPADDR:-${IP:-}}"
+mac="${MACADDR:-${LLADDR:-${MAC:-}}}"
+ip="${IPADDR:-${IP:-${DESTINATION:-}}}"
 host="${HOSTNAME:-${DHCP_HOSTNAME:-}}"
 
 [ -n "$mac" ] || exit 0
+mac="$(printf '%s' "$mac" | tr '[:upper:]' '[:lower:]')"
+case "$mac" in
+[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]) ;;
+*) exit 0 ;;
+esac
+
+if [ -z "$ip" ] && [ -r /tmp/dhcp.leases ]; then
+	ip="$(awk -v mac="$mac" 'tolower($2)==mac { print $3; exit }' /tmp/dhcp.leases)"
+fi
+if [ -z "$host" ] && [ -r /tmp/dhcp.leases ]; then
+	host="$(awk -v mac="$mac" 'tolower($2)==mac && $4!="*" { print $4; exit }' /tmp/dhcp.leases)"
+fi
+if [ -z "$ip" ] && command -v ip >/dev/null 2>&1; then
+	ip="$(ip -4 neigh show 2>/dev/null | awk -v mac="$mac" '{ for (i=1; i<=NF; i++) if ($i=="lladdr" && tolower($(i+1))==mac) { print $1; exit } }')"
+fi
 case "$ip" in
 	*.*.*.*) ;;
 	*) exit 0 ;;
