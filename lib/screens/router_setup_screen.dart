@@ -90,7 +90,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
     return switch (_selectedProfile) {
       _SetupProfile.basic => _basicFeatures,
       _SetupProfile.standard => _standardFeatures,
-      _SetupProfile.advanced => [..._standardFeatures, 'pbr'],
+      _SetupProfile.advanced => [..._standardFeatures, 'pbr', 'banip'],
       _SetupProfile.custom =>
         _CustomInstallComponentsCard.items
             .where((item) => _customInstallFeatures.contains(item.feature))
@@ -829,6 +829,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
       _SetupProfile.advanced => [
         ..._installLabels(_SetupProfile.standard),
         'Policy-Based Routing (PBR)',
+        'banIP country and IP blocking',
       ],
       _SetupProfile.custom =>
         _CustomInstallComponentsCard.items
