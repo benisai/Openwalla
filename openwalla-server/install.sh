@@ -56,6 +56,7 @@ for file in \
 	tunnel/Dockerfile \
 	tunnel/entrypoint.sh \
 	tunnel/install-router.sh \
+	tunnel/Caddyfile.example \
 	tunnel/traefik-dynamic.example.yaml \
 	app/__init__.py \
 	app/auth.py \

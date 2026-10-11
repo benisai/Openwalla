@@ -28,6 +28,8 @@ docker compose up -d --build
 
 The dashboard and API are available at `http://<docker-host>:8080`. Enter that URL under **Network Flows > Flow Settings**.
 
+Openwalla Server does not require Traefik, Caddy, or another reverse proxy. Docker publishes the dashboard/API directly on `OPENWALLA_API_PORT`. A reverse proxy is optional when you want HTTPS and a hostname.
+
 Set `OPENWALLA_API_TOKEN` to require `Authorization: Bearer <token>`. Enter the same token in the app. Leaving it empty allows LAN access without authentication.
 
 ## Configuration
@@ -50,6 +52,13 @@ Set `OPENWALLA_API_TOKEN` to require `Authorization: Bearer <token>`. Enter the 
 | `OPENWALLA_AUTH_BAN_PATH` | `/data/openwalla-auth-bans.json` | Persistent IP-ban state file |
 | `OPENWALLA_AUTH_TRUST_PROXY` | `false` | Trust the first `X-Forwarded-For` address |
 | `OPENWALLA_AUTH_SECURE_COOKIE` | `false` | Send the session cookie over HTTPS only |
+| `OPENWALLA_DOCKER_NETWORK` | `openwalla` | Docker network created for Openwalla services and optional proxies |
+| `OPENWALLA_TUNNEL_GATEWAY_BIND` | `0.0.0.0` | Host address accepting the router's outbound SSH tunnel |
+| `OPENWALLA_TUNNEL_SSH_PORT` | `2222` | Public SSH gateway port used by the router |
+| `OPENWALLA_TUNNEL_HTTP_BIND` | `127.0.0.1` | Host address exposing tunneled LuCI |
+| `OPENWALLA_TUNNEL_HTTP_PORT` | `10080` | Host and container port for tunneled LuCI |
+| `OPENWALLA_TUNNEL_REMOTE_SSH_BIND` | `127.0.0.1` | Host address exposing tunneled router SSH |
+| `OPENWALLA_TUNNEL_REMOTE_SSH_PORT` | `10022` | Host and container port for tunneled router SSH |
 
 ## API
 
@@ -89,7 +98,9 @@ When Traefik is the only path to Openwalla Server, set `OPENWALLA_AUTH_TRUST_PRO
 
 ## Optional reverse tunnel
 
-Openwalla Server includes an optional SSH gateway for reaching a router behind NAT without opening an inbound router firewall port. The router initiates a key-authenticated outbound SSH connection to the VPS. LuCI is forwarded to port `10080` inside the gateway container and router SSH to port `10022`. Neither forwarded port is published directly by Docker.
+Openwalla Server includes an optional SSH gateway for reaching a router behind NAT without opening an inbound router firewall port. The router initiates a key-authenticated outbound SSH connection to the server. LuCI is forwarded to port `10080` and router SSH to port `10022`.
+
+Both forwarded services bind to `127.0.0.1` on the Docker host by default. This works directly with a host-installed Caddy, Traefik, nginx, or another proxy without exposing LuCI or router SSH publicly. The router-facing gateway listens on port `2222` on all host interfaces so the remote router can establish its outbound connection.
 
 The first implementation supports one router per Openwalla Server instance.
 
@@ -113,8 +124,6 @@ Paste the printed public-key line into:
 openwalla-server/tunnel-data/authorized_keys
 ```
 
-Make sure the external Docker network used by Traefik exists. The default is `proxy`; change `OPENWALLA_PROXY_NETWORK` in `.env` when your network has another name.
-
 Start the optional gateway:
 
 ```sh
@@ -129,11 +138,74 @@ Restart the router connection:
 
 The OpenWrt `procd` service reconnects automatically after a network interruption or VPS restart.
 
-### 3. Route LuCI through Traefik
+### 3. Open LuCI directly or through a proxy
 
-Copy `tunnel/traefik-dynamic.example.yaml` into the Traefik file-provider directory, change `router.example.com`, and configure the desired certificate resolver or TLS options. Traefik must share the Docker network configured by `OPENWALLA_PROXY_NETWORK`.
+From the Docker host, tunneled LuCI is available at:
 
-Protect the router hostname with Traefik authentication or an IP allowlist. The SSH gateway authenticates the router connection, but the LuCI endpoint still needs normal access controls at the reverse proxy.
+```text
+http://127.0.0.1:10080
+```
+
+Tunneled router SSH is available with:
+
+```sh
+ssh -p 10022 root@127.0.0.1
+```
+
+To access LuCI directly from another trusted machine without a reverse proxy, set a LAN address in `.env`, then recreate the tunnel service:
+
+```env
+OPENWALLA_TUNNEL_HTTP_BIND=192.168.1.10
+```
+
+Avoid `0.0.0.0` unless a host firewall restricts access. Publishing tunneled LuCI directly to the internet is not recommended.
+
+### Caddy on the Docker host
+
+Use `tunnel/Caddyfile.example`, or add:
+
+```caddyfile
+router.example.com {
+    reverse_proxy 127.0.0.1:10080
+}
+```
+
+### Containerized reverse proxies
+
+Compose creates a regular Docker network named `openwalla`; it does not require an existing proxy network. Connect the proxy container to that network and route to:
+
+```text
+http://openwalla-tunnel:10080
+```
+
+For example:
+
+```sh
+docker network connect openwalla caddy
+```
+
+Replace `caddy` with the actual proxy container name. For a persistent Compose configuration, add the network to the proxy's Compose file:
+
+```yaml
+services:
+  caddy:
+    networks:
+      - default
+      - openwalla
+
+networks:
+  openwalla:
+    external: true
+    name: openwalla
+```
+
+Set `OPENWALLA_DOCKER_NETWORK` if you want Openwalla to create the network under a different name, and use that same name in the proxy configuration.
+
+### Traefik file provider
+
+Copy `tunnel/traefik-dynamic.example.yaml` into the Traefik file-provider directory, change `router.example.com`, and configure the desired certificate resolver or TLS options. Connect the Traefik container to the `openwalla` Docker network first.
+
+Protect the router hostname with reverse-proxy authentication or an IP allowlist. The SSH gateway authenticates the router connection, but the LuCI endpoint still needs normal access controls at the proxy.
 
 Useful checks:
 

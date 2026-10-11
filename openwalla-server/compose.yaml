@@ -27,6 +27,8 @@ services:
       OPENWALLA_TUNNEL_REMOTE_SSH_PORT: "${OPENWALLA_TUNNEL_REMOTE_SSH_PORT:-10022}"
     volumes:
       - ./data:/data
+    networks:
+      - openwalla
 
   openwalla-tunnel:
     profiles: ["tunnel"]
@@ -36,17 +38,19 @@ services:
     container_name: openwalla-tunnel
     restart: unless-stopped
     ports:
-      - "${OPENWALLA_TUNNEL_SSH_PORT:-2222}:22"
+      - "${OPENWALLA_TUNNEL_GATEWAY_BIND:-0.0.0.0}:${OPENWALLA_TUNNEL_SSH_PORT:-2222}:22"
+      - "${OPENWALLA_TUNNEL_HTTP_BIND:-127.0.0.1}:${OPENWALLA_TUNNEL_HTTP_PORT:-10080}:${OPENWALLA_TUNNEL_HTTP_PORT:-10080}"
+      - "${OPENWALLA_TUNNEL_REMOTE_SSH_BIND:-127.0.0.1}:${OPENWALLA_TUNNEL_REMOTE_SSH_PORT:-10022}:${OPENWALLA_TUNNEL_REMOTE_SSH_PORT:-10022}"
     environment:
       OPENWALLA_TUNNEL_USER: "${OPENWALLA_TUNNEL_USER:-openwalla}"
+      OPENWALLA_TUNNEL_HTTP_PORT: "${OPENWALLA_TUNNEL_HTTP_PORT:-10080}"
+      OPENWALLA_TUNNEL_REMOTE_SSH_PORT: "${OPENWALLA_TUNNEL_REMOTE_SSH_PORT:-10022}"
     volumes:
       - ./tunnel-data/authorized_keys:/config/authorized_keys:ro
       - ./tunnel-data/host-keys:/etc/ssh/keys
     networks:
-      - default
-      - openwalla-proxy
+      - openwalla
 
 networks:
-  openwalla-proxy:
-    name: "${OPENWALLA_PROXY_NETWORK:-proxy}"
-    external: true
+  openwalla:
+    name: "${OPENWALLA_DOCKER_NETWORK:-openwalla}"

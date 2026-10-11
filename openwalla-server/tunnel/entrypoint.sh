@@ -3,8 +3,14 @@
 set -eu
 
 TUNNEL_USER="${OPENWALLA_TUNNEL_USER:-openwalla}"
+HTTP_PORT="${OPENWALLA_TUNNEL_HTTP_PORT:-10080}"
+REMOTE_SSH_PORT="${OPENWALLA_TUNNEL_REMOTE_SSH_PORT:-10022}"
 KEY_DIRECTORY=/etc/ssh/keys
 AUTHORIZED_KEYS=/config/authorized_keys
+
+case "$HTTP_PORT:$REMOTE_SSH_PORT" in
+*[!0-9:]*|:*|*:) printf '%s\n' "[openwalla-tunnel] Invalid forwarded port configuration." >&2; exit 1 ;;
+esac
 
 if [ ! -s "$AUTHORIZED_KEYS" ]; then
 	printf '%s\n' "[openwalla-tunnel] No router public key found at $AUTHORIZED_KEYS." >&2
@@ -40,7 +46,7 @@ PermitRootLogin no
 AllowUsers $TUNNEL_USER
 AllowTcpForwarding remote
 GatewayPorts clientspecified
-PermitListen 0.0.0.0:10080 0.0.0.0:10022
+PermitListen 0.0.0.0:$HTTP_PORT 0.0.0.0:$REMOTE_SSH_PORT
 PermitTunnel no
 PermitTTY no
 X11Forwarding no
