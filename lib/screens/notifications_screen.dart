@@ -139,6 +139,52 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
         title: 'Notifications',
         showBack: true,
         actions: [
+          PopupMenuButton<_NotificationFilter>(
+            initialValue: _filter,
+            tooltip: 'Filter notifications',
+            onSelected: (filter) => setState(() => _filter = filter),
+            icon: Icon(
+              Icons.filter_list_rounded,
+              color: _filter == _NotificationFilter.all
+                  ? colorScheme.onSurface
+                  : colorScheme.primary,
+            ),
+            itemBuilder: (context) => _NotificationFilter.values.map((filter) {
+              final (label, icon) = switch (filter) {
+                _NotificationFilter.all => ('All', Icons.notifications_rounded),
+                _NotificationFilter.critical => (
+                  'Critical',
+                  Icons.error_rounded,
+                ),
+                _NotificationFilter.warning => (
+                  'Warnings',
+                  Icons.warning_amber_rounded,
+                ),
+                _NotificationFilter.resolved => (
+                  'Resolved',
+                  Icons.check_circle_rounded,
+                ),
+              };
+              return PopupMenuItem<_NotificationFilter>(
+                value: filter,
+                child: Row(
+                  children: [
+                    Icon(icon, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text(label)),
+                    if (_filter == filter) ...[
+                      const SizedBox(width: 12),
+                      Icon(
+                        Icons.check_rounded,
+                        size: 20,
+                        color: colorScheme.primary,
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: PopupMenuButton<_NotificationMenuAction>(
@@ -192,29 +238,6 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                                 },
                                 icon: const Icon(Icons.close_rounded),
                               ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: _NotificationFilter.values.map((filter) {
-                          final label = switch (filter) {
-                            _NotificationFilter.all => 'All',
-                            _NotificationFilter.critical => 'Critical',
-                            _NotificationFilter.warning => 'Warnings',
-                            _NotificationFilter.resolved => 'Resolved',
-                          };
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: ChoiceChip(
-                              label: Text(label),
-                              selected: _filter == filter,
-                              onSelected: (_) =>
-                                  setState(() => _filter = filter),
-                            ),
-                          );
-                        }).toList(),
                       ),
                     ),
                     const SizedBox(height: 18),
