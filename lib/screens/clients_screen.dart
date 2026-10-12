@@ -715,7 +715,7 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
   Future<void> _openDeviceDetails(Client client) async {
     await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (context) => _DeviceDetailsPage(
+        builder: (context) => DeviceDetailsPage(
           client: client,
           onIdentityUpdated:
               ({
@@ -999,7 +999,7 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
   }
 }
 
-class _DeviceDetailsPage extends ConsumerStatefulWidget {
+class DeviceDetailsPage extends ConsumerStatefulWidget {
   final Client client;
   final void Function({
     required String hostname,
@@ -1010,7 +1010,8 @@ class _DeviceDetailsPage extends ConsumerStatefulWidget {
   final Future<void> Function(bool paused) onToggleInternetPause;
   final Future<void> Function(bool blocked) onToggleInternetBlock;
 
-  const _DeviceDetailsPage({
+  const DeviceDetailsPage({
+    super.key,
     required this.client,
     required this.onIdentityUpdated,
     required this.onToggleInternetPause,
@@ -1018,10 +1019,10 @@ class _DeviceDetailsPage extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<_DeviceDetailsPage> createState() => _DeviceDetailsPageState();
+  ConsumerState<DeviceDetailsPage> createState() => _DeviceDetailsPageState();
 }
 
-class _DeviceDetailsPageState extends ConsumerState<_DeviceDetailsPage> {
+class _DeviceDetailsPageState extends ConsumerState<DeviceDetailsPage> {
   final _nameController = TextEditingController();
   final _ipController = TextEditingController();
   final _nameFocusNode = FocusNode();

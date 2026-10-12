@@ -70,6 +70,32 @@ void main() {
       expect(notification.effectiveSeverity, 'warning');
       expect(notification.effectiveCategory, 'device');
       expect(notification.isNetworkPerformanceEvent, isFalse);
+      expect(notification.isQuarantineEvent, isTrue);
+      expect(notification.deviceMacAddress, 'AA:BB:CC:DD:EE:FF');
+    });
+
+    test('reads quarantine device MAC from enriched metadata', () {
+      final notification = OpenwallaNotification.fromSqliteRow(
+        '12|1789849887|device-quarantine|New device quarantined|0|0|device|'
+        'warning|Device quarantined|Phone needs approval|mac=aa-bb-cc-dd-ee-ff',
+      )!;
+      expect(notification.deviceMacAddress, 'AA:BB:CC:DD:EE:FF');
+    });
+
+    test('quarantine rows without a valid MAC do not link to a device', () {
+      final notification = OpenwallaNotification.fromSqliteRow(
+        '13|1789849887|device-quarantine|New device quarantined mac=invalid|0|0',
+      )!;
+      expect(notification.isQuarantineEvent, isTrue);
+      expect(notification.deviceMacAddress, isNull);
+    });
+
+    test('unrelated device events do not become quarantine links', () {
+      final notification = OpenwallaNotification.fromSqliteRow(
+        '14|1789849887|devices|Device connected mac=AA:BB:CC:DD:EE:FF|0|0',
+      )!;
+      expect(notification.isQuarantineEvent, isFalse);
+      expect(notification.deviceMacAddress, isNull);
     });
   });
 }

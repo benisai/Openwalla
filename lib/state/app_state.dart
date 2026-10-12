@@ -452,6 +452,19 @@ class OpenwallaNotification {
     return message.trim();
   }
 
+  bool get isQuarantineEvent =>
+      app.toLowerCase().contains('quarantine') ||
+      RegExp(r'\bquarantined\b', caseSensitive: false).hasMatch(message);
+
+  String? get deviceMacAddress {
+    if (!isQuarantineEvent) return null;
+    final match = RegExp(
+      r'\bmac\s*=\s*((?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2})(?![0-9a-f:-])',
+      caseSensitive: false,
+    ).firstMatch('$metadata $message $details');
+    return match?.group(1)?.toUpperCase().replaceAll('-', ':');
+  }
+
   String get effectiveSeverity {
     if (severity.trim().isNotEmpty) return severity.trim().toLowerCase();
     final lower = message.toLowerCase();
