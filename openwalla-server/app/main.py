@@ -80,7 +80,7 @@ def _tunnel_status() -> dict[str, object]:
     }
 
 
-@app.get("/", include_in_schema=False)
+@app.get("/", include_in_schema=False, response_model=None)
 def dashboard_page(request: Request) -> FileResponse | RedirectResponse:
     if authentication.enabled and not authentication.valid_session(
         request.cookies.get(SESSION_COOKIE)
@@ -89,7 +89,7 @@ def dashboard_page(request: Request) -> FileResponse | RedirectResponse:
     return FileResponse(STATIC_DIRECTORY / "dashboard.html")
 
 
-@app.get("/login", include_in_schema=False)
+@app.get("/login", include_in_schema=False, response_model=None)
 def login_page(request: Request) -> FileResponse | RedirectResponse:
     if not authentication.enabled or authentication.valid_session(
         request.cookies.get(SESSION_COOKIE)
