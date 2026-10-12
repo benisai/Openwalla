@@ -9,7 +9,6 @@ from typing import Any, Iterable
 
 from .processor import ProcessedFlow
 
-
 FLOW_COLUMNS = """
     timeinsert,local_ip,local_port,local_mac,fqdn,dest_ip,dest_port,dest_type,
     detected_protocol_name,detected_app_name,interface,internal,
@@ -30,8 +29,7 @@ class FlowDatabase:
 
     def _initialize(self) -> None:
         with self._lock, self._connection:
-            self._connection.executescript(
-                """
+            self._connection.executescript("""
                 PRAGMA journal_mode=WAL;
                 PRAGMA synchronous=NORMAL;
                 PRAGMA busy_timeout=30000;
@@ -72,8 +70,7 @@ class FlowDatabase:
                     ON flow_raw(local_ip, timeinsert DESC);
                 CREATE INDEX IF NOT EXISTS idx_flow_raw_app_time
                     ON flow_raw(detected_app_name, timeinsert DESC);
-                """
-            )
+                """)
 
     def insert_many(self, flows: Iterable[ProcessedFlow]) -> int:
         values = [flow.values for flow in flows]
@@ -101,13 +98,17 @@ class FlowDatabase:
             parameters.append(int(time.time()) - (hours * 3600))
         normalized = (protocol or "").strip().upper()
         if normalized == "HTTP":
-            conditions.append("(UPPER(detected_protocol_name) = 'HTTP' OR dest_port = 80)")
+            conditions.append(
+                "(UPPER(detected_protocol_name) = 'HTTP' OR dest_port = 80)"
+            )
         elif normalized == "HTTPS":
             conditions.append(
                 "(UPPER(detected_protocol_name) IN ('HTTP/S','HTTPS','TLS') OR dest_port = 443)"
             )
         elif normalized == "DNS":
-            conditions.append("(UPPER(detected_protocol_name) = 'DNS' OR dest_port = 53)")
+            conditions.append(
+                "(UPPER(detected_protocol_name) = 'DNS' OR dest_port = 53)"
+            )
         if mac:
             conditions.append("LOWER(local_mac) = ?")
             parameters.append(mac.strip().lower())
@@ -130,14 +131,20 @@ class FlowDatabase:
         mac: str | None,
         search: str | None,
         hours: int | None,
+        normalized: bool = False,
     ) -> list[dict[str, Any]]:
         where, parameters = self._where(protocol, mac, search, hours)
         parameters.extend([limit, offset])
         with self._lock:
+            columns = "*" if normalized else "json"
             rows = self._connection.execute(
-                f"SELECT json FROM flow_raw{where} ORDER BY id DESC LIMIT ? OFFSET ?",
+                f"SELECT {columns} FROM flow_raw{where} ORDER BY id DESC LIMIT ? OFFSET ?",
                 parameters,
             ).fetchall()
+        if normalized:
+            return [
+                {key: row[key] for key in row.keys() if key != "json"} for row in rows
+            ]
         result: list[dict[str, Any]] = []
         for row in rows:
             try:

@@ -68,6 +68,16 @@ class AuthenticationManager:
     def enabled(self) -> bool:
         return bool(self.settings.ui_password or self.settings.ui_password_hash)
 
+    def reconfigure(self, settings: Settings) -> None:
+        with self._lock:
+            self.settings = settings
+            secret = (
+                settings.session_secret or settings.api_token or settings.ui_password
+            )
+            self._secret = hashlib.sha256(
+                (secret or secrets.token_urlsafe(32)).encode()
+            ).digest()
+
     def client_ip(self, request: Any) -> str:
         if self.settings.auth_trust_proxy:
             forwarded = request.headers.get("x-forwarded-for", "")
@@ -110,7 +120,9 @@ class AuthenticationManager:
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             with temporary.open("w", encoding="utf-8") as handle:
-                json.dump({"version": 1, "bans": self._bans}, handle, separators=(",", ":"))
+                json.dump(
+                    {"version": 1, "bans": self._bans}, handle, separators=(",", ":")
+                )
                 handle.flush()
                 os.fsync(handle.fileno())
             os.chmod(temporary, 0o600)
@@ -152,8 +164,8 @@ class AuthenticationManager:
         encoded = self.settings.ui_password_hash
         if encoded:
             try:
-                algorithm, cost, block_size, parallelism, salt, expected = encoded.split(
-                    ":", 5
+                algorithm, cost, block_size, parallelism, salt, expected = (
+                    encoded.split(":", 5)
                 )
                 if algorithm != "scrypt":
                     return False

@@ -63,6 +63,22 @@ class FlowDatabaseTest(unittest.TestCase):
         )
         self.assertEqual(count, 1)
 
+    def test_normalized_records_for_web_explorer(self) -> None:
+        rows = self.database.list_flows(
+            limit=40,
+            offset=0,
+            protocol=None,
+            mac=None,
+            search="example.com",
+            hours=24,
+            normalized=True,
+        )
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["fqdn"], "api.example.com")
+        self.assertEqual(rows[0]["local_ip"], "192.168.1.20")
+        self.assertGreater(rows[0]["timeinsert"], 0)
+        self.assertNotIn("json", rows[0])
+
     def test_dashboard_summary(self) -> None:
         summary = self.database.dashboard_summary(24)
 

@@ -12,7 +12,6 @@ from .config import Settings
 from .database import FlowDatabase
 from .processor import FlowProcessor, ProcessedFlow
 
-
 LOGGER = logging.getLogger("openwalla.collector")
 
 
@@ -36,13 +35,19 @@ class NetifyCollector:
         self.status = CollectorStatus()
         self._queue: queue.Queue[ProcessedFlow] = queue.Queue(maxsize=10000)
         self._stop = threading.Event()
+        self._reconnect = threading.Event()
+        self._configuration_lock = threading.Lock()
         self._threads: list[threading.Thread] = []
         self._connection: socket.socket | None = None
 
     def start(self) -> None:
         self._threads = [
-            threading.Thread(target=self._collect_loop, name="netify-reader", daemon=True),
-            threading.Thread(target=self._write_loop, name="sqlite-writer", daemon=True),
+            threading.Thread(
+                target=self._collect_loop, name="netify-reader", daemon=True
+            ),
+            threading.Thread(
+                target=self._write_loop, name="sqlite-writer", daemon=True
+            ),
             threading.Thread(target=self._prune_loop, name="retention", daemon=True),
         ]
         for thread in self._threads:
@@ -50,6 +55,7 @@ class NetifyCollector:
 
     def stop(self) -> None:
         self._stop.set()
+        self._reconnect.set()
         if self._connection is not None:
             try:
                 self._connection.shutdown(socket.SHUT_RDWR)
@@ -59,22 +65,49 @@ class NetifyCollector:
         for thread in self._threads:
             thread.join(timeout=3)
 
+    def reconfigure(self, settings: Settings) -> None:
+        with self._configuration_lock:
+            connection_changed = (settings.netify_host, settings.netify_port) != (
+                self.settings.netify_host,
+                self.settings.netify_port,
+            )
+            self.processor = FlowProcessor(
+                settings.excluded_protocols, settings.router_lan_ip
+            )
+            self.settings = settings
+            if connection_changed:
+                self._reconnect.set()
+                connection = self._connection
+                if connection is not None:
+                    try:
+                        connection.shutdown(socket.SHUT_RDWR)
+                    except OSError:
+                        pass
+
     def _collect_loop(self) -> None:
         while not self._stop.is_set():
             try:
+                target = (self.settings.netify_host, self.settings.netify_port)
                 LOGGER.info(
                     "Connecting to Netify at %s:%s",
                     self.settings.netify_host,
                     self.settings.netify_port,
                 )
-                with socket.create_connection(
-                    (self.settings.netify_host, self.settings.netify_port), timeout=15
-                ) as connection:
-                    self._connection = connection
+                with socket.create_connection(target, timeout=15) as connection:
+                    with self._configuration_lock:
+                        if (
+                            target
+                            != (self.settings.netify_host, self.settings.netify_port)
+                            or self._stop.is_set()
+                        ):
+                            continue
+                        self._connection = connection
                     connection.settimeout(None)
                     self.status.connected = True
                     self.status.last_error = ""
-                    with connection.makefile("r", encoding="utf-8", errors="replace") as stream:
+                    with connection.makefile(
+                        "r", encoding="utf-8", errors="replace"
+                    ) as stream:
                         while not self._stop.is_set():
                             line = stream.readline()
                             if not line:
@@ -94,7 +127,8 @@ class NetifyCollector:
             finally:
                 self.status.connected = False
                 self._connection = None
-            self._stop.wait(self.settings.reconnect_seconds)
+            self._reconnect.wait(self.settings.reconnect_seconds)
+            self._reconnect.clear()
 
     def _write_loop(self) -> None:
         while not self._stop.is_set():

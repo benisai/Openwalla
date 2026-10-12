@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import hmac
 import socket
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
@@ -10,18 +11,21 @@ from urllib.parse import parse_qs
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from .auth import AuthenticationManager, SESSION_COOKIE
 from .collector import NetifyCollector
 from .config import Settings
 from .database import FlowDatabase
-
+from .runtime_config import RuntimeConfig, RuntimeOptions, public_settings
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
-settings = Settings.from_environment()
+runtime_config = RuntimeConfig(Settings.from_environment())
+settings = runtime_config.load()
+settings_lock = threading.Lock()
 database = FlowDatabase(settings.database_path)
 collector = NetifyCollector(settings, database)
 authentication = AuthenticationManager(settings)
@@ -42,6 +46,8 @@ def authorize(
     if not settings.api_token and not authentication.enabled:
         return
     raise HTTPException(status_code=401, detail="Authentication required")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     collector.start()
@@ -53,6 +59,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Openwalla Server", version="1.0.0", lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=STATIC_DIRECTORY), name="static")
 
 
 def _port_reachable(host: str, port: int) -> bool:
@@ -81,12 +88,49 @@ def _tunnel_status() -> dict[str, object]:
 
 
 @app.get("/", include_in_schema=False, response_model=None)
+@app.get("/netify", include_in_schema=False, response_model=None)
+@app.get("/tunnel", include_in_schema=False, response_model=None)
+@app.get("/settings", include_in_schema=False, response_model=None)
 def dashboard_page(request: Request) -> FileResponse | RedirectResponse:
     if authentication.enabled and not authentication.valid_session(
         request.cookies.get(SESSION_COOKIE)
     ):
         return RedirectResponse("/login", status_code=303)
     return FileResponse(STATIC_DIRECTORY / "dashboard.html")
+
+
+@app.get("/api/v1/settings", dependencies=[Depends(authorize)])
+def get_settings() -> dict:
+    return public_settings(settings)
+
+
+@app.put("/api/v1/settings", dependencies=[Depends(authorize)])
+def update_settings(options: RuntimeOptions, request: Request) -> dict:
+    global settings
+    # Do not accept cross-origin configuration writes using browser credentials.
+    origin = request.headers.get("origin")
+    if origin and origin != str(request.base_url).rstrip("/"):
+        raise HTTPException(403, "Cross-origin settings changes are not allowed")
+    with settings_lock:
+        try:
+            updated = runtime_config.prepare(settings, options)
+            runtime_config.save(updated)
+            updated = runtime_config.load()
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
+        except OSError as error:
+            logging.exception("Unable to persist server settings")
+            raise HTTPException(
+                500, "Unable to save settings to the data volume"
+            ) from error
+        settings = updated
+        collector.reconfigure(updated)
+        authentication.reconfigure(updated)
+    return {
+        "settings": public_settings(updated),
+        "login_required": authentication.enabled
+        and not authentication.valid_session(request.cookies.get(SESSION_COOKIE)),
+    }
 
 
 @app.get("/login", include_in_schema=False, response_model=None)
@@ -103,11 +147,11 @@ async def login(request: Request) -> RedirectResponse:
     values = parse_qs((await request.body()).decode("utf-8", errors="replace"))
     username = values.get("username", [""])[0]
     password = values.get("password", [""])[0]
-    result = authentication.login(
-        authentication.client_ip(request), username, password
-    )
+    result = authentication.login(authentication.client_ip(request), username, password)
     if not result.accepted:
-        suffix = f"?banned={result.banned_seconds}" if result.banned_seconds else "?error=1"
+        suffix = (
+            f"?banned={result.banned_seconds}" if result.banned_seconds else "?error=1"
+        )
         return RedirectResponse(f"/login{suffix}", status_code=303)
     response = RedirectResponse("/", status_code=303)
     response.set_cookie(
@@ -184,6 +228,7 @@ def flows(
     mac: str | None = None,
     search: str | None = None,
     hours: Annotated[int | None, Query(ge=1, le=168)] = None,
+    normalized: bool = False,
 ) -> dict[str, object]:
     return {
         "items": database.list_flows(
@@ -193,6 +238,7 @@ def flows(
             mac=mac,
             search=search,
             hours=hours,
+            normalized=normalized,
         )
     }
 

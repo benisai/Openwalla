@@ -61,11 +61,16 @@ for file in \
 	app/__init__.py \
 	app/auth.py \
 	app/config.py \
+	app/runtime_config.py \
 	app/processor.py \
 	app/database.py \
 	app/collector.py \
 	app/main.py \
 	app/static/dashboard.html \
+	app/static/server.css \
+	app/static/server.js \
+	app/static/lucide.min.js \
+	app/static/LUCIDE-LICENSE \
 	app/static/login.html
 do
 	download "$file"
@@ -88,10 +93,11 @@ fi
 log "Building and starting Openwalla Server"
 (
 	cd "$INSTALL_DIR"
-	$COMPOSE up -d --build
+	$COMPOSE -f compose.yaml up -d --build
 )
 
 api_port="$(sed -n 's/^OPENWALLA_API_PORT=//p' "$INSTALL_DIR/.env" | tail -n 1)"
 [ -n "$api_port" ] || api_port="2020"
 log "Openwalla Server is running on port $api_port."
-log "Edit $INSTALL_DIR/.env, then rerun this installer to change settings."
+log "Open http://<server-ip>:$api_port to configure Netify, retention, and login settings."
+log "Docker ports, volumes, and the optional tunnel deployment remain in $INSTALL_DIR/.env."

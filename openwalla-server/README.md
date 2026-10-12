@@ -18,9 +18,9 @@ chmod +x openwalla-server-install.sh
 ./openwalla-server-install.sh
 ```
 
-The installer downloads the current runtime files into `./openwalla-server`, creates a persistent `.env`, and runs `docker compose up -d --build`. Edit `openwalla-server/.env` to set the router LAN address and optional API token, then rerun the installer to apply the settings.
+The installer downloads the current runtime files into `./openwalla-server`, creates a persistent `.env`, and runs `docker compose up -d --build`. Open the web interface to configure the router address, data retention, and access protection. Existing `.env` values are used as initial defaults.
 
-For a manual installation, copy `.env.example` to `.env`, update the values, then run:
+For a manual installation, copy `.env.example` to `.env`, then run:
 
 ```sh
 docker compose up -d --build
@@ -30,9 +30,39 @@ The dashboard and API are available at `http://<docker-host>:2020`. Enter that U
 
 Openwalla Server does not require Traefik, Caddy, or another reverse proxy. Docker publishes the dashboard/API directly on `OPENWALLA_API_PORT`. A reverse proxy is optional when you want HTTPS and a hostname.
 
-Set `OPENWALLA_API_TOKEN` to require `Authorization: Bearer <token>`. Enter the same token in the app. Leaving it empty allows LAN access without authentication.
+Under **Settings > App API access**, set a token to require `Authorization: Bearer <token>`. Enter the same token in the mobile app. With both dashboard login and API token disabled, the server allows unauthenticated access: keep it on a trusted network until protection is enabled. Use HTTPS when exposing it outside your LAN.
+
+## Web interface
+
+- **Dashboard**: connection health, flow totals, observed devices, top applications, and login protection status. Refreshes every 10 seconds while the browser tab is visible.
+- **Netify**: live stream counters and errors, router address and stream port, reconnect interval, excluded protocols, and a searchable, paginated flow explorer.
+- **Tunnel**: LuCI and SSH forward reachability, with editable gateway monitoring host and ports. Monitoring does not deploy or reconfigure the SSH gateway itself.
+- **Settings**: flow retention, dashboard username/password, session lifetime, IP-ban policy, API token, and currently banned addresses.
+
+Runtime settings are validated and atomically saved to `/data/openwalla-settings.json` with owner-only permissions. Passwords are stored as scrypt hashes; tokens and password hashes are never returned by the settings API. Blank password/token fields retain the existing values. Changing dashboard credentials invalidates existing sessions. Bans remain intact when settings change.
+
+Saved settings take precedence over `.env` after the first save and survive container recreation in the `openwalla-data` volume. Do not use `docker compose down -v` unless you intend to delete both settings and collected data.
+
+Docker still controls published host ports, mounted volumes, trusted-proxy/HTTPS-cookie behavior, and the optional tunnel container profile. Changes to those deployment options require updating `.env`/Compose and recreating the affected service. The web UI does not mount the Docker socket or obtain host-level container control.
+
+### Update an existing standalone installation
+
+From the existing `openwalla-server` directory:
+
+```sh
+wget -O /tmp/openwalla-server-install.sh https://raw.githubusercontent.com/benisai/Openwalla/main/openwalla-server/install.sh
+sudo env OPENWALLA_SERVER_DIR="$PWD" sh /tmp/openwalla-server-install.sh
+```
+
+This refreshes the runtime files and rebuilds the service without deleting `.env` or the data volume. Use `docker compose` (no hyphen) with current Docker engines.
+
+### Tests
+
+From `openwalla-server`, install `requirements-dev.txt` into a virtual environment and run `python -m unittest discover -s tests -v`. These are server tests; no Android build is involved.
 
 ## Configuration
+
+The variables below provide bootstrap defaults and deployment settings. Use the web interface for ongoing runtime changes.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -67,21 +97,21 @@ Set `OPENWALLA_API_TOKEN` to require `Authorization: Bearer <token>`. Enter the 
 - `GET /api/v1/status`
 - `GET /api/v1/dashboard?hours=24`
 - `GET /api/v1/tunnel/status`
+- `GET /api/v1/settings` (secrets redacted)
+- `PUT /api/v1/settings` (validated runtime configuration)
 - `GET /api/v1/flows?limit=250&offset=0&hours=24`
 - `GET /api/v1/flows/count?hours=24`
 - `POST /api/v1/maintenance/prune`
 
-Flow endpoints also accept `protocol`, `mac`, and `search` query parameters.
+Flow endpoints also accept `protocol`, `mac`, and `search` query parameters. `/flows` returns original Netify JSON by default for mobile-app compatibility; the web explorer requests `normalized=true` for database timestamps and normalized display columns.
 
-The web dashboard displays collector health, reverse-tunnel reachability, flow and device totals, top detected applications, and recent flows. It refreshes every 10 seconds. When `OPENWALLA_API_TOKEN` is configured, the dashboard asks for the token and stores it in the browser on that device.
+The web interface refreshes every 10 seconds while visible. API-token authentication is stored in browser session storage, not permanently in local storage. Dashboard login cookies also authorize API requests.
 
 ## Dashboard authentication
 
-Set `OPENWALLA_UI_USERNAME` and either `OPENWALLA_UI_PASSWORD` or `OPENWALLA_UI_PASSWORD_HASH` in `.env`, then recreate the service:
+Under **Settings > Dashboard login**, enable login, enter a username and new password, confirm it, and save. The server hashes the password and redirects to sign in. Existing sessions are invalidated when credentials change. No container rebuild is needed.
 
-```sh
-docker compose up -d --build
-```
+For environment-based bootstrap only, set `OPENWALLA_UI_USERNAME` and either `OPENWALLA_UI_PASSWORD` or `OPENWALLA_UI_PASSWORD_HASH` before the first web settings save.
 
 For a hashed password, generate an scrypt value without placing the password in shell history:
 
@@ -89,7 +119,7 @@ For a hashed password, generate an scrypt value without placing the password in 
 docker compose exec openwalla-server python -m app.auth
 ```
 
-Paste the resulting value into `OPENWALLA_UI_PASSWORD_HASH`, leave `OPENWALLA_UI_PASSWORD` empty, and recreate the service. Dashboard sessions use signed `HttpOnly`, `SameSite=Strict` cookies. Set `OPENWALLA_AUTH_SECURE_COOKIE=true` when the dashboard is available exclusively through HTTPS.
+For bootstrap, paste the resulting value into `OPENWALLA_UI_PASSWORD_HASH`, leave `OPENWALLA_UI_PASSWORD` empty, and recreate the service. After runtime settings have been saved, change passwords through the web interface instead. Dashboard sessions use signed `HttpOnly`, `SameSite=Strict` cookies. Set `OPENWALLA_AUTH_SECURE_COOKIE=true` when the dashboard is available exclusively through HTTPS.
 
 The server temporarily bans a client address after the configured number of failed logins. The dashboard Security panel displays the active policy and current temporary bans. Active bans are written atomically to `/data/openwalla-auth-bans.json`, which is preserved in the `openwalla-data` Docker volume, and are restored after container updates or restarts. Expired entries are removed automatically.
 
