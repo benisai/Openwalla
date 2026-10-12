@@ -24,6 +24,7 @@ import 'package:openwalla/utils/http_client_manager.dart';
 import 'package:openwalla/utils/geo_blocking.dart';
 import 'package:openwalla/utils/logger.dart';
 import 'package:openwalla/utils/rpc_result.dart';
+import 'package:openwalla/utils/quarantine_release.dart';
 import 'package:openwalla/utils/router_setup_commands.dart';
 
 typedef _WirelessConnection = ({
@@ -3578,7 +3579,7 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
     Client client, {
     BuildContext? context,
   }) async {
-    queueClientInternetUnblock(client);
+    await queueClientInternetUnblock(client);
     notifyListeners();
   }
 
@@ -14008,6 +14009,10 @@ uci commit dhcp
   }
 
   Future<void> setClientInternetBlocked(Client client, bool blocked) async {
+    if (!blocked) {
+      await queueClientInternetUnblock(client);
+      return;
+    }
     if (_reviewerModeEnabled) {
       notifyListeners();
       return;
@@ -14126,7 +14131,7 @@ uci commit dhcp
     notifyListeners();
   }
 
-  void queueClientInternetUnblock(Client client) {
+  Future<void> queueClientInternetUnblock(Client client) async {
     if (_reviewerModeEnabled) {
       notifyListeners();
       return;
@@ -14135,26 +14140,31 @@ uci commit dhcp
     final router = _routerService?.selectedRouter;
     final sysauth = _authService?.sysauth;
     if (router == null || sysauth == null || _apiService == null) {
-      Logger.warning('Background device unblock skipped: no router connection');
-      return;
+      throw StateError('No selected router connection is available');
     }
 
     final normalizedMac = _normalizeMacAddress(client.macAddress);
     if (!RegExp(r'^([0-9A-F]{2}:){5}[0-9A-F]{2}$').hasMatch(normalizedMac)) {
-      Logger.warning('Background device unblock skipped: invalid MAC');
-      return;
+      throw ArgumentError('A valid device MAC address is required');
     }
 
-    unawaited(
-      _queueClientInternetUnblock(
+    try {
+      await _queueClientInternetUnblock(
         router: router,
         sysauth: sysauth,
         mac: normalizedMac,
-      ).catchError((Object error, StackTrace stack) {
-        Logger.warning('Background device unblock could not be queued: $error');
-        Logger.debug('Background device unblock stack: $stack');
-      }),
-    );
+      );
+    } catch (error) {
+      if (!_looksLikeExpiredSession(error) ||
+          !await refreshRouterAuthenticationAfterSetup()) {
+        rethrow;
+      }
+      await _queueClientInternetUnblock(
+        router: router,
+        sysauth: _authService!.sysauth!,
+        mac: normalizedMac,
+      );
+    }
     notifyListeners();
   }
 
@@ -14163,22 +14173,36 @@ uci commit dhcp
     required String sysauth,
     required String mac,
   }) async {
+    await releaseQuarantineRules(
+      mac: mac,
+      call: (object, method, params) => _apiService!.call(
+        router.ipAddress,
+        sysauth,
+        router.useHttps,
+        object: object,
+        method: method,
+        params: params,
+      ),
+      reloadFirewall: () async {
+        final result = await _apiService!.systemExec(
+          router.ipAddress,
+          sysauth,
+          router.useHttps,
+          command:
+              '(/etc/init.d/firewall reload || /etc/init.d/firewall restart) && echo OPENWALLA_RELEASE_APPLIED',
+        );
+        if (!_rpcCallSucceeded(result) ||
+            !_commandOutput(result).contains('OPENWALLA_RELEASE_APPLIED')) {
+          throw StateError('Router could not apply the quarantine release');
+        }
+      },
+    );
     final escapedMac = mac.toLowerCase().replaceAll("'", "''");
     final dbSql =
         "UPDATE devices SET quarantined=0, status='online', last_seen=strftime('%s','now') WHERE lower(mac)='$escapedMac';";
     final releaseScript =
         '''
 mac=${_shellQuote(mac.toLowerCase())}
-for pass in 1 2 3 4; do
-  for section in \$(uci -q show firewall 2>/dev/null | sed -n 's/^firewall\\.\\([^.=]*\\)=rule\$/\\1/p'); do
-    name=\$(uci -q get firewall."\$section".name 2>/dev/null || true)
-    src_mac=\$(uci -q get firewall."\$section".src_mac 2>/dev/null | tr '[:upper:]' '[:lower:]')
-    case "\$name" in
-      openwalla_quarantine_*) [ "\$src_mac" = "\$mac" ] && uci -q delete firewall."\$section" ;;
-    esac
-  done
-done
-uci commit firewall >/dev/null 2>&1 || true
 ${_sqliteCommand(_devicesDbExpression(), dbSql)} >/dev/null 2>&1 || true
 for socket in /var/run/hostapd/* /var/run/hostapd-*/*; do
   [ -S "\$socket" ] || continue
@@ -14186,15 +14210,19 @@ for socket in /var/run/hostapd/* /var/run/hostapd-*/*; do
   iface="\${socket##*/}"
   /usr/sbin/hostapd_cli -p "\$dir" -i "\$iface" deny_acl REMOVE "\$mac" >/dev/null 2>&1 || true
 done
-/etc/init.d/firewall reload >/dev/null 2>&1 || /etc/init.d/firewall restart >/dev/null 2>&1 || true
 ''';
-    await _apiService!.systemExec(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      command:
-          '( sleep 1; $releaseScript ) >/dev/null 2>&1 & echo OPENWALLA_UNBLOCK_QUEUED',
-    );
+    try {
+      await _apiService!.systemExec(
+        router.ipAddress,
+        sysauth,
+        router.useHttps,
+        command: releaseScript,
+      );
+    } catch (error) {
+      Logger.warning(
+        'Quarantine rules released; optional device metadata/Wi-Fi ACL cleanup failed: $error',
+      );
+    }
   }
 
   Future<void> _setWirelessClientDenied({

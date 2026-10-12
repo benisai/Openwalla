@@ -612,12 +612,16 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
   String _normalizeMac(String mac) =>
       mac.trim().toUpperCase().replaceAll('-', ':');
 
-  void _applyCachedClientBlockState(String mac, bool blocked) {
+  void _applyCachedClientBlockState(
+    String mac,
+    bool blocked, {
+    bool? quarantined,
+  }) {
     Client updateClient(Client client) {
       if (_normalizeMac(client.macAddress) != mac) return client;
       return client.copyWith(
         isBlocked: blocked,
-        isQuarantined: blocked ? client.isQuarantined : false,
+        isQuarantined: quarantined ?? (blocked ? client.isQuarantined : false),
         status: blocked ? 'blocked' : 'online',
       );
     }
@@ -663,19 +667,8 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
       _applyCachedClientBlockState(mac, blocked);
       _clientsFuture = Future.value(_visibleClients);
     });
-    if (!blocked) {
-      ref.read(appStateProvider).queueClientInternetUnblock(client);
-      if (!mounted) return;
-      setState(() => _blockingMacs.remove(mac));
-      context.showToastSuccess(
-        wasQuarantined ? 'Device unquarantined' : 'Device unblocked',
-        subtitle: client.displayName,
-        actionKey: 'client-block-$mac',
-      );
-      return;
-    }
     context.showToastLoading(
-      'Blocking device...',
+      blocked ? 'Blocking device...' : 'Releasing device...',
       subtitle: client.displayName,
       actionKey: 'client-block-$mac',
     );
@@ -686,14 +679,22 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
           .setClientInternetBlocked(client, blocked);
       if (!mounted) return;
       context.showToastSuccess(
-        'Internet access blocked',
+        blocked
+            ? 'Internet access blocked'
+            : wasQuarantined
+            ? 'Device unquarantined'
+            : 'Device unblocked',
         subtitle: client.displayName,
         actionKey: 'client-block-$mac',
       );
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _applyCachedClientBlockState(mac, !blocked);
+        _applyCachedClientBlockState(
+          mac,
+          !blocked,
+          quarantined: wasQuarantined,
+        );
         _clientsFuture = Future.value(_visibleClients);
       });
       context.showToastError(
@@ -701,6 +702,7 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
         subtitle: e.toString().replaceFirst('Bad state: ', ''),
         actionKey: 'client-block-$mac',
       );
+      rethrow;
     } finally {
       if (mounted) {
         setState(() {

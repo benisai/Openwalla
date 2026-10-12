@@ -166,12 +166,37 @@ class _QuarantineScreenState extends ConsumerState<QuarantineScreen> {
         );
       });
     }
-    ref.read(appStateProvider).queueClientInternetUnblock(client);
-    context.showToastSuccess(
-      'Device released',
-      subtitle: client.displayName,
-      actionKey: actionKey,
-    );
+    context.showToastLoading('Releasing device...', actionKey: actionKey);
+    try {
+      await ref.read(appStateProvider).releaseQuarantinedDevice(client);
+      if (!mounted) return;
+      context.showToastSuccess(
+        'Device released',
+        subtitle: client.displayName,
+        actionKey: actionKey,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        final current = _snapshot;
+        if (current != null &&
+            !current.devices.any(
+              (device) => device.macAddress == client.macAddress,
+            )) {
+          _snapshot = OpenwallaQuarantineSnapshot(
+            enabled: current.enabled,
+            running: current.running,
+            intervalSeconds: current.intervalSeconds,
+            devices: [...current.devices, client],
+          );
+        }
+      });
+      context.showToastError(
+        'Could not release device',
+        subtitle: error.toString().replaceFirst('Bad state: ', ''),
+        actionKey: actionKey,
+      );
+    }
   }
 
   @override
