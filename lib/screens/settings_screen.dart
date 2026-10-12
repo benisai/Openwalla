@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/main.dart';
+import 'package:openwalla/design/luci_design_system.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
 import 'package:openwalla/widgets/luci_toast.dart';
@@ -16,37 +17,36 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  Widget _buildSettingsCard({
+  Widget _buildSettingsTile({
     required BuildContext context,
     required IconData icon,
     required String title,
     required String subtitle,
     required VoidCallback onTap,
+    Color? color,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
+    final accent = color ?? colorScheme.primary;
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: colorScheme.primaryContainer,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, color: colorScheme.onPrimaryContainer, size: 24),
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      leading: Container(
+        width: 42,
+        height: 42,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: accent.withValues(alpha: 0.12),
+          shape: BoxShape.circle,
         ),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(subtitle),
-        trailing: Icon(
-          Icons.arrow_forward_ios,
-          size: 16,
-          color: colorScheme.onSurfaceVariant,
-        ),
-        onTap: onTap,
+        child: Icon(icon, color: accent),
       ),
+      title: Text(title, style: LuciTextStyles.cardTitle(context)),
+      subtitle: Text(subtitle, style: LuciTextStyles.cardSubtitle(context)),
+      trailing: Icon(
+        Icons.chevron_right_rounded,
+        color: colorScheme.onSurfaceVariant,
+      ),
+      onTap: onTap,
     );
   }
 
@@ -94,81 +94,63 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return Scaffold(
       appBar: const LuciAppBar(title: 'Settings', showBack: true),
       body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
         children: [
           Builder(
             builder: (context) {
               final appState = ref.watch(appStateProvider);
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildSettingsCard(
+              return Card(
+                elevation: 1,
+                margin: EdgeInsets.zero,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  children: ListTile.divideTiles(
                     context: context,
-                    icon: Icons.palette_outlined,
-                    title: 'Theme',
-                    subtitle:
-                        '${_themeModeLabel(appState.themeMode)} • ${appState.themeAccent.label}',
-                    onTap: () => _openSettingsPage(
-                      context,
-                      const _ThemeSettingsScreen(),
-                    ),
-                  ),
-                  _buildSettingsCard(
-                    context: context,
-                    icon: Icons.dashboard_customize,
-                    title: 'Dashboard Settings',
-                    subtitle: 'Choose which cards and panels appear',
-                    onTap: () => _openSettingsPage(
-                      context,
-                      const RouterDashboardSettingsScreen(
-                        title: 'Dashboard Settings',
-                        showThroughput: false,
-                        showWirelessInterfaces: false,
-                        showWiredInterfaces: false,
-                      ),
-                    ),
-                  ),
-                  if (appState.reviewerModeEnabled) ...[
-                    const Divider(height: 32),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                      child: Text(
-                        'Reviewer Mode',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    ListTile(
-                      leading: const Icon(
-                        Icons.info_outline,
-                        color: Colors.orange,
-                      ),
-                      title: const Text('Reviewer Mode Active'),
-                      subtitle: Text(
-                        'Mock data is being used for demonstration',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      child: FilledButton.icon(
-                        onPressed: () =>
-                            _showReviewerModeResetDialog(context, ref),
-                        icon: const Icon(Icons.exit_to_app),
-                        label: const Text('Exit Reviewer Mode'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: Theme.of(context).colorScheme.error,
-                          foregroundColor: Theme.of(
-                            context,
-                          ).colorScheme.onError,
+                    tiles: [
+                      _buildSettingsTile(
+                        context: context,
+                        icon: Icons.palette_outlined,
+                        title: 'Theme',
+                        subtitle:
+                            '${_themeModeLabel(appState.themeMode)} • ${appState.themeAccent.label}',
+                        onTap: () => _openSettingsPage(
+                          context,
+                          const _ThemeSettingsScreen(),
                         ),
                       ),
-                    ),
-                  ],
-                ],
+                      _buildSettingsTile(
+                        context: context,
+                        icon: Icons.dashboard_customize,
+                        title: 'Dashboard Settings',
+                        subtitle: 'Choose which cards and panels appear',
+                        onTap: () => _openSettingsPage(
+                          context,
+                          const RouterDashboardSettingsScreen(
+                            title: 'Dashboard Settings',
+                            showThroughput: false,
+                            showWirelessInterfaces: false,
+                            showWiredInterfaces: false,
+                          ),
+                        ),
+                      ),
+                      if (appState.reviewerModeEnabled)
+                        _buildSettingsTile(
+                          context: context,
+                          icon: Icons.exit_to_app_rounded,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.error.withValues(alpha: 0.78),
+                          title: 'Exit Reviewer Mode',
+                          subtitle:
+                              'Demo data is active. Return to router login',
+                          onTap: () =>
+                              _showReviewerModeResetDialog(context, ref),
+                        ),
+                    ],
+                  ).toList(),
+                ),
               );
             },
           ),
