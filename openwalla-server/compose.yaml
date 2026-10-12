@@ -26,7 +26,7 @@ services:
       OPENWALLA_TUNNEL_HTTP_PORT: "${OPENWALLA_TUNNEL_HTTP_PORT:-10080}"
       OPENWALLA_TUNNEL_REMOTE_SSH_PORT: "${OPENWALLA_TUNNEL_REMOTE_SSH_PORT:-10022}"
     volumes:
-      - ./data:/data
+      - openwalla-data:/data
     networks:
       - openwalla
 
@@ -54,3 +54,7 @@ services:
 networks:
   openwalla:
     name: "${OPENWALLA_DOCKER_NETWORK:-openwalla}"
+
+volumes:
+  openwalla-data:
+    name: "${OPENWALLA_DATA_VOLUME:-openwalla-data}"

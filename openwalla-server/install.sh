@@ -45,7 +45,7 @@ download() {
 	mv "$temporary" "$destination"
 }
 
-mkdir -p "$INSTALL_DIR/app/static" "$INSTALL_DIR/data" "$INSTALL_DIR/tunnel" \
+mkdir -p "$INSTALL_DIR/app/static" "$INSTALL_DIR/tunnel" \
 	"$INSTALL_DIR/tunnel-data/host-keys"
 
 for file in \

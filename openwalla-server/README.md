@@ -53,6 +53,7 @@ Set `OPENWALLA_API_TOKEN` to require `Authorization: Bearer <token>`. Enter the 
 | `OPENWALLA_AUTH_TRUST_PROXY` | `false` | Trust the first `X-Forwarded-For` address |
 | `OPENWALLA_AUTH_SECURE_COOKIE` | `false` | Send the session cookie over HTTPS only |
 | `OPENWALLA_DOCKER_NETWORK` | `openwalla` | Docker network created for Openwalla services and optional proxies |
+| `OPENWALLA_DATA_VOLUME` | `openwalla-data` | Docker volume storing the SQLite database and authentication bans |
 | `OPENWALLA_TUNNEL_GATEWAY_BIND` | `0.0.0.0` | Host address accepting the router's outbound SSH tunnel |
 | `OPENWALLA_TUNNEL_SSH_PORT` | `2222` | Public SSH gateway port used by the router |
 | `OPENWALLA_TUNNEL_HTTP_BIND` | `127.0.0.1` | Host address exposing tunneled LuCI |
@@ -90,7 +91,9 @@ docker compose exec openwalla-server python -m app.auth
 
 Paste the resulting value into `OPENWALLA_UI_PASSWORD_HASH`, leave `OPENWALLA_UI_PASSWORD` empty, and recreate the service. Dashboard sessions use signed `HttpOnly`, `SameSite=Strict` cookies. Set `OPENWALLA_AUTH_SECURE_COOKIE=true` when the dashboard is available exclusively through HTTPS.
 
-The server temporarily bans a client address after the configured number of failed logins. The dashboard Security panel displays the active policy and current temporary bans. Active bans are written atomically to `/data/openwalla-auth-bans.json`, which is preserved by the existing `./data:/data` volume, and are restored after container updates or restarts. Expired entries are removed automatically.
+The server temporarily bans a client address after the configured number of failed logins. The dashboard Security panel displays the active policy and current temporary bans. Active bans are written atomically to `/data/openwalla-auth-bans.json`, which is preserved in the `openwalla-data` Docker volume, and are restored after container updates or restarts. Expired entries are removed automatically.
+
+The same Docker volume stores `/data/openwalla-netify.sqlite`. Docker initializes it with the ownership prepared by the image, avoiding host bind-mount permission failures while keeping data across container rebuilds and restarts.
 
 When Traefik is the only path to Openwalla Server, set `OPENWALLA_AUTH_TRUST_PROXY=true` so limits apply to the original client address. Keep it disabled if clients can connect directly, because an untrusted client could forge `X-Forwarded-For`.
 
