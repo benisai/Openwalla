@@ -1300,6 +1300,13 @@ class _DeviceDetailsPageState extends ConsumerState<DeviceDetailsPage> {
       if (!nextBlocked) _isQuarantined = false;
       _isBlocking = true;
     });
+    unawaited(_finishInternetBlock(nextBlocked, wasQuarantined));
+  }
+
+  Future<void> _finishInternetBlock(
+    bool nextBlocked,
+    bool wasQuarantined,
+  ) async {
     try {
       await widget.onToggleInternetBlock(nextBlocked);
       if (!mounted) return;

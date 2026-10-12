@@ -45,6 +45,11 @@ void main() {
               'name': 'custom_rule',
               'src_mac': mac,
             },
+            'manual': {
+              '.type': 'rule',
+              'name': '${manualDeviceBlockPrefix}phone_wan',
+              'src_mac': mac,
+            },
           },
         },
       ];
@@ -73,8 +78,16 @@ void main() {
     'removes all matching quarantine rules and applies through native UCI',
     () async {
       await release();
-      expect(deleted, ['lan', 'wan', 'router']);
-      expect(methods, ['get', 'delete', 'delete', 'delete', 'commit', 'apply']);
+      expect(deleted, ['lan', 'wan', 'router', 'manual']);
+      expect(methods, [
+        'get',
+        'delete',
+        'delete',
+        'delete',
+        'delete',
+        'commit',
+        'apply',
+      ]);
       expect(fallbackCount, 0);
     },
   );

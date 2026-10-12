@@ -7,6 +7,8 @@ typedef QuarantineRpcCall =
       Map<String, dynamic> params,
     );
 
+const manualDeviceBlockPrefix = 'owrt_device_block_';
+
 Future<void> releaseQuarantineRules({
   required String mac,
   required QuarantineRpcCall call,
@@ -37,7 +39,9 @@ Future<void> releaseQuarantineRules({
   for (final entry in (data['values'] as Map).entries) {
     final rule = entry.value;
     if (rule is! Map || rule['.type'] != 'rule') continue;
-    if (!(rule['name']?.toString() ?? '').startsWith('openwalla_quarantine_')) {
+    final name = rule['name']?.toString() ?? '';
+    if (!name.startsWith('openwalla_quarantine_') &&
+        !name.startsWith(manualDeviceBlockPrefix)) {
       continue;
     }
     final addresses = [rule['src_mac'], rule['src_mac_address']].expand((

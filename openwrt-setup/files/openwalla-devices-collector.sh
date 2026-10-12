@@ -380,19 +380,35 @@ collect_totals() {
 }
 
 collect_quarantined() {
-	uci -q show firewall 2>/dev/null | awk -F'[.=]' -v prefix="$RULE_PREFIX" '
-		$1 == "firewall" && $3 == "name" && index($0, prefix) > 0 {
-			section=$2
-			quarantine[section]=1
-		}
-		$1 == "firewall" && $3 == "src_mac" {
+	collect_firewall_macs "$RULE_PREFIX"
+}
+
+collect_firewall_macs() {
+	uci -q show firewall 2>/dev/null | awk -F'[.=]' -v prefix="$1" '
+		$1 == "firewall" && ($3 == "name" || $3 == "src_mac" || $3 == "enabled") {
 			section=$2
 			value=$0
 			sub(/^[^=]*=/, "", value)
 			gsub(/\047/, "", value)
 			gsub(/"/, "", value)
-			if (quarantine[section] && value ~ /^[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]$/)
-				print tolower(value)
+			if ($3 == "name") names[section]=value
+			if ($3 == "src_mac") macs[section]=tolower(value)
+			if ($3 == "enabled") enabled[section]=value
+		}
+		END {
+			# Older app blocks had a _router rule; the quarantine script never creates one.
+			for (section in names)
+				if (names[section] ~ /^openwalla_quarantine_.*_router$/ && enabled[section] != "0")
+					manual[macs[section]]=1
+			for (section in names) {
+				mac=macs[section]
+				if (enabled[section] == "0") continue
+				matches=(index(names[section], prefix) == 1)
+				if (prefix == "owrt_device_block_" && manual[mac]) matches=1
+				if (prefix != "owrt_device_block_" && manual[mac]) matches=0
+				if (matches && mac ~ /^[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]$/)
+					print mac
+			}
 		}
 	' | sort -u
 }
@@ -447,7 +463,7 @@ remove_quarantine_rules_for_mac() {
 			name="$(uci_get firewall."$section".name)"
 			source="$(uci_get firewall."$section".src_mac | tr '[:upper:]' '[:lower:]')"
 			case "$name" in
-			"${RULE_PREFIX}"*)
+		"${RULE_PREFIX}"*|owrt_device_block_*)
 				if [ "$source" = "$mac" ]; then
 					uci -q delete firewall."$section" >/dev/null 2>&1 || true
 					changed=1
@@ -584,7 +600,17 @@ collect_once() {
 	done <"$quarantined"
 
 	sql_exec "UPDATE devices SET status='offline' WHERE last_seen < $cutoff AND quarantined = 0 AND scheduled_block = 0;"
+	sql_exec "UPDATE devices SET status=CASE WHEN last_seen >= $cutoff THEN 'online' ELSE 'offline' END WHERE status='blocked' AND quarantined=0 AND scheduled_block=0;"
 	sql_exec "UPDATE devices SET status='blocked' WHERE quarantined = 1;"
+	collect_firewall_macs 'owrt_device_block_' | while IFS= read -r mac; do
+		[ -n "$mac" ] || continue
+		esc_mac="$(sql_escape "$mac")"
+		if grep -qx "$mac" "$quarantined" 2>/dev/null; then
+			sql_exec "UPDATE devices SET status='blocked' WHERE mac='$esc_mac';" || true
+		else
+			sql_exec "UPDATE devices SET status='blocked', quarantined=0 WHERE mac='$esc_mac';" || true
+		fi
+	done
 
 	rm -f "$candidates" "$totals" "$quarantined"
 }
