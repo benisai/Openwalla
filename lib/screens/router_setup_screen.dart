@@ -315,7 +315,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
                     autocorrect: false,
                     decoration: const InputDecoration(
                       labelText: 'Openwalla Server URL',
-                      hintText: 'http://192.168.1.10:8080',
+                      hintText: 'http://192.168.1.10:2020',
                       prefixIcon: Icon(Icons.dns_rounded),
                     ),
                   ),

@@ -92,6 +92,6 @@ log "Building and starting Openwalla Server"
 )
 
 api_port="$(sed -n 's/^OPENWALLA_API_PORT=//p' "$INSTALL_DIR/.env" | tail -n 1)"
-[ -n "$api_port" ] || api_port="8080"
+[ -n "$api_port" ] || api_port="2020"
 log "Openwalla Server is running on port $api_port."
 log "Edit $INSTALL_DIR/.env, then rerun this installer to change settings."

@@ -26,7 +26,7 @@ For a manual installation, copy `.env.example` to `.env`, update the values, the
 docker compose up -d --build
 ```
 
-The dashboard and API are available at `http://<docker-host>:8080`. Enter that URL under **Network Flows > Flow Settings**.
+The dashboard and API are available at `http://<docker-host>:2020`. Enter that URL under **Network Flows > Flow Settings**.
 
 Openwalla Server does not require Traefik, Caddy, or another reverse proxy. Docker publishes the dashboard/API directly on `OPENWALLA_API_PORT`. A reverse proxy is optional when you want HTTPS and a hostname.
 
