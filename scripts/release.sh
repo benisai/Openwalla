@@ -1,112 +1,120 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# Openwalla Release Script (CI-driven)
+# Creates an Openwalla release tag. GitHub Actions builds and publishes the APK/AAB.
 # Usage: ./scripts/release.sh [major|minor|patch]
 
-set -e
+set -euo pipefail
 
-# Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Function to print colored output
 print_status() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+    printf '%b\n' "${GREEN}[INFO]${NC} $1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    printf '%b\n' "${YELLOW}[WARNING]${NC} $1"
 }
 
 print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    printf '%b\n' "${RED}[ERROR]${NC} $1" >&2
 }
 
-# Check if we're in the right directory
-if [ ! -f "pubspec.yaml" ]; then
-    print_error "This script must be run from the project root directory"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT"
+
+if [ ! -f pubspec.yaml ] || [ ! -f .github/workflows/release.yml ]; then
+    print_error "Release files are missing from $PROJECT_ROOT."
     exit 1
 fi
 
-# Check if git is clean
+if [ "$(git branch --show-current)" != "main" ]; then
+    print_error "Releases must be created from the main branch."
+    exit 1
+fi
+
 if [ -n "$(git status --porcelain)" ]; then
-    print_error "Working directory is not clean. Please commit or stash your changes first."
+    print_error "Working directory is not clean. Commit or stash changes first."
     exit 1
 fi
 
-# Get current version from pubspec.yaml
-CURRENT_VERSION=$(grep "^version:" pubspec.yaml | sed 's/version: //')
-print_status "Current version: $CURRENT_VERSION"
+print_status "Checking origin/main and release tags..."
+git fetch --quiet origin main --tags
+if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+    print_error "Local main is not synchronized with origin/main. Pull or push changes first."
+    exit 1
+fi
 
-# Parse version components
-IFS='.' read -ra VERSION_PARTS <<< "${CURRENT_VERSION%%+*}"
-MAJOR=${VERSION_PARTS[0]}
-MINOR=${VERSION_PARTS[1]}
-PATCH=${VERSION_PARTS[2]}
+CURRENT_VERSION="$(awk '/^version:/ {print $2; exit}' pubspec.yaml)"
+CURRENT_NAME="${CURRENT_VERSION%%+*}"
+CURRENT_BUILD="${CURRENT_VERSION#*+}"
 
-# Determine release type
-RELEASE_TYPE=${1:-patch}
+if [ -z "$CURRENT_VERSION" ] || [ "$CURRENT_NAME" = "$CURRENT_VERSION" ]; then
+    print_error "pubspec.yaml must contain a version in name+build format."
+    exit 1
+fi
 
-case $RELEASE_TYPE in
+IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_NAME"
+if ! [[ "$MAJOR" =~ ^[0-9]+$ && "$MINOR" =~ ^[0-9]+$ && "$PATCH" =~ ^[0-9]+$ && "$CURRENT_BUILD" =~ ^[0-9]+$ ]]; then
+    print_error "Unsupported version format: $CURRENT_VERSION"
+    exit 1
+fi
+
+RELEASE_TYPE="${1:-patch}"
+case "$RELEASE_TYPE" in
     major)
-        NEW_MAJOR=$((MAJOR + 1))
-        NEW_MINOR=0
-        NEW_PATCH=0
+        NEW_NAME="$((MAJOR + 1)).0.0"
         ;;
     minor)
-        NEW_MAJOR=$MAJOR
-        NEW_MINOR=$((MINOR + 1))
-        NEW_PATCH=0
+        NEW_NAME="$MAJOR.$((MINOR + 1)).0"
         ;;
     patch)
-        NEW_MAJOR=$MAJOR
-        NEW_MINOR=$MINOR
-        NEW_PATCH=$((PATCH + 1))
+        NEW_NAME="$MAJOR.$MINOR.$((PATCH + 1))"
         ;;
     *)
-        print_error "Invalid release type. Use: major, minor, or patch"
+        print_error "Invalid release type. Use major, minor, or patch."
         exit 1
         ;;
 esac
 
-NEW_VERSION="$NEW_MAJOR.$NEW_MINOR.$NEW_PATCH"
-TAG_VERSION="v$NEW_VERSION"
+NEW_BUILD=$((CURRENT_BUILD + 1))
+NEW_VERSION="$NEW_NAME+$NEW_BUILD"
+TAG_VERSION="v$NEW_NAME"
 
-print_status "New version: $NEW_VERSION"
-print_status "Tag version: $TAG_VERSION"
+if git rev-parse "$TAG_VERSION" >/dev/null 2>&1; then
+    print_error "Tag $TAG_VERSION already exists."
+    exit 1
+fi
 
-echo
-read -p "Do you want to create release $TAG_VERSION? (y/N): " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    print_warning "Release cancelled"
+print_status "Current app version: $CURRENT_VERSION"
+print_status "Proposed app version: $NEW_VERSION"
+print_status "Git tag: $TAG_VERSION"
+printf '\n'
+read -r -p "Create and publish $TAG_VERSION? (y/N): " REPLY
+if [[ ! "$REPLY" =~ ^[Yy]$ ]]; then
+    print_warning "Release cancelled."
     exit 0
 fi
 
-# Get current build number
-CURRENT_BUILD=$(echo "$CURRENT_VERSION" | awk -F'+' '{print $2}')
-if [ -z "$CURRENT_BUILD" ]; then
-    CURRENT_BUILD=1
-fi
-NEW_BUILD=$((CURRENT_BUILD + 1))
-
-# Update pubspec.yaml with new version and incremented build number
-print_status "Updating pubspec.yaml to version: $NEW_VERSION+$NEW_BUILD"
-sed -i.bak "s/^version: .*/version: $NEW_VERSION+$NEW_BUILD/" pubspec.yaml
+print_status "Updating pubspec.yaml..."
+sed -i.bak "s/^version: .*/version: $NEW_VERSION/" pubspec.yaml
 rm pubspec.yaml.bak
 
-# Commit changes
-print_status "Committing changes..."
+print_status "Committing version $NEW_VERSION..."
 git add pubspec.yaml
-git commit -m "chore: bump version to $NEW_VERSION"
+git commit \
+    -m "Release Openwalla $TAG_VERSION" \
+    -m "uploaded from macbook"
 
+print_status "Pushing main..."
 git push origin main
 
-# Create and push tag
-print_status "Creating tag $TAG_VERSION..."
-git tag -a "$TAG_VERSION" -m "Release $TAG_VERSION"
+print_status "Creating and pushing $TAG_VERSION..."
+git tag -a "$TAG_VERSION" -m "Openwalla $TAG_VERSION (build $NEW_BUILD)"
 git push origin "$TAG_VERSION"
 
-print_status "Release $TAG_VERSION created and pushed! CI will handle the build and GitHub release."
+print_status "$TAG_VERSION was dispatched. GitHub Actions will publish the signed APK and AAB."
+print_status "Track it at https://github.com/benisai/Openwalla/actions/workflows/release.yml"

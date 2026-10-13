@@ -135,6 +135,7 @@ flutter run
 - Requires Flutter 3.32.5+ and Dart 3.8+
 - Android: `flutter build apk`  
 - iOS: `flutter build ios`
+- Release publishing: follow [RELEASING.md](RELEASING.md) to create signed GitHub APK and Android App Bundle releases.
 
 ---
 

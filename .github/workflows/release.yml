@@ -1,86 +1,120 @@
-name: Release
+name: Release Openwalla
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*.*.*'
 
-jobs:  
-  build-android:      
-    name: Build Android 
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-android:
+    name: Build and publish Android release
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
-        #1 Checkout Repository
-      - name: Checkout Repository
-        uses: actions/checkout@v3
-
-        #2 Setup Java
-      - name: Set Up Java
-        uses: actions/setup-java@v3
+      - name: Check out repository
+        uses: actions/checkout@v4
         with:
-          distribution: 'zulu'
-          java-version: '21'
+          fetch-depth: 0
 
-        #3 Setup Flutter
-      - name: Set Up Flutter
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '21'
+          cache: gradle
+
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.35.2'
-          channel: 'stable'
+          channel: stable
+          cache: true
 
-        #4 Install Dependencies
-      - name: Install Dependencies
+      - name: Verify release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_version="$(awk '/^version:/ {print $2; exit}' pubspec.yaml)"
+          version_name="${app_version%%+*}"
+          build_number="${app_version#*+}"
+          if [[ -z "$app_version" || "$version_name" == "$app_version" ]]; then
+            echo "pubspec.yaml must contain a version in name+build format." >&2
+            exit 1
+          fi
+          if [[ "${GITHUB_REF_NAME}" != "v${version_name}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match pubspec version ${app_version}." >&2
+            exit 1
+          fi
+          echo "app_version=${app_version}" >> "$GITHUB_OUTPUT"
+          echo "version_name=${version_name}" >> "$GITHUB_OUTPUT"
+          echo "build_number=${build_number}" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
         run: flutter pub get
 
-        #5 Setup Keystore
-      - name: Create Keystore
-        run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > app/luci_mobile_keystore.jks
-          echo "${{ secrets.ANDROID_KEY_PROPERTIES_BASE64 }}" | base64 --decode > key.properties
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Configure release signing
+        working-directory: android
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEY_PROPERTIES_BASE64: ${{ secrets.ANDROID_KEY_PROPERTIES_BASE64 }}
-        working-directory: android
-      
-      - name: Build APK
-        run: flutter build apk --release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$ANDROID_KEYSTORE_BASE64" || -z "$ANDROID_KEY_PROPERTIES_BASE64" ]]; then
+            echo "ANDROID_KEYSTORE_BASE64 and ANDROID_KEY_PROPERTIES_BASE64 are required." >&2
+            exit 1
+          fi
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > app/openwalla-release.jks
+          printf '%s' "$ANDROID_KEY_PROPERTIES_BASE64" | base64 --decode > key.properties
+          test -s app/openwalla-release.jks
+          test -s key.properties
 
-      - name: Build appBundle
-        run: flutter build appbundle --release
+      - name: Build signed APK and app bundle
+        run: |
+          flutter build apk --release
+          flutter build appbundle --release
 
-      - name: Upload Artifacts
+      - name: Stage release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_base="Openwalla-v${{ steps.version.outputs.version_name }}-build${{ steps.version.outputs.build_number }}"
+          mkdir -p dist/release
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/release/${release_base}.apk"
+          cp build/app/outputs/bundle/release/app-release.aab "dist/release/${release_base}.aab"
+          cd dist/release
+          sha256sum "${release_base}.apk" "${release_base}.aab" > SHA256SUMS.txt
+
+      - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Releases
-          path: |
-            build/app/outputs/flutter-apk/app-release.apk
-            build/app/outputs/bundle/release/app-release.aab
+          name: Openwalla-${{ steps.version.outputs.app_version }}
+          path: dist/release/*
+          if-no-files-found: error
+          retention-days: 30
 
-      - name: Generate Release Notes
-        id: release_notes
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          # Get the previous tag
-          PREVIOUS_TAG=$(git tag --sort=-version:refname | head -2 | tail -1)
-          
-          # If no previous tag exists, use the first commit
-          if [ -z "$PREVIOUS_TAG" ]; then
-            PREVIOUS_TAG=$(git rev-list --max-parents=0 HEAD)
-          fi
-          
-          # Generate commit messages since the previous tag
-          echo "## What's Changed" > release_notes.md
-          echo "" >> release_notes.md
-          git log --pretty=format:"- %s (%h)" $PREVIOUS_TAG..${{ github.ref_name }} >> release_notes.md
-          
-          # Set the release notes as output
-          echo "RELEASE_NOTES<<EOF" >> $GITHUB_OUTPUT
-          cat release_notes.md >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Create Release
-        uses: ncipollo/release-action@v1
-        with:
-          artifacts: "build/app/outputs/flutter-apk/app-release.apk,build/app/outputs/bundle/release/app-release.aab"
-          tag: ${{ github.ref_name }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          gh release create "${GITHUB_REF_NAME}" \
+            dist/release/* \
+            --verify-tag \
+            --generate-notes \
+            --latest \
+            --title "Openwalla ${GITHUB_REF_NAME}"
