@@ -34,6 +34,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   Future<List<NlbwDeviceUsage>>? _topDevicesFuture;
   Future<List<NlbwProtocolUsage>>? _protocolUsageFuture;
   final Map<String, Future<List<VnstatUsageSample>>> _usageFutures = {};
+  final Map<_StatsUsageRange, int> _selectedUsageBars = {};
   StatisticsPreloadData? _boundPreloadData;
   Future<StatisticsPreloadData>? _boundPreloadFuture;
   Future<MonthlyUsageSettings>? _preloadSettingsFuture;
@@ -858,7 +859,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
               range,
               snapshot.data ?? const [],
             );
-            return _usageBarGraph(samples);
+            return _usageBarGraph(samples, range: range);
           },
         ),
         const SizedBox(height: 12),
@@ -969,8 +970,9 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
 
   Widget _usageBarGraph(
     List<({String label, int downloadBytes, int uploadBytes, bool hasData})>
-    samples,
-  ) {
+    samples, {
+    required _StatsUsageRange range,
+  }) {
     final colorScheme = Theme.of(context).colorScheme;
     final totalDownload = samples.fold<int>(
       0,
@@ -987,6 +989,11 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     final chartMaxY = trackMaxY * 1.18;
     final labelIndexes = _bottomLabelIndexes(samples.length);
     final hasAnyData = samples.any((sample) => sample.hasData);
+    final selectedBar = _selectedUsageBars[range];
+    final selectedIndex =
+        selectedBar != null && selectedBar >= 0 && selectedBar < samples.length
+        ? selectedBar
+        : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1018,9 +1025,12 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                 final total = download + upload;
                 final showTotal =
                     total > 0 && totalLabelIndexes.contains(index);
+                final isSelected = selectedIndex == index;
                 return BarChartGroupData(
                   x: index,
-                  showingTooltipIndicators: showTotal ? const [0] : const [],
+                  showingTooltipIndicators: showTotal || isSelected
+                      ? const [0]
+                      : const [],
                   barRods: [
                     BarChartRodData(
                       toY: total,
@@ -1060,16 +1070,55 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                       barTouchData: BarTouchData(
                         enabled: true,
                         handleBuiltInTouches: false,
+                        allowTouchBarBackDraw: true,
+                        touchExtraThreshold: const EdgeInsets.all(8),
+                        touchCallback: (event, response) {
+                          if (event is! FlTapUpEvent) return;
+                          final touchedIndex =
+                              response?.spot?.touchedBarGroupIndex;
+                          setState(() {
+                            if (touchedIndex == null ||
+                                touchedIndex < 0 ||
+                                touchedIndex >= samples.length ||
+                                selectedIndex == touchedIndex) {
+                              _selectedUsageBars.remove(range);
+                            } else {
+                              _selectedUsageBars[range] = touchedIndex;
+                            }
+                          });
+                        },
                         touchTooltipData: BarTouchTooltipData(
                           direction: TooltipDirection.top,
-                          tooltipPadding: EdgeInsets.zero,
-                          tooltipMargin: 5,
-                          maxContentWidth: 52,
+                          tooltipPadding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 5,
+                          ),
+                          tooltipMargin: 6,
+                          maxContentWidth: 150,
                           fitInsideHorizontally: true,
                           fitInsideVertically: true,
-                          getTooltipColor: (_) => Colors.transparent,
+                          getTooltipColor: (group) => selectedIndex == group.x
+                              ? colorScheme.surfaceContainerHighest
+                              : Colors.transparent,
                           getTooltipItem: (group, groupIndex, rod, rodIndex) {
                             final sample = samples[group.x];
+                            if (selectedIndex == group.x) {
+                              return BarTooltipItem(
+                                '${sample.label}\n'
+                                'Total ${_formatUsageTotal(sample.downloadBytes + sample.uploadBytes)}\n'
+                                'Down ${_formatUsageTotal(sample.downloadBytes)}  '
+                                'Up ${_formatUsageTotal(sample.uploadBytes)}',
+                                Theme.of(
+                                  context,
+                                ).textTheme.labelSmall!.copyWith(
+                                  color: colorScheme.onSurface,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  height: 1.28,
+                                  letterSpacing: 0,
+                                ),
+                              );
+                            }
                             return BarTooltipItem(
                               _formatUsageTotal(
                                 sample.downloadBytes + sample.uploadBytes,
