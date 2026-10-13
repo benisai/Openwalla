@@ -821,7 +821,14 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
               range,
               snapshot.data ?? const [],
             );
-            return _usageLineGraph(samples);
+            return _usageLineGraph(
+              samples,
+              labelCount:
+                  range == _StatsUsageRange.hour ||
+                      range == _StatsUsageRange.day
+                  ? 8
+                  : 4,
+            );
           },
         ),
         const SizedBox(height: 12),
@@ -932,8 +939,9 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
 
   Widget _usageLineGraph(
     List<({String label, int downloadBytes, int uploadBytes, bool hasData})>
-    samples,
-  ) {
+    samples, {
+    required int labelCount,
+  }) {
     final colorScheme = Theme.of(context).colorScheme;
     final totalDownload = samples.fold<int>(
       0,
@@ -947,7 +955,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
         .expand((sample) => [sample.downloadBytes, sample.uploadBytes])
         .fold<int>(0, max);
     final maxY = _niceMax(maxValue);
-    final labelIndexes = _bottomLabelIndexes(samples.length);
+    final labelIndexes = _bottomLabelIndexes(samples.length, count: labelCount);
     final hasAnyData = samples.any((sample) => sample.hasData);
 
     return Column(
@@ -1345,9 +1353,14 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     return maxBytes * 1.15;
   }
 
-  Set<int> _bottomLabelIndexes(int length) {
+  Set<int> _bottomLabelIndexes(int length, {required int count}) {
     if (length <= 1) return {0};
-    return {0, (length / 3).floor(), ((length * 2) / 3).floor(), length - 1};
+    final visibleCount = min(count, length);
+    if (visibleCount <= 1) return {0};
+    return {
+      for (var index = 0; index < visibleCount; index++)
+        ((length - 1) * index / (visibleCount - 1)).round(),
+    };
   }
 
   ({int totalBytes, int daysLeft, double progress}) _monthlySummary(
