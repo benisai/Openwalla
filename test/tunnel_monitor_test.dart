@@ -17,6 +17,38 @@ void main() {
 
   setUp(() => FlutterSecureStorage.setMockInitialValues({}));
 
+  testWidgets('info beside refresh opens without a configured server', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TunnelSettingsScreen(
+          routerId: 'router-a',
+          service: TunnelMonitorService(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final refresh = find.byTooltip('Refresh tunnel status');
+    final info = find.byTooltip('About the tunnel');
+    expect(
+      tester.getCenter(info).dx,
+      greaterThan(tester.getCenter(refresh).dx),
+    );
+    await tester.tap(info);
+    await tester.pumpAndSettle();
+    expect(find.text('About the Tunnel'), findsOneWidget);
+    expect(find.textContaining('outbound SSH'), findsOneWidget);
+    expect(find.textContaining('does not install or start it'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Got it'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect((await TunnelMonitorService().load('router-a')).serverUrl, isEmpty);
+  });
+
   test('server URL supports LAN, HTTPS, and reverse proxy base paths', () {
     for (final entry in {
       'http://10.10.10.2:2020/': 'http://10.10.10.2:2020/api/v1/tunnel/status',
