@@ -23,9 +23,14 @@ class _MoreScreenSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      elevation: 1,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      elevation: 2,
+      margin: const EdgeInsets.symmetric(
+        horizontal: LuciSpacing.md,
+        vertical: LuciSpacing.sm,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: LuciCardStyles.standardRadius,
+      ),
       child: Column(
         children: ListTile.divideTiles(context: context, tiles: tiles).toList(),
       ),
@@ -180,10 +185,11 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
     return Scaffold(
       appBar: const LuciAppBar(title: 'More'),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+        padding: const EdgeInsets.symmetric(vertical: LuciSpacing.sm),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const LuciSectionHeader('Router'),
             Builder(
               builder: (context) {
                 final isRebooting = ref.watch(
@@ -191,7 +197,6 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                 );
                 return _MoreScreenSection(
                   tiles: [
-                    _buildGroupHeader(context, 'Router'),
                     _buildMoreTile(
                       context,
                       icon: Icons.router_outlined,
@@ -218,92 +223,76 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                       enabled: !isRebooting,
                       showSpinner: isRebooting,
                     ),
-                    _buildGroupHeader(context, 'Openwalla'),
-                    _buildMoreTile(
-                      context,
-                      icon: Icons.settings_outlined,
-                      iconColor: Theme.of(context).colorScheme.primary,
-                      title: 'Settings',
-                      subtitle: 'Configure app preferences',
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const SettingsScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    _buildMoreTile(
-                      context,
-                      icon: Icons.lan_outlined,
-                      iconColor: Theme.of(context).colorScheme.primary,
-                      title: 'Tunnel',
-                      subtitle: 'Connect to and monitor Openwalla Server',
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => TunnelSettingsScreen(
-                              routerId:
-                                  ref
-                                      .read(appStateProvider)
-                                      .selectedRouter
-                                      ?.id ??
-                                  'app',
-                              loadInitialSettings: () async {
-                                final settings = await ref
-                                    .read(appStateProvider)
-                                    .fetchFlowStatsSettings();
-                                return TunnelMonitorSettings(
-                                  serverUrl: settings.serverUrl,
-                                  apiToken: settings.apiToken,
-                                );
-                              },
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                    _buildMoreTile(
-                      context,
-                      icon: Icons.info_outline_rounded,
-                      iconColor: Theme.of(context).colorScheme.primary,
-                      title: 'About',
-                      subtitle: 'App version, repository, and credits',
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const AboutScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    _buildMoreTile(
-                      context,
-                      icon: Icons.logout_rounded,
-                      iconColor: const Color(0xFFD9798E),
-                      title: 'Logout',
-                      subtitle: 'End your session and sign out',
-                      titleColor: const Color(0xFFD9798E),
-                      onTap: () => _showLogoutDialog(context),
-                    ),
                   ],
                 );
               },
             ),
+            const LuciSectionHeader('Openwalla'),
+            _MoreScreenSection(
+              tiles: [
+                _buildMoreTile(
+                  context,
+                  icon: Icons.settings_outlined,
+                  iconColor: Theme.of(context).colorScheme.primary,
+                  title: 'Settings',
+                  subtitle: 'Configure app preferences',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                    );
+                  },
+                ),
+                _buildMoreTile(
+                  context,
+                  icon: Icons.lan_outlined,
+                  iconColor: Theme.of(context).colorScheme.primary,
+                  title: 'Tunnel',
+                  subtitle: 'Connect to and monitor Openwalla Server',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => TunnelSettingsScreen(
+                          routerId:
+                              ref.read(appStateProvider).selectedRouter?.id ??
+                              'app',
+                          loadInitialSettings: () async {
+                            final settings = await ref
+                                .read(appStateProvider)
+                                .fetchFlowStatsSettings();
+                            return TunnelMonitorSettings(
+                              serverUrl: settings.serverUrl,
+                              apiToken: settings.apiToken,
+                            );
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                _buildMoreTile(
+                  context,
+                  icon: Icons.info_outline_rounded,
+                  iconColor: Theme.of(context).colorScheme.primary,
+                  title: 'About',
+                  subtitle: 'App version, repository, and credits',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const AboutScreen()),
+                    );
+                  },
+                ),
+                _buildMoreTile(
+                  context,
+                  icon: Icons.logout_rounded,
+                  iconColor: const Color(0xFFD9798E),
+                  title: 'Logout',
+                  subtitle: 'End your session and sign out',
+                  titleColor: const Color(0xFFD9798E),
+                  onTap: () => _showLogoutDialog(context),
+                ),
+              ],
+            ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGroupHeader(BuildContext context, String title) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Text(
-          title.toUpperCase(),
-          style: LuciTextStyles.sectionHeader(context),
         ),
       ),
     );
@@ -340,13 +329,11 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
       opacity: enabled ? 1.0 : 0.5,
       child: ListTile(
         leading: Container(
-          width: 42,
-          height: 42,
-          alignment: Alignment.center,
           decoration: BoxDecoration(
             color: iconColor.withValues(alpha: 0.12),
             shape: BoxShape.circle,
           ),
+          padding: const EdgeInsets.all(10),
           child: spinningIconWidget,
         ),
         title: Text(
@@ -366,14 +353,17 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
           semanticsLabel: subtitle,
         ),
         enabled: enabled,
-        trailing: Icon(
-          Icons.chevron_right_rounded,
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
         onTap: enabled ? onTap : null,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: LuciSpacing.lg,
+          vertical: 10,
+        ),
         hoverColor: theme.colorScheme.primary.withValues(alpha: 0.04),
         splashColor: theme.colorScheme.primary.withValues(alpha: 0.08),
+        minVerticalPadding: LuciSpacing.md,
+        minLeadingWidth: 0,
+        visualDensity: VisualDensity.standard,
       ),
     );
   }
