@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:openwalla/services/secure_storage_service.dart';
 import 'package:openwalla/services/openwalla_server_settings.dart';
+import 'package:openwalla/services/router_acl_service.dart';
 import 'package:openwalla/services/router_service.dart';
 import 'package:openwalla/services/ssh_service.dart';
 import 'package:openwalla/services/throughput_service.dart';
@@ -2116,6 +2117,7 @@ class AppState extends ChangeNotifier {
   RouterService? _routerService;
   ThroughputService? _throughputService;
   final HttpClientManager _httpClientManager = HttpClientManager();
+  final RouterAclService _routerAclService = RouterAclService();
   List<Client> _clients = const [];
   bool _isClientsLoading = false;
   final Set<String> _parentalPausedMacs = {};
@@ -2163,6 +2165,15 @@ class AppState extends ChangeNotifier {
   String? _statisticsPreloadRouterId;
   String? _statisticsPreloadFutureRouterId;
   bool _skipNextAutoLogin = false;
+  bool _routerAclCheckInProgress = false;
+  bool _routerAclInstallPromptPending = false;
+  String? _lastRouterAclCheckRouterId;
+  DateTime? _lastRouterAclCheckAt;
+  String? _activeRouterAddress;
+  String? _activeSshHost;
+  String? _activeSshUsername;
+  String? _activeSshPassword;
+  bool get routerAclInstallPromptPending => _routerAclInstallPromptPending;
   StatisticsPreloadData? get statisticsPreloadData {
     final routerId = _routerService?.selectedRouter?.id;
     if (routerId == null || _statisticsPreloadData?.routerId != routerId) {
@@ -2247,6 +2258,13 @@ class AppState extends ChangeNotifier {
     requestedTab = null;
     requestedInterfaceToScroll = null;
     return index;
+  }
+
+  bool consumeRouterAclInstallPrompt() {
+    if (!_routerAclInstallPromptPending) return false;
+    _routerAclInstallPromptPending = false;
+    notifyListeners();
+    return true;
   }
 
   AppState._() {
@@ -2876,6 +2894,90 @@ class AppState extends ChangeNotifier {
     return output;
   }
 
+  Future<void> checkRouterAclAfterLogin({bool force = false}) async {
+    if (_reviewerModeEnabled || _routerAclCheckInProgress) return;
+    final router = _routerService?.selectedRouter;
+    final host =
+        _activeSshHost ??
+        (router == null ? null : routerAclSshHost(router.ipAddress));
+    final username = _activeSshUsername ?? router?.username ?? 'root';
+    final password = _activeSshPassword ?? router?.password ?? '';
+    final routerId = router?.id ?? host;
+    if (host == null ||
+        routerId == null ||
+        _authService?.isAuthenticated != true) {
+      return;
+    }
+
+    final now = DateTime.now();
+    if (!force &&
+        _lastRouterAclCheckRouterId == routerId &&
+        _lastRouterAclCheckAt != null &&
+        now.difference(_lastRouterAclCheckAt!) < const Duration(seconds: 15)) {
+      return;
+    }
+
+    _routerAclCheckInProgress = true;
+    _lastRouterAclCheckRouterId = routerId;
+    _lastRouterAclCheckAt = now;
+    try {
+      final status = await _routerAclService.check(
+        host: host,
+        username: username,
+        password: password,
+      );
+      final currentRouterId =
+          _routerService?.selectedRouter?.id ?? _activeSshHost;
+      if (currentRouterId != routerId) return;
+      if (status == RouterAclStatus.missing) {
+        _routerAclInstallPromptPending = true;
+        notifyListeners();
+      }
+    } catch (error, stack) {
+      Logger.debug('Background router ACL check failed: $error');
+      Logger.debug('Background router ACL check stack: $stack');
+    } finally {
+      _routerAclCheckInProgress = false;
+    }
+  }
+
+  Future<String> installBundledRouterAcl({
+    void Function(String chunk)? onOutput,
+  }) async {
+    final router = _routerService?.selectedRouter;
+    final host =
+        _activeSshHost ??
+        (router == null ? null : routerAclSshHost(router.ipAddress));
+    if (host == null) {
+      throw StateError('No selected router connection is available');
+    }
+    final username = _activeSshUsername ?? router?.username ?? 'root';
+    final password = _activeSshPassword ?? router?.password ?? '';
+
+    final result = await _routerAclService.install(
+      host: host,
+      username: username,
+      password: password,
+      onOutput: onOutput,
+    );
+    final output = result.output.trimRight();
+    if ((result.exitCode != null && result.exitCode != 0) ||
+        !output.contains('[openwalla-acl] Install complete.')) {
+      throw StateError(
+        output.isEmpty
+            ? 'The router did not confirm the ACL installation.'
+            : output,
+      );
+    }
+
+    _routerAclInstallPromptPending = false;
+    _lastRouterAclCheckRouterId = router?.id ?? host;
+    _lastRouterAclCheckAt = DateTime.now();
+    await refreshRouterAuthenticationAfterSetup();
+    notifyListeners();
+    return output;
+  }
+
   String _buildOpenwallaSetupCommand(
     List<String> features, {
     String? postInstallCheck,
@@ -2951,17 +3053,25 @@ class AppState extends ChangeNotifier {
     if (_reviewerModeEnabled) return true;
     final router = _routerService?.selectedRouter;
     final authService = _authService;
-    if (router == null || authService == null) return false;
+    final address = _activeRouterAddress ?? router?.ipAddress;
+    final username = _activeSshUsername ?? router?.username;
+    final password = _activeSshPassword ?? router?.password;
+    if (address == null ||
+        username == null ||
+        password == null ||
+        authService == null) {
+      return false;
+    }
 
     for (var attempt = 0; attempt < 4; attempt++) {
       if (attempt > 0) {
         await Future<void>.delayed(const Duration(milliseconds: 750));
       }
       final authenticated = await authService.tryAutoLogin(
-        router.ipAddress,
-        router.username,
-        router.password,
-        router.useHttps,
+        address,
+        username,
+        password,
+        authService.useHttps,
         context: context?.mounted == true ? context : null,
       );
       if (authenticated && authService.sysauth != null) return true;
@@ -4346,6 +4456,10 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
 
       // Check if authentication was successful
       if (_authService!.isAuthenticated) {
+        _activeRouterAddress = ip;
+        _activeSshHost = routerAclSshHost(ip);
+        _activeSshUsername = user.trim().isEmpty ? 'root' : user;
+        _activeSshPassword = pass;
         // Get the actual protocol used (might be different due to redirect)
         final actualUseHttps = _authService!.useHttps;
 
@@ -4386,6 +4500,7 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
         warmStatisticsData();
         _isLoading = false;
         notifyListeners();
+        unawaited(checkRouterAclAfterLogin());
         return true;
       } else {
         _errorMessage =
@@ -4407,6 +4522,13 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
     await _authService?.logout();
     _dashboardData = null;
     _dashboardError = null;
+    _routerAclInstallPromptPending = false;
+    _lastRouterAclCheckRouterId = null;
+    _lastRouterAclCheckAt = null;
+    _activeRouterAddress = null;
+    _activeSshHost = null;
+    _activeSshUsername = null;
+    _activeSshPassword = null;
     _cancelThroughputTimer();
     // Optionally, do not clear routers or selectedRouter
     notifyListeners();
@@ -12534,7 +12656,8 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         context: context,
       );
     }
-    return await _authService?.tryAutoLogin(
+    final success =
+        await _authService?.tryAutoLogin(
           null,
           null,
           null,
@@ -12542,6 +12665,19 @@ done | sort -t "|" -k1,1nr | head -n ''' +
           context: context,
         ) ??
         false;
+    if (success) {
+      final router = _routerService?.selectedRouter;
+      if (router != null) {
+        _activeRouterAddress = router.ipAddress;
+        _activeSshHost = routerAclSshHost(router.ipAddress);
+        _activeSshUsername = router.username.trim().isEmpty
+            ? 'root'
+            : router.username;
+        _activeSshPassword = router.password;
+      }
+      unawaited(checkRouterAclAfterLogin());
+    }
+    return success;
   }
 
   /// Fetch all associated wireless MAC addresses from all wireless interfaces

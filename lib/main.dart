@@ -8,6 +8,7 @@ import 'package:openwalla/screens/main_screen.dart';
 import 'package:openwalla/screens/settings_screen.dart';
 import 'package:openwalla/screens/splash_screen.dart';
 import 'package:openwalla/screens/welcome_setup_screen.dart';
+import 'package:openwalla/widgets/router_acl_prompt_host.dart';
 
 void main() {
   runApp(ProviderScope(child: const LuCIApp()));
@@ -16,6 +17,7 @@ void main() {
 final appStateProvider = ChangeNotifierProvider<AppState>(
   (ref) => AppState.instance,
 );
+final rootNavigatorKey = GlobalKey<NavigatorState>();
 
 class LuCIApp extends ConsumerWidget {
   const LuCIApp({super.key});
@@ -127,11 +129,17 @@ class LuCIApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final appState = ref.watch(appStateProvider);
     return MaterialApp(
+      navigatorKey: rootNavigatorKey,
       title: 'Openwalla',
       theme: _buildOpenwallaTheme(Brightness.light, appState.themeAccent),
       darkTheme: _buildOpenwallaTheme(Brightness.dark, appState.themeAccent),
       themeMode: appState.themeMode,
       initialRoute: '/splash',
+      builder: (context, child) => RouterAclPromptHost(
+        appState: appState,
+        navigatorKey: rootNavigatorKey,
+        child: child ?? const SizedBox.shrink(),
+      ),
       routes: {
         '/splash': (context) => const SplashScreen(),
         '/login': (context) => const LoginScreen(),

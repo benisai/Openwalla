@@ -10,7 +10,7 @@ import 'package:url_launcher/url_launcher_string.dart';
 import 'package:openwalla/config/app_config.dart';
 import 'package:openwalla/models/router.dart' as model;
 import 'package:openwalla/services/secure_storage_service.dart';
-import 'package:openwalla/services/ssh_service.dart';
+import 'package:openwalla/services/router_acl_service.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/utils/gateway_utils.dart';
 import 'package:openwalla/utils/url_parser.dart';
@@ -426,19 +426,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       ).whenComplete(console.dispose),
     );
 
-    final commandInput = await rootBundle.loadString(
-      'openwrt-setup/rpcd-acl.json',
-    );
-
     final output = StringBuffer();
     try {
-      final result = await SshService().runCommand(
+      final result = await RouterAclService().install(
         host: request.host,
         port: request.port,
         username: request.username,
         password: request.password,
-        command: _localAclInstallCommand,
-        stdin: commandInput,
         onOutput: (chunk) {
           output.write(chunk);
           console.setOutput(output.toString());
@@ -463,19 +457,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       console.complete();
     }
   }
-
-  static const _localAclInstallCommand = r'''
-set -e
-echo "[openwalla-acl] Installing bundled RPC permissions..."
-mkdir -p /usr/share/rpcd/acl.d
-cat > /usr/share/rpcd/acl.d/openwalla.json
-chmod 0644 /usr/share/rpcd/acl.d/openwalla.json
-test -s /usr/share/rpcd/acl.d/openwalla.json
-if [ -x /etc/init.d/rpcd ]; then
-  /etc/init.d/rpcd restart
-fi
-echo "[openwalla-acl] Install complete. Return to Openwalla and connect again."
-''';
 
   InputDecoration _loginInputDecoration({
     required BuildContext context,
