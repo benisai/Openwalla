@@ -375,7 +375,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
     apiTokenController.dispose();
     if (confirmed != true) return null;
     return FlowStatsSettings(
-      enabled: mode == NetifyCollectorMode.local && current.enabled,
+      enabled: mode == NetifyCollectorMode.local,
       pollSeconds: current.pollSeconds,
       retentionHours: current.retentionHours,
       collectorMode: mode,
@@ -395,6 +395,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
     await appState.saveFlowStatsSettings(
       settings,
       context: mounted ? context : null,
+      allowSshFallback: true,
     );
   }
 

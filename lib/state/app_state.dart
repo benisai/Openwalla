@@ -3141,8 +3141,25 @@ class AppState extends ChangeNotifier {
   Future<void> saveFlowStatsSettings(
     FlowStatsSettings settings, {
     BuildContext? context,
+    bool allowSshFallback = false,
   }) async {
     if (_reviewerModeEnabled) return;
+    try {
+      await _saveFlowStatsSettingsViaRpc(settings, context: context);
+    } catch (error, stack) {
+      if (!allowSshFallback) rethrow;
+      Logger.warning(
+        'RPC flow settings save failed after setup; retrying over SSH: $error',
+      );
+      Logger.debug('RPC flow settings save stack: $stack');
+      await _saveFlowStatsSettingsViaSsh(settings);
+    }
+  }
+
+  Future<void> _saveFlowStatsSettingsViaRpc(
+    FlowStatsSettings settings, {
+    BuildContext? context,
+  }) async {
     final router = _routerService?.selectedRouter;
     final sysauth = _authService?.sysauth;
     if (router == null || sysauth == null || _apiService == null) {
@@ -3166,25 +3183,13 @@ class AppState extends ChangeNotifier {
       connection.statusUri;
     }
     final saveOutput = await runRouterSetupCommand(
-      "uci -q get openwalla.flow_stats >/dev/null 2>&1 || "
-      "uci set openwalla.flow_stats=flow_stats; "
-      "uci -q get openwalla.collector >/dev/null 2>&1 || "
-      "uci set openwalla.collector=netify; "
-      "uci set openwalla.flow_stats.enabled='$expectedEnabled' && "
-      "uci set openwalla.flow_stats.db_path='/tmp/openwalla-netify-flow-stats.sqlite' && "
-      "uci set openwalla.flow_stats.poll='$expectedPoll' && "
-      "uci set openwalla.flow_stats.bucket_seconds='300' && "
-      "uci set openwalla.flow_stats.retention_seconds='2592000' && "
-      "uci set openwalla.collector.retention_hours='$expectedRetentionHours' && "
-      "uci set openwalla.collector.mode=${_shellQuote(expectedMode)} && "
-      "uci set openwalla.collector.server_url=${_shellQuote(serverUrl)} && "
-      "uci commit openwalla && "
-      "[ \"\$(uci -q get openwalla.flow_stats.enabled)\" = '$expectedEnabled' ] && "
-      "[ \"\$(uci -q get openwalla.flow_stats.poll)\" = '$expectedPoll' ] && "
-      "[ \"\$(uci -q get openwalla.collector.retention_hours)\" = '$expectedRetentionHours' ] && "
-      "[ \"\$(uci -q get openwalla.collector.mode)\" = '$expectedMode' ] && "
-      "[ \"\$(uci -q get openwalla.collector.server_url)\" = ${_shellQuote(serverUrl)} ] && "
-      "echo FLOW_STATS_SAVED",
+      _flowStatsSettingsCommand(
+        enabled: expectedEnabled,
+        poll: expectedPoll,
+        retentionHours: expectedRetentionHours,
+        mode: expectedMode,
+        serverUrl: serverUrl,
+      ),
       context: context?.mounted == true ? context : null,
     );
     if (!saveOutput.contains('FLOW_STATS_SAVED')) {
@@ -3202,11 +3207,101 @@ class AppState extends ChangeNotifier {
       storage: _secureStorageService,
     ).save(router.id, connection);
 
+    await runRouterSetupCommand(_flowCollectorApplyCommand(settings));
+  }
+
+  Future<void> _saveFlowStatsSettingsViaSsh(FlowStatsSettings settings) async {
+    final router = _routerService?.selectedRouter;
+    if (router == null ||
+        router.username.trim().isEmpty ||
+        router.password.isEmpty) {
+      throw StateError(
+        'Router setup finished, but saved SSH credentials are unavailable for the flow settings retry.',
+      );
+    }
+
+    final expectedEnabled = settings.enabled ? '1' : '0';
+    final expectedPoll = settings.pollSeconds.clamp(2, 10).toString();
+    final expectedRetentionHours =
+        const {24, 48, 72, 96, 120}.contains(settings.retentionHours)
+        ? settings.retentionHours.toString()
+        : '24';
+    final serverUrl = settings.serverUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    final connection = OpenwallaServerSettings(
+      serverUrl: serverUrl,
+      apiToken: settings.apiToken,
+    );
+    if (settings.collectorMode == NetifyCollectorMode.external ||
+        serverUrl.isNotEmpty) {
+      connection.statusUri;
+    }
+
+    final command =
+        '''
+set -e
+${_flowStatsSettingsCommand(enabled: expectedEnabled, poll: expectedPoll, retentionHours: expectedRetentionHours, mode: settings.collectorMode.name, serverUrl: serverUrl)}
+${_flowCollectorApplyCommand(settings)}
+echo OPENWALLA_FLOW_SETTINGS_APPLIED
+''';
+    final result = await SshService().runCommand(
+      host: router.ipAddress,
+      username: router.username,
+      password: router.password,
+      command: command,
+    );
+    if ((result.exitCode != null && result.exitCode != 0) ||
+        !result.output.contains('FLOW_STATS_SAVED') ||
+        !result.output.contains('OPENWALLA_FLOW_SETTINGS_APPLIED')) {
+      final details = result.output.trim();
+      throw StateError(
+        'Router setup finished, but the flow settings retry failed'
+        '${result.exitCode == null ? '' : ' with SSH exit code ${result.exitCode}'}'
+        '${details.isEmpty ? '.' : ': $details'}',
+      );
+    }
+
+    await OpenwallaServerSettingsStore(
+      storage: _secureStorageService,
+    ).save(router.id, connection);
+  }
+
+  String _flowStatsSettingsCommand({
+    required String enabled,
+    required String poll,
+    required String retentionHours,
+    required String mode,
+    required String serverUrl,
+  }) {
+    final serverUrlCommand = serverUrl.isEmpty
+        ? 'uci -q delete openwalla.collector.server_url || true'
+        : 'uci set openwalla.collector.server_url=${_shellQuote(serverUrl)}';
+    return "uci -q get openwalla.flow_stats >/dev/null 2>&1 || "
+        "uci set openwalla.flow_stats=flow_stats; "
+        "uci -q get openwalla.collector >/dev/null 2>&1 || "
+        "uci set openwalla.collector=netify; "
+        "uci set openwalla.flow_stats.enabled='$enabled' && "
+        "uci set openwalla.flow_stats.db_path='/tmp/openwalla-netify-flow-stats.sqlite' && "
+        "uci set openwalla.flow_stats.poll='$poll' && "
+        "uci set openwalla.flow_stats.bucket_seconds='300' && "
+        "uci set openwalla.flow_stats.retention_seconds='2592000' && "
+        "uci set openwalla.collector.retention_hours='$retentionHours' && "
+        "uci set openwalla.collector.mode=${_shellQuote(mode)} && "
+        "($serverUrlCommand) && "
+        "uci commit openwalla && "
+        "[ \"\$(uci -q get openwalla.flow_stats.enabled)\" = '$enabled' ] && "
+        "[ \"\$(uci -q get openwalla.flow_stats.poll)\" = '$poll' ] && "
+        "[ \"\$(uci -q get openwalla.collector.retention_hours)\" = '$retentionHours' ] && "
+        "[ \"\$(uci -q get openwalla.collector.mode)\" = '$mode' ] && "
+        "[ \"\$(uci -q get openwalla.collector.server_url)\" = ${_shellQuote(serverUrl)} ] && "
+        "echo FLOW_STATS_SAVED";
+  }
+
+  String _flowCollectorApplyCommand(FlowStatsSettings settings) {
     final external = settings.collectorMode == NetifyCollectorMode.external;
     final listenAddress = external
         ? r'$(uci -q get network.lan.ipaddr)'
         : '127.0.0.1';
-    await runRouterSetupCommand('''
+    return '''
 CONF=/etc/netifyd.conf
 LISTEN=$listenAddress
 [ -n "\$LISTEN" ] || LISTEN=127.0.0.1
@@ -3220,7 +3315,7 @@ if [ -f "\$CONF" ]; then
 fi
 ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || true' : '/etc/init.d/openwalla-netify-collector restart >/dev/null 2>&1 || /etc/init.d/openwalla-netify-collector start >/dev/null 2>&1 || true'}
 /etc/init.d/netifyd restart >/dev/null 2>&1 || /etc/init.d/netifyd start >/dev/null 2>&1 || true
-''');
+''';
   }
 
   Future<FlowStatsUsageSummary> fetchFlowStatsUsage({
