@@ -2031,17 +2031,6 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
             onTap: () =>
                 _copyToClipboard(context, interface.ipAddress!, 'IP Address'),
           ),
-        if (showPublicIp)
-          _buildDetailRow(
-            context,
-            'Public IP',
-            _routerPublicIp ??
-                (_isLoadingPublicIp ? 'Checking...' : 'Unavailable'),
-            onTap: _routerPublicIp == null
-                ? () => _loadRouterPublicIp(forceRefresh: true)
-                : () =>
-                      _copyToClipboard(context, _routerPublicIp!, 'Public IP'),
-          ),
         if (interface.ipv6Addresses != null &&
             interface.ipv6Addresses!.isNotEmpty)
           ...interface.ipv6Addresses!.map(
@@ -2070,6 +2059,17 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
               interface.dnsServers.join(', '),
               'DNS Servers',
             ),
+          ),
+        if (showPublicIp)
+          _buildDetailRow(
+            context,
+            'Public IP',
+            _routerPublicIp ??
+                (_isLoadingPublicIp ? 'Checking...' : 'Unavailable'),
+            onTap: _routerPublicIp == null
+                ? () => _loadRouterPublicIp(forceRefresh: true)
+                : () =>
+                      _copyToClipboard(context, _routerPublicIp!, 'Public IP'),
           ),
         // Add WireGuard peer information if this is a WireGuard interface
         if (interface.protocol.toLowerCase() == 'wireguard') ...[
