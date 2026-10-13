@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openwalla/screens/tunnel_settings_screen.dart';
@@ -22,6 +23,23 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(320, 600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
+    String? openedUrl;
+    const launcherChannel = MethodChannel('plugins.flutter.io/url_launcher');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      launcherChannel,
+      (call) async {
+        if (call.method == 'launch') {
+          openedUrl = call.arguments['url'] as String;
+        }
+        return true;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        launcherChannel,
+        null,
+      ),
+    );
     await tester.pumpWidget(
       MaterialApp(
         home: TunnelSettingsScreen(
@@ -42,6 +60,16 @@ void main() {
     expect(find.text('About the Tunnel'), findsOneWidget);
     expect(find.textContaining('outbound SSH'), findsOneWidget);
     expect(find.textContaining('does not install or start it'), findsOneWidget);
+    expect(find.textContaining('recommended but optional'), findsOneWidget);
+    final readme = find.text('Openwalla Server README');
+    await tester.ensureVisible(readme);
+    await tester.pumpAndSettle();
+    await tester.tap(readme);
+    await tester.pumpAndSettle();
+    expect(
+      openedUrl,
+      'https://github.com/benisai/Openwalla/blob/main/openwalla-server/README.md#optional-reverse-tunnel',
+    );
     expect(tester.takeException(), isNull);
     await tester.tap(find.text('Got it'));
     await tester.pumpAndSettle();

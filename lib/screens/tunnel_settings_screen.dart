@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:openwalla/services/tunnel_monitor_service.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
 import 'package:openwalla/widgets/luci_toast.dart';
+import 'package:url_launcher/url_launcher_string.dart';
 
 class TunnelSettingsScreen extends StatefulWidget {
   final String routerId;
@@ -135,23 +136,40 @@ class _TunnelSettingsScreenState extends State<TunnelSettingsScreen> {
       builder: (context) => AlertDialog(
         icon: const Icon(Icons.info_outline_rounded),
         title: const Text('About the Tunnel'),
-        content: const SingleChildScrollView(
-          child: Text(
-            'The router opens an encrypted, key-authenticated outbound SSH '
-            'connection to your Openwalla Server gateway. It forwards LuCI '
-            'and router SSH through that connection, without opening inbound '
-            'ports on the router.\n\n'
-            'Server API shows whether the app can contact Openwalla Server. '
-            'LuCI and SSH show whether the server can reach the configured '
-            'tunnel ports. Reachable does not confirm a successful login or '
-            'an active user session.\n\n'
-            'This page monitors the tunnel; it does not install or start it. '
-            'The optional server gateway and router tunnel service must be '
-            'set up separately.\n\n'
-            'The server URL and API token are shared with flow settings. '
-            'Local router or Openwalla Server flow collection remains a '
-            'separate choice. Use HTTPS for server access outside your '
-            'trusted LAN, and keep forwarded LuCI and SSH ports private.',
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'The router opens an encrypted, key-authenticated outbound SSH '
+                'connection to your Openwalla Server gateway. It forwards LuCI '
+                'and router SSH through that connection, without opening inbound '
+                'ports on the router.\n\n'
+                'For remote access, running the gateway on an external server, '
+                'such as a VPS, is recommended but optional. A suitable '
+                'self-hosted server works too, as long as the router can reach it.\n\n'
+                'Server API shows whether the app can contact Openwalla Server. '
+                'LuCI and SSH show whether the server can reach the configured '
+                'tunnel ports. Reachable does not confirm a successful login or '
+                'an active user session.\n\n'
+                'This page monitors the tunnel; it does not install or start it. '
+                'The optional server gateway and router tunnel service must be '
+                'set up separately.\n\n'
+                'The server URL and API token are shared with flow settings. '
+                'Local router or Openwalla Server flow collection remains a '
+                'separate choice. Use HTTPS for server access outside your '
+                'trusted LAN, and keep forwarded LuCI and SSH ports private.',
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: _openTunnelReadme,
+                child: const Text(
+                  'Openwalla Server README',
+                  style: TextStyle(decoration: TextDecoration.underline),
+                ),
+              ),
+            ],
           ),
         ),
         actions: [
@@ -162,6 +180,20 @@ class _TunnelSettingsScreenState extends State<TunnelSettingsScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _openTunnelReadme() async {
+    try {
+      final opened = await launchUrlString(
+        'https://github.com/benisai/Openwalla/blob/main/openwalla-server/README.md#optional-reverse-tunnel',
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened && mounted) {
+        context.showToastError('Could not open the setup guide');
+      }
+    } catch (_) {
+      if (mounted) context.showToastError('Could not open the setup guide');
+    }
   }
 
   Widget _endpoint(String title, bool? available, {String? detail}) {
