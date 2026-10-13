@@ -3834,16 +3834,30 @@ class _AddPortForwardSheetState extends ConsumerState<_AddPortForwardSheet> {
               child: ListView(
                 padding: EdgeInsets.fromLTRB(20, 18, 20, bottomInset + 20),
                 children: [
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Rule Name',
-                      prefixIcon: Icon(Icons.label_outline_rounded),
-                    ),
-                    validator: _required,
-                    textInputAction: TextInputAction.next,
+                  const _PortForwardSectionLabel(
+                    icon: Icons.label_outline_rounded,
+                    title: 'Name',
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: colors.surfaceContainerHighest.withValues(
+                        alpha: 0.32,
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: TextFormField(
+                      controller: _nameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Rule Name',
+                        prefixIcon: Icon(Icons.label_outline_rounded),
+                      ),
+                      validator: _required,
+                      textInputAction: TextInputAction.next,
+                    ),
+                  ),
+                  const SizedBox(height: 28),
                   _PortForwardSectionLabel(
                     icon: Icons.public_rounded,
                     title: 'Incoming Traffic',
@@ -4051,12 +4065,12 @@ class _AddPortForwardSheetState extends ConsumerState<_AddPortForwardSheet> {
 class _PortForwardSectionLabel extends StatelessWidget {
   final IconData icon;
   final String title;
-  final String subtitle;
+  final String? subtitle;
 
   const _PortForwardSectionLabel({
     required this.icon,
     required this.title,
-    required this.subtitle,
+    this.subtitle,
   });
 
   @override
@@ -4076,7 +4090,8 @@ class _PortForwardSectionLabel extends StatelessWidget {
                   context,
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
               ),
-              Text(subtitle, style: LuciTextStyles.cardSubtitle(context)),
+              if (subtitle != null)
+                Text(subtitle!, style: LuciTextStyles.cardSubtitle(context)),
             ],
           ),
         ),
