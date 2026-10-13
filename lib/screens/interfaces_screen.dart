@@ -3574,6 +3574,7 @@ class _AddPortForwardSheetState extends ConsumerState<_AddPortForwardSheet> {
   String _destinationZone = 'lan';
   String _protocol = 'tcp';
   bool _isSaving = false;
+  bool _destinationPortEdited = false;
 
   bool get _isEditing => widget.forward != null;
 
@@ -3592,6 +3593,8 @@ class _AddPortForwardSheetState extends ConsumerState<_AddPortForwardSheet> {
     _internalPortController.text = forward.destinationPort == 'Any'
         ? ''
         : forward.destinationPort;
+    _destinationPortEdited =
+        _internalPortController.text != _externalPortController.text;
     _sourceZone = forward.source;
     _destinationZone =
         widget.routerIp.isNotEmpty &&
@@ -3898,6 +3901,11 @@ class _AddPortForwardSheetState extends ConsumerState<_AddPortForwardSheet> {
                             Expanded(
                               child: TextFormField(
                                 controller: _externalPortController,
+                                onChanged: (value) {
+                                  if (!_destinationPortEdited) {
+                                    _internalPortController.text = value;
+                                  }
+                                },
                                 decoration: const InputDecoration(
                                   labelText: 'External Port',
                                   prefixIcon: Icon(Icons.input_rounded),
@@ -4006,6 +4014,7 @@ class _AddPortForwardSheetState extends ConsumerState<_AddPortForwardSheet> {
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: _internalPortController,
+                          onChanged: (_) => _destinationPortEdited = true,
                           decoration: const InputDecoration(
                             labelText: 'Destination Port',
                             prefixIcon: Icon(Icons.output_rounded),
