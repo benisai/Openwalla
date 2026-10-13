@@ -61,7 +61,7 @@ class RouterSetupScreen extends ConsumerStatefulWidget {
 
 class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
   static const _rawSetupBase =
-      'https://raw.githubusercontent.com/benisai/openwalla-apk/main/openwrt-setup';
+      'https://raw.githubusercontent.com/benisai/Openwalla/main/openwrt-setup';
 
   static const _basicFeatures = ['monitoring'];
   static const _standardFeatures = [

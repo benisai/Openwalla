@@ -1,8 +1,10 @@
 class AppConfig {
   static const String githubRepositoryUrl =
-      'https://github.com/benisai/openwalla-apk';
+      'https://github.com/benisai/Openwalla';
   static const String githubPubspecUrl =
-      'https://raw.githubusercontent.com/benisai/openwalla-apk/main/pubspec.yaml';
+      'https://raw.githubusercontent.com/benisai/Openwalla/main/pubspec.yaml';
+  static const String privacyPolicyUrl =
+      '$githubRepositoryUrl/blob/main/PRIVACY_POLICY.md';
 
   // GitHub issues URL
   static const String githubIssuesUrl = '$githubRepositoryUrl/issues';

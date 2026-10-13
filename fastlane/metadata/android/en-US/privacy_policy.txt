@@ -1,1 +1,1 @@
-See PRIVACY_POLICY.md in the project root or the app's About section. 
+https://github.com/benisai/Openwalla/blob/main/PRIVACY_POLICY.md

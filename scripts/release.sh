@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# LuCI Mobile Release Script (CI-driven)
+# Openwalla Release Script (CI-driven)
 # Usage: ./scripts/release.sh [major|minor|patch]
 
 set -e
@@ -109,4 +109,4 @@ print_status "Creating tag $TAG_VERSION..."
 git tag -a "$TAG_VERSION" -m "Release $TAG_VERSION"
 git push origin "$TAG_VERSION"
 
-print_status "Release $TAG_VERSION created and pushed! CI will handle the build and GitHub release." 
+print_status "Release $TAG_VERSION created and pushed! CI will handle the build and GitHub release."

@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-BUILD_DIR="${OPENWALLA_BUILD_DIR:-$PROJECT_ROOT/.openwalla-apk-build}"
+BUILD_DIR="${OPENWALLA_BUILD_DIR:-$PROJECT_ROOT/.openwalla-build}"
 BUILD_DIR_NAME="$(basename "$BUILD_DIR")"
 OUTPUT_DIR="${OPENWALLA_APK_OUTPUT_DIR:-$PROJECT_ROOT/dist/apk}"
 APK_TEST_DIR="${OPENWALLA_APK_TEST_DIR:-$PROJECT_ROOT/APK-TEST}"

@@ -21,7 +21,7 @@ lib)
 esac
 FILES_DIR="$OPENWALLA_SETUP_DIR/files"
 RPCD_ACL="$OPENWALLA_SETUP_DIR/rpcd-acl.json"
-OPENWALLA_RAW_BASE="${OPENWALLA_RAW_BASE:-https://raw.githubusercontent.com/benisai/openwalla-apk/main/openwrt-setup}"
+OPENWALLA_RAW_BASE="${OPENWALLA_RAW_BASE:-https://raw.githubusercontent.com/benisai/Openwalla/main/openwrt-setup}"
 PKG_MGR=""
 
 log() {

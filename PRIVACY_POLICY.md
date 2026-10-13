@@ -1,52 +1,75 @@
-# Privacy Policy
+# Openwalla Privacy Policy
 
-**LuCI Mobile**  
-Last updated: July 7, 2025
+Last updated: October 12, 2026
 
-LuCI Mobile ("we", "our", or "us") is committed to protecting your privacy. This Privacy Policy explains how our mobile application ("App") collects, uses, and safeguards your information when you use the App to manage your OpenWrt/LuCI routers.
+Openwalla is an open-source mobile application for managing OpenWrt routers. This policy explains what information the app handles, where it is stored, and the choices available to you.
 
-## 1. Information We Collect
+## 1. Information Openwalla Handles
 
-### a. User Credentials
-- The App requires your router's IP address, username, and password to connect to your device.
-- These credentials are stored securely on your device using industry-standard encryption (via `flutter_secure_storage`).
-- We do **not** collect, transmit, or store your credentials on any external servers.
+### Router connection information
 
-### b. Network Data
-- The App communicates directly with your router to display network status, connected clients, and system information.
-- All data is retrieved in real-time from your router and is **not** sent to any third-party servers.
+- Openwalla uses the router address, username, password, and connection preferences that you provide to connect to your router.
+- Saved credentials and API tokens are stored on your device using platform-provided secure storage through `flutter_secure_storage`.
+- The Openwalla project does not operate a service that receives or stores your router credentials.
 
-### c. Usage Data
-- We do **not** collect analytics, usage statistics, or any personal data from your device.
+### Router and network data
 
-## 2. How We Use Your Information
+- Openwalla reads router status, interfaces, connected devices, traffic information, logs, and configuration data to provide the features you request.
+- This information normally travels directly between your device and your OpenWrt router.
+- Some optional Openwalla components store monitoring data on your router, including SQLite databases created by the router helper scripts.
 
-- To authenticate and connect to your router.
-- To display network and system information from your router within the App.
-- To securely store your credentials locally for your convenience.
+### Optional self-hosted Openwalla Server
 
-## 3. Data Sharing and Disclosure
+- You may configure the app to connect to an Openwalla Server that you or your administrator operates, including a server hosted on a LAN or VPS.
+- When enabled, the app sends requests to the server address you configure. The server may process or store network-flow and tunnel-status data according to that deployment's configuration.
+- Openwalla does not provide or control that server. The server operator is responsible for its security, retention, access, and deletion policies.
 
-- We do **not** share, sell, or disclose your information to any third parties.
-- All communication is strictly between your device and your router.
+### Internet requests
 
-## 4. Security
+- Openwalla may request public files from the project's GitHub repository to check published app or router-component versions, open documentation, or install router components that you select.
+- Router setup may download packages from OpenWrt or package-provider repositories selected by the router.
+- These providers may receive ordinary connection metadata, such as an IP address, under their own privacy policies. Openwalla does not include router credentials or router data in its GitHub version and documentation requests.
+- Openwalla does not include advertising, analytics SDKs, or third-party tracking.
 
-- Credentials are stored using secure storage mechanisms provided by your device.
-- The App supports HTTPS connections and can handle self-signed certificates for secure communication with your router.
-- We recommend using strong passwords and enabling HTTPS on your router for additional security.
+## 2. How Information Is Used
 
-## 5. Children's Privacy
+Openwalla uses this information only to:
 
-- The App is not intended for use by children under the age of 13.
-- We do not knowingly collect personal information from children.
+- authenticate with and manage routers you configure;
+- display router, device, traffic, and system information;
+- run actions that you request, such as changing settings or installing components;
+- connect to an optional self-hosted Openwalla Server; and
+- save your app preferences and connection profiles.
 
-## 6. Changes to This Privacy Policy
+## 3. Sharing and Sale of Data
 
-- We may update this Privacy Policy from time to time. Any changes will be posted within the App and/or on our website.
-- Your continued use of the App after changes are made constitutes your acceptance of the new policy.
+- The Openwalla project does not sell personal information.
+- The Openwalla project does not receive or share your router credentials, router data, or network-flow data.
+- Data may be handled by a router, server, VPN, proxy, or other infrastructure that you or your administrator configures. Those systems are outside the Openwalla project's control.
 
-## 7. Contact Us
+## 4. Data Retention and Deletion
 
-If you have any questions or concerns about this Privacy Policy, please contact us at:  
-[github.com/cogwheel0/luci-mobile/issues] 
+- Removing a router profile deletes that profile's locally stored app credentials and settings.
+- Openwalla does not create an Openwalla cloud account, so there is no developer-hosted account to delete.
+- Uninstalling Openwalla removes app data according to the mobile operating system's normal behavior.
+- Data stored by router helper components remains on the router until you remove it or uninstall those components.
+- Data stored by an optional Openwalla Server must be deleted from that self-hosted deployment by its operator.
+
+## 5. Security
+
+- Sensitive saved values use platform secure storage where supported.
+- Openwalla supports HTTPS and SSH connections. HTTP may also be used for local routers when you configure it.
+- You are responsible for securing your router, mobile device, and any optional Openwalla Server. Strong passwords, current OpenWrt software, HTTPS, and restricted network access are recommended.
+- No method of storage or transmission can be guaranteed to be completely secure.
+
+## 6. Children's Privacy
+
+Openwalla is not directed to children under 13, and the project does not knowingly collect personal information from children.
+
+## 7. Changes to This Policy
+
+This policy may be updated when Openwalla's functionality or data practices change. The current version will be published in the project repository and linked from the app.
+
+## 8. Contact
+
+Questions or concerns may be submitted through the [Openwalla issue tracker](https://github.com/benisai/Openwalla/issues).

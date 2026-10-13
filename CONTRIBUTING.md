@@ -1,6 +1,6 @@
-# Contributing to LuCI Mobile
+# Contributing to Openwalla
 
-Thank you for your interest in contributing to LuCI Mobile! This document provides guidelines and information for contributors.
+Thank you for your interest in contributing to Openwalla! This document provides guidelines and information for contributors.
 
 ## Table of Contents
 
@@ -33,12 +33,12 @@ By participating in this project, you agree to abide by our Code of Conduct. Ple
 1. Fork the repository on GitHub
 2. Clone your fork locally:
    ```bash
-   git clone https://github.com/cogwheel0/luci-mobile.git
-   cd luci-mobile
+   git clone https://github.com/benisai/Openwalla.git
+   cd Openwalla
    ```
 3. Add the upstream repository:
    ```bash
-   git remote add upstream https://github.com/cogwheel0/luci-mobile.git
+   git remote add upstream https://github.com/benisai/Openwalla.git
    ```
 
 ## Development Setup
@@ -339,4 +339,4 @@ Contributors will be recognized in:
 - Contributor hall of fame
 - GitHub contributors page
 
-Thank you for contributing to LuCI Mobile! Your contributions help make this project better for everyone. 
+Thank you for contributing to Openwalla! Your contributions help make this project better for everyone.

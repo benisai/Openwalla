@@ -1,6 +1,6 @@
 const String kOpenwallaInternetPreflightCommand = r'''
 echo "[openwalla-app] Checking router internet connection..."
-OPENWALLA_CONNECTIVITY_URL="https://raw.githubusercontent.com/benisai/openwalla-apk/main/openwrt-setup/setup-openwrt-router.sh"
+OPENWALLA_CONNECTIVITY_URL="https://raw.githubusercontent.com/benisai/Openwalla/main/openwrt-setup/setup-openwrt-router.sh"
 OPENWALLA_INTERNET_OK=0
 if command -v wget >/dev/null 2>&1; then
   wget -q -T 10 -O /dev/null "$OPENWALLA_CONNECTIVITY_URL" && OPENWALLA_INTERNET_OK=1

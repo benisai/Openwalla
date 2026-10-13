@@ -8,7 +8,7 @@ import 'package:openwalla/widgets/luci_toast.dart';
 import 'package:openwalla/widgets/ssh_console_sheet.dart';
 
 const _routerComponentsRawBase =
-    'https://raw.githubusercontent.com/benisai/openwalla-apk/main/openwrt-setup';
+    'https://raw.githubusercontent.com/benisai/Openwalla/main/openwrt-setup';
 
 String buildRouterComponentsCommand(String action) => [
   'export OPENWALLA_RAW_BASE=$_routerComponentsRawBase',

@@ -10,7 +10,7 @@ Designed for both power users and network enthusiasts, Openwalla simplifies rout
 * <b>Detailed Client Oversight:</b> See a live list of all connected devices with their IP/MAC addresses, hostnames, and active connection times.
 * <b>Powerful System Control:</b> Remotely reboot your router with a single tap.
 * <b>Secure & Flexible Connection:</b> Connect via HTTP or HTTPS, with support for self-signed certificates and secure credential storage.
-* <b>Modern UI:</b> Enjoy a clean Openwalla-inspired experience, including full support for light and dark themes.
+* <b>Modern UI:</b> Enjoy a clean interface with full support for light and dark themes.
 
 -----
 
@@ -24,9 +24,7 @@ This app requires an OpenWrt router with the LuCI web interface enabled. For rem
 
 Openwalla is an open-source project. For support, to report issues, or to view the source code, please visit our GitHub repository:
 
-https://github.com/cogwheel0/luci-mobile
-
-Email: cogwheel@cogwheel.app
+https://github.com/benisai/Openwalla
 
 -----
 

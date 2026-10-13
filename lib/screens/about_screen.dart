@@ -257,10 +257,31 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
                   ),
                   leading: Icon(Icons.code_rounded, color: colors.primary),
                   title: const Text('Openwalla on GitHub'),
-                  subtitle: const Text('benisai/openwalla-apk'),
+                  subtitle: const Text('benisai/Openwalla'),
                   trailing: const Icon(Icons.open_in_new_rounded),
                   onTap: () =>
                       _openLink(context, AppConfig.githubRepositoryUrl),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Card(
+                elevation: 1,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 6,
+                  ),
+                  leading: Icon(
+                    Icons.privacy_tip_outlined,
+                    color: colors.primary,
+                  ),
+                  title: const Text('Privacy Policy'),
+                  subtitle: const Text('How Openwalla handles your data'),
+                  trailing: const Icon(Icons.open_in_new_rounded),
+                  onTap: () => _openLink(context, AppConfig.privacyPolicyUrl),
                 ),
               ),
               const SizedBox(height: 24),
