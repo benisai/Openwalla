@@ -1,30 +1,9 @@
-import 'dart:convert';
-
 import 'package:dio/dio.dart';
 import 'package:openwalla/services/secure_storage_service.dart';
+import 'package:openwalla/services/openwalla_server_settings.dart';
 import 'package:openwalla/utils/http_client_manager.dart';
 
-class TunnelMonitorSettings {
-  final String serverUrl;
-  final String apiToken;
-
-  const TunnelMonitorSettings({this.serverUrl = '', this.apiToken = ''});
-
-  Uri get statusUri {
-    final base = Uri.tryParse(serverUrl.trim());
-    if (base == null ||
-        !const ['http', 'https'].contains(base.scheme) ||
-        base.host.isEmpty ||
-        base.userInfo.isNotEmpty ||
-        base.hasQuery ||
-        base.hasFragment) {
-      throw const FormatException('Enter a valid HTTP or HTTPS server URL.');
-    }
-    return base.replace(
-      path: '${base.path.replaceAll(RegExp(r'/+$'), '')}/api/v1/tunnel/status',
-    );
-  }
-}
+typedef TunnelMonitorSettings = OpenwallaServerSettings;
 
 class TunnelMonitorStatus {
   final String host;
@@ -67,34 +46,19 @@ class TunnelMonitorStatus {
 }
 
 class TunnelMonitorService {
-  final SecureStorageService _storage;
+  final OpenwallaServerSettingsStore _settings;
   final Dio? _client;
 
   TunnelMonitorService({SecureStorageService? storage, Dio? client})
-    : _storage = storage ?? SecureStorageService(),
+    : _settings = OpenwallaServerSettingsStore(storage: storage),
       _client = client;
 
-  String _key(String routerId) => 'tunnelMonitor:$routerId';
-
-  Future<TunnelMonitorSettings> load(String routerId) async {
-    final saved = await _storage.readValue(_key(routerId));
-    if (saved == null) return const TunnelMonitorSettings();
-    final data = jsonDecode(saved) as Map<String, dynamic>;
-    return TunnelMonitorSettings(
-      serverUrl: data['serverUrl'] as String? ?? '',
-      apiToken: data['apiToken'] as String? ?? '',
-    );
-  }
+  Future<TunnelMonitorSettings> load(String routerId) =>
+      _settings.load(routerId);
 
   Future<void> save(String routerId, TunnelMonitorSettings settings) async {
     settings.statusUri;
-    await _storage.writeValue(
-      _key(routerId),
-      jsonEncode({
-        'serverUrl': settings.serverUrl.trim(),
-        'apiToken': settings.apiToken.trim(),
-      }),
-    );
+    await _settings.save(routerId, settings);
   }
 
   Future<TunnelMonitorStatus> fetch(

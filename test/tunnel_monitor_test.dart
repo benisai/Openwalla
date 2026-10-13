@@ -237,4 +237,40 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
   });
+
+  testWidgets('first Tunnel visit prefills an existing flow connection', (
+    tester,
+  ) async {
+    final dio = Dio();
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (request, handler) {
+          expect(request.uri.host, 'existing-server');
+          expect(request.headers['Authorization'], 'Bearer existing-token');
+          handler.resolve(
+            Response(requestOptions: request, data: statusResponse()),
+          );
+        },
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TunnelSettingsScreen(
+          routerId: 'router-a',
+          service: TunnelMonitorService(client: dio),
+          loadInitialSettings: () async => const TunnelMonitorSettings(
+            serverUrl: 'http://existing-server:2020',
+            apiToken: 'existing-token',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final fields = tester
+        .widgetList<TextFormField>(find.byType(TextFormField))
+        .toList();
+    expect(fields.first.controller!.text, 'http://existing-server:2020');
+    expect(fields.last.controller!.text, 'existing-token');
+    expect(find.text('Reachable'), findsNWidgets(2));
+  });
 }

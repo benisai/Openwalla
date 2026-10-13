@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:openwalla/services/secure_storage_service.dart';
+import 'package:openwalla/services/openwalla_server_settings.dart';
 import 'package:openwalla/services/router_service.dart';
 import 'package:openwalla/services/ssh_service.dart';
 import 'package:openwalla/services/throughput_service.dart';
@@ -2998,7 +2999,15 @@ class AppState extends ChangeNotifier {
       final collector = values?['collector'];
       if (collector is! Map) return false;
       if (collector['mode']?.toString() == 'external') {
-        return collector['server_url']?.toString().trim().isNotEmpty == true;
+        final routerId = _routerService?.selectedRouter?.id;
+        final connection =
+            await OpenwallaServerSettingsStore(
+              storage: _secureStorageService,
+            ).load(
+              routerId ?? 'app',
+              legacyServerUrl: collector['server_url']?.toString() ?? '',
+            );
+        return connection.serverUrl.isNotEmpty;
       }
       final enabled = collector['enabled']?.toString().trim().toLowerCase();
       return !{'0', 'false', 'off', 'disabled'}.contains(enabled);
@@ -3034,20 +3043,26 @@ class AppState extends ChangeNotifier {
         retentionHours: 24,
       );
     }
+    final routerId = _routerService?.selectedRouter?.id ?? 'app';
+    final serverSettings = OpenwallaServerSettingsStore(
+      storage: _secureStorageService,
+    );
+    var connection = await serverSettings.load(routerId);
     try {
-      final values = await _fetchOpenwallaUciValues(context: context);
+      final values = await _fetchOpenwallaUciValues(
+        context: context?.mounted == true ? context : null,
+      );
       final section = values is Map ? values['flow_stats'] : null;
       final collector = values is Map ? values['collector'] : null;
       final parsedRetentionHours = int.tryParse(
         collector is Map ? collector['retention_hours']?.toString() ?? '' : '',
       );
-      final routerId = _routerService?.selectedRouter?.id;
-      final apiToken = routerId == null
-          ? ''
-          : await _secureStorageService.readValue(
-                  'netify_server_token:$routerId',
-                ) ??
-                '';
+      connection = await serverSettings.load(
+        routerId,
+        legacyServerUrl: collector is Map
+            ? collector['server_url']?.toString() ?? ''
+            : '',
+      );
       return FlowStatsSettings(
         enabled: section is Map && section['enabled']?.toString() == '1',
         pollSeconds:
@@ -3064,18 +3079,18 @@ class AppState extends ChangeNotifier {
             collector is Map && collector['mode']?.toString() == 'external'
             ? NetifyCollectorMode.external
             : NetifyCollectorMode.local,
-        serverUrl: collector is Map
-            ? collector['server_url']?.toString() ?? ''
-            : '',
-        apiToken: apiToken,
+        serverUrl: connection.serverUrl,
+        apiToken: connection.apiToken,
       );
     } catch (e, stack) {
       Logger.warning('Failed to fetch flow stats settings: $e');
       Logger.debug('Flow stats settings stack: $stack');
-      return const FlowStatsSettings(
+      return FlowStatsSettings(
         enabled: false,
         pollSeconds: 5,
         retentionHours: 24,
+        serverUrl: connection.serverUrl,
+        apiToken: connection.apiToken,
       );
     }
   }
@@ -3099,26 +3114,13 @@ class AppState extends ChangeNotifier {
         : '24';
     final expectedMode = settings.collectorMode.name;
     final serverUrl = settings.serverUrl.trim().replaceAll(RegExp(r'/+$'), '');
-    if (settings.collectorMode == NetifyCollectorMode.external) {
-      final uri = Uri.tryParse(serverUrl);
-      if (uri == null ||
-          !{'http', 'https'}.contains(uri.scheme) ||
-          uri.host.isEmpty) {
-        throw ArgumentError('Enter a valid Openwalla Server URL');
-      }
-    }
-    final routerId = _routerService?.selectedRouter?.id;
-    if (routerId != null) {
-      if (settings.apiToken.trim().isEmpty) {
-        await _secureStorageService.deleteValue(
-          'netify_server_token:$routerId',
-        );
-      } else {
-        await _secureStorageService.writeValue(
-          'netify_server_token:$routerId',
-          settings.apiToken.trim(),
-        );
-      }
+    final connection = OpenwallaServerSettings(
+      serverUrl: serverUrl,
+      apiToken: settings.apiToken,
+    );
+    if (settings.collectorMode == NetifyCollectorMode.external ||
+        serverUrl.isNotEmpty) {
+      connection.statusUri;
     }
     final saveOutput = await runRouterSetupCommand(
       "uci -q get openwalla.flow_stats >/dev/null 2>&1 || "
@@ -3138,6 +3140,7 @@ class AppState extends ChangeNotifier {
       "[ \"\$(uci -q get openwalla.flow_stats.poll)\" = '$expectedPoll' ] && "
       "[ \"\$(uci -q get openwalla.collector.retention_hours)\" = '$expectedRetentionHours' ] && "
       "[ \"\$(uci -q get openwalla.collector.mode)\" = '$expectedMode' ] && "
+      "[ \"\$(uci -q get openwalla.collector.server_url)\" = ${_shellQuote(serverUrl)} ] && "
       "echo FLOW_STATS_SAVED",
       context: context?.mounted == true ? context : null,
     );
@@ -3149,10 +3152,12 @@ class AppState extends ChangeNotifier {
     if (saved.enabled != settings.enabled ||
         saved.pollSeconds != int.parse(expectedPoll) ||
         saved.retentionHours != int.parse(expectedRetentionHours) ||
-        saved.collectorMode != settings.collectorMode ||
-        saved.serverUrl != serverUrl) {
+        saved.collectorMode != settings.collectorMode) {
       throw StateError('Flow usage settings could not be verified');
     }
+    await OpenwallaServerSettingsStore(
+      storage: _secureStorageService,
+    ).save(router.id, connection);
 
     final external = settings.collectorMode == NetifyCollectorMode.external;
     final listenAddress = external
@@ -6133,10 +6138,10 @@ done | sort -t "|" -k1,1nr | head -n ''' +
     String path, [
     Map<String, dynamic>? query,
   ]) {
-    final base = Uri.parse(serverUrl.trim().replaceAll(RegExp(r'/+$'), ''));
-    final basePath = base.path == '/' ? '' : base.path;
-    return base.replace(
-      path: '$basePath$path',
+    final endpoint = OpenwallaServerSettings(
+      serverUrl: serverUrl,
+    ).endpoint(path);
+    return endpoint.replace(
       queryParameters: query?.map(
         (key, value) => MapEntry(key, value.toString()),
       ),
@@ -6156,6 +6161,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
     final response = await client.getUri(
       uri,
       options: Options(
+        followRedirects: false,
         headers: settings.apiToken.isEmpty
             ? null
             : {'Authorization': 'Bearer ${settings.apiToken}'},

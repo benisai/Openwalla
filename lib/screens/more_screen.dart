@@ -9,6 +9,7 @@ import 'package:openwalla/screens/manage_device_screen.dart';
 import 'package:openwalla/screens/reboot_countdown_screen.dart';
 import 'package:openwalla/screens/settings_screen.dart';
 import 'package:openwalla/screens/tunnel_settings_screen.dart';
+import 'package:openwalla/services/tunnel_monitor_service.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
 import 'package:openwalla/design/luci_design_system.dart';
 import 'package:openwalla/utils/http_client_manager.dart';
@@ -248,6 +249,15 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                                       .selectedRouter
                                       ?.id ??
                                   'app',
+                              loadInitialSettings: () async {
+                                final settings = await ref
+                                    .read(appStateProvider)
+                                    .fetchFlowStatsSettings();
+                                return TunnelMonitorSettings(
+                                  serverUrl: settings.serverUrl,
+                                  apiToken: settings.apiToken,
+                                );
+                              },
                             ),
                           ),
                         );

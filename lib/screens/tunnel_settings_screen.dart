@@ -7,8 +7,14 @@ import 'package:openwalla/widgets/luci_toast.dart';
 class TunnelSettingsScreen extends StatefulWidget {
   final String routerId;
   final TunnelMonitorService? service;
+  final Future<TunnelMonitorSettings> Function()? loadInitialSettings;
 
-  const TunnelSettingsScreen({super.key, required this.routerId, this.service});
+  const TunnelSettingsScreen({
+    super.key,
+    required this.routerId,
+    this.service,
+    this.loadInitialSettings,
+  });
 
   @override
   State<TunnelSettingsScreen> createState() => _TunnelSettingsScreenState();
@@ -37,7 +43,10 @@ class _TunnelSettingsScreenState extends State<TunnelSettingsScreen> {
 
   Future<void> _load() async {
     try {
-      final saved = await _service.load(widget.routerId);
+      var saved = await _service.load(widget.routerId);
+      if (saved.serverUrl.isEmpty && widget.loadInitialSettings != null) {
+        saved = await widget.loadInitialSettings!();
+      }
       if (!mounted) return;
       _url.text = saved.serverUrl;
       _token.text = saved.apiToken;
