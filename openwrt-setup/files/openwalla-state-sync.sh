@@ -1,15 +1,17 @@
 #!/bin/sh
 
 # Openwalla state sync:
-# - keeps live writes in /tmp
+# - keeps live writes in /tmp/openwalla
 # - checkpoints selected runtime data to persistent storage on interval
-# - restores checkpoint back into /tmp on boot
+# - restores checkpoint back into /tmp/openwalla on boot
 
 set -u
 
+mkdir -p /tmp/openwalla
+
 MARKER="# OPENWALLA_STATE_SYNC"
 CRON_PATH="/etc/crontabs/root"
-STATE_TS_FILE="/tmp/openwalla-state-sync.last"
+STATE_TS_FILE="/tmp/openwalla/openwalla-state-sync.last"
 
 uci_get() {
 	uci -q get "$1" 2>/dev/null || true
@@ -48,7 +50,7 @@ read_netify_db() {
 	local path
 	path="$(uci_get openwalla.collector.db_path)"
 	if [ -z "$path" ]; then
-		path="/tmp/openwalla-netify.sqlite"
+		path="/tmp/openwalla/openwalla-netify.sqlite"
 	fi
 	echo "$path"
 }
@@ -57,7 +59,7 @@ read_netify_flow_stats_db() {
 	local path
 	path="$(uci_get openwalla.flow_stats.db_path)"
 	if [ -z "$path" ]; then
-		path="/tmp/openwalla-netify-flow-stats.sqlite"
+		path="/tmp/openwalla/openwalla-netify-flow-stats.sqlite"
 	fi
 	echo "$path"
 }
@@ -66,7 +68,7 @@ read_connection_flows_db() {
 	local path
 	path="$(uci_get openwalla.connection_flows.db_path)"
 	if [ -z "$path" ]; then
-		path="/tmp/openwalla-connection-flows.sqlite"
+		path="/tmp/openwalla/openwalla-connection-flows.sqlite"
 	fi
 	echo "$path"
 }
@@ -75,7 +77,7 @@ read_device_bandwidth_db() {
 	local path
 	path="$(uci_get openwalla.device_bandwidth.db_path)"
 	if [ -z "$path" ]; then
-		path="/tmp/openwalla-device-bandwidth.sqlite"
+		path="/tmp/openwalla/openwalla-device-bandwidth.sqlite"
 	fi
 	echo "$path"
 }
@@ -84,7 +86,7 @@ read_devices_db() {
 	local path
 	path="$(uci_get openwalla.devices.db_path)"
 	if [ -z "$path" ]; then
-		path="/tmp/openwalla-devices.sqlite"
+		path="/tmp/openwalla/openwalla-devices.sqlite"
 	fi
 	echo "$path"
 }
@@ -93,7 +95,7 @@ read_notifications_db() {
 	local path
 	path="$(uci_get openwalla.notifications.db_path)"
 	if [ -z "$path" ]; then
-		path="/tmp/openwalla-notifications.sqlite"
+		path="/tmp/openwalla/openwalla-notifications.sqlite"
 	fi
 	echo "$path"
 }
@@ -101,7 +103,7 @@ read_notifications_db() {
 read_parental_db() {
 	local path
 	path="$(uci_get openwalla.parental.db_path)"
-	[ -n "$path" ] || path="/tmp/openwalla-parental.sqlite"
+	[ -n "$path" ] || path="/tmp/openwalla/openwalla-parental.sqlite"
 	echo "$path"
 }
 
@@ -109,7 +111,7 @@ read_ping_file() {
 	local path
 	path="$(uci_get openwalla.ping_monitor.output_file)"
 	if [ -z "$path" ]; then
-		path="/tmp/openwalla-ping-monitor.txt"
+		path="/tmp/openwalla/openwalla-ping-monitor.txt"
 	fi
 	echo "$path"
 }
@@ -118,7 +120,7 @@ read_dns_file() {
 	local path
 	path="$(uci_get openwalla.dns_monitor.output_file)"
 	if [ -z "$path" ]; then
-		path="/tmp/openwalla-dns-monitor.txt"
+		path="/tmp/openwalla/openwalla-dns-monitor.txt"
 	fi
 	echo "$path"
 }
@@ -127,7 +129,7 @@ read_speedtest_file() {
 	local path
 	path="$(uci_get openwalla.speedtest_monitor.output_file)"
 	if [ -z "$path" ]; then
-		path="/tmp/openwalla-speedtest-monitor.txt"
+		path="/tmp/openwalla/openwalla-speedtest-monitor.txt"
 	fi
 	echo "$path"
 }
@@ -136,7 +138,7 @@ read_quarantine_state_file() {
 	local path
 	path="$(uci_get openwalla.quarantine.state_file)"
 	if [ -z "$path" ]; then
-		path="/tmp/openwalla-quarantine-known.txt"
+		path="/tmp/openwalla/openwalla-quarantine-known.txt"
 	fi
 	echo "$path"
 }
@@ -188,14 +190,14 @@ save_runtime_logs() {
 	local dst="$state_dir/tmp"
 	mkdir -p "$dst"
 	for f in \
-		/tmp/openwalla-netify-collector.log \
-		/tmp/openwalla-connection-flows-collector.log \
-		/tmp/openwalla-devices-collector.log \
-		/tmp/openwalla-device-bandwidth-collector.log \
-		/tmp/openwalla-dns-monitor.last.log \
-		/tmp/openwalla-paternal-pause.last.log \
-		/tmp/openwalla-network-monitor.last.log \
-		/tmp/openwalla-speedtest-monitor.last.log
+		/tmp/openwalla/openwalla-netify-collector.log \
+		/tmp/openwalla/openwalla-connection-flows-collector.log \
+		/tmp/openwalla/openwalla-devices-collector.log \
+		/tmp/openwalla/openwalla-device-bandwidth-collector.log \
+		/tmp/openwalla/openwalla-dns-monitor.last.log \
+		/tmp/openwalla/openwalla-paternal-pause.last.log \
+		/tmp/openwalla/openwalla-network-monitor.last.log \
+		/tmp/openwalla/openwalla-speedtest-monitor.last.log
 	do
 		[ -f "$f" ] || continue
 		cp -f "$f" "$dst/" 2>/dev/null || true
@@ -254,13 +256,44 @@ restore_copy() {
 	cp -f "$src" "$dst" 2>/dev/null || true
 }
 
+normalize_runtime_config_paths() {
+	local key current target changed
+	changed=0
+	for key in \
+		openwalla.collector.db_path \
+		openwalla.flow_stats.db_path \
+		openwalla.connection_flows.db_path \
+		openwalla.device_bandwidth.db_path \
+		openwalla.devices.db_path \
+		openwalla.parental.db_path \
+		openwalla.ping_monitor.output_file \
+		openwalla.ping_monitor.state_file \
+		openwalla.ping_monitor.interface_state_file \
+		openwalla.ping_monitor.wireguard_state_file \
+		openwalla.dns_monitor.output_file \
+		openwalla.speedtest_monitor.output_file \
+		openwalla.quarantine.state_file \
+		openwalla.notifications.db_path
+	do
+		current="$(uci_get "$key")"
+		case "$current" in
+		/tmp/openwalla-*|/tmp/.openwalla*)
+			target="/tmp/openwalla/${current#/tmp/}"
+			uci set "$key=$target"
+			changed=1
+			;;
+		esac
+	done
+	[ "$changed" = "1" ] && uci commit openwalla
+}
+
 restore_runtime_logs() {
 	local state_dir="$1"
 	local src="$state_dir/tmp"
 	[ -d "$src" ] || return 0
 	for f in "$src"/openwalla-*.log "$src"/openwalla-speedtest-monitor.last.log; do
 		[ -f "$f" ] || continue
-		cp -f "$f" "/tmp/$(basename "$f")" 2>/dev/null || true
+		cp -f "$f" "/tmp/openwalla/$(basename "$f")" 2>/dev/null || true
 	done
 }
 
@@ -350,6 +383,7 @@ restore_state() {
 	restore_copy "$state_dir/openwalla-speedtest-monitor.txt" "$speedtest_file"
 	restore_copy "$state_dir/openwalla-quarantine-known.txt" "$quarantine_state_file"
 	restore_copy "$state_dir/openwalla.config" "/etc/config/openwalla"
+	normalize_runtime_config_paths
 	restore_copy "$state_dir/openwalla-state-sync.last" "$STATE_TS_FILE"
 	restore_vnstat_dir "$state_dir"
 	restore_runtime_logs "$state_dir"
@@ -448,7 +482,7 @@ build_cron_line() {
 sync_cron() {
 	local line tmp
 	line="$(build_cron_line)"
-	tmp="/tmp/.openwalla_state_cron.$$"
+	tmp="/tmp/openwalla/.openwalla_state_cron.$$"
 
 	if [ -f "$CRON_PATH" ]; then
 		grep -v "$MARKER" "$CRON_PATH" >"$tmp" 2>/dev/null || : >"$tmp"

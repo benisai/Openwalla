@@ -7,13 +7,14 @@ set -u
 
 PATH="/usr/sbin:/usr/bin:/sbin:/bin"
 export PATH
+mkdir -p /tmp/openwalla
 
-DEFAULT_DEVICES_DB="/tmp/openwalla-devices.sqlite"
+DEFAULT_DEVICES_DB="/tmp/openwalla/openwalla-devices.sqlite"
 DEFAULT_VENDOR_DB="/usr/share/openwalla/openwalla-mac-vendors.txt"
 VENDOR_DB="${OPENWALLA_VENDOR_DB:-$DEFAULT_VENDOR_DB}"
 CRON_PATH="${OPENWALLA_CRON_PATH:-/etc/crontabs/root}"
 CRON_MARKER="# OPENWALLA_1HR_RUN"
-LOCK_DIR="/tmp/openwalla-1hr-run.lock"
+LOCK_DIR="/tmp/openwalla/openwalla-1hr-run.lock"
 
 find_sqlite_bin() {
 	if command -v sqlite3 >/dev/null 2>&1; then
@@ -42,8 +43,8 @@ run_vendor_enrichment() {
 	[ -f "$devices_db" ] || return 0
 	[ -r "$VENDOR_DB" ] || return 0
 
-	prefixes="/tmp/.openwalla-vendor-prefixes.$$"
-	matches="/tmp/.openwalla-vendor-matches.$$"
+	prefixes="/tmp/openwalla/.openwalla-vendor-prefixes.$$"
+	matches="/tmp/openwalla/.openwalla-vendor-matches.$$"
 	"$sqlite_bin" -batch -noheader "$devices_db" \
 		"SELECT DISTINCT upper(substr(replace(mac, ':', ''), 1, 6)) FROM devices WHERE vendor = '' AND length(replace(mac, ':', '')) >= 6;" \
 		>"$prefixes" 2>/dev/null || true
@@ -86,9 +87,9 @@ install_cron() {
 	local tmp
 	mkdir -p "$(dirname "$CRON_PATH")"
 	touch "$CRON_PATH"
-	tmp="/tmp/.openwalla-1hr-cron.$$"
+	tmp="/tmp/openwalla/.openwalla-1hr-cron.$$"
 	grep -v "OPENWALLA_1HR_RUN" "$CRON_PATH" >"$tmp" 2>/dev/null || : >"$tmp"
-	echo "0 * * * * /usr/bin/Openwalla-1hr-run.sh run >/tmp/openwalla-1hr-run.last.log 2>&1 $CRON_MARKER" >>"$tmp"
+	echo "0 * * * * mkdir -p /tmp/openwalla; /usr/bin/Openwalla-1hr-run.sh run >/tmp/openwalla/openwalla-1hr-run.last.log 2>&1 $CRON_MARKER" >>"$tmp"
 	cp "$tmp" "$CRON_PATH"
 	rm -f "$tmp"
 	reload_cron

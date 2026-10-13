@@ -12,7 +12,8 @@ const _routerComponentsRawBase =
 
 String buildRouterComponentsCommand(String action) => [
   'export OPENWALLA_RAW_BASE=$_routerComponentsRawBase',
-  'SCRIPT=/tmp/openwalla-components.sh',
+  'SCRIPT=/tmp/openwalla/openwalla-components.sh',
+  'mkdir -p /tmp/openwalla',
   'if command -v wget >/dev/null 2>&1; then wget -qO "\$SCRIPT" "\$OPENWALLA_RAW_BASE/openwalla-components.sh"; else curl -fsSL "\$OPENWALLA_RAW_BASE/openwalla-components.sh" -o "\$SCRIPT"; fi',
   'chmod 0755 "\$SCRIPT"',
   'sh "\$SCRIPT" $action',

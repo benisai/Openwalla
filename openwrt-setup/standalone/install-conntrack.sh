@@ -26,7 +26,7 @@ install_file "$FILES_DIR/openwalla-connection-flows-collector.init" /etc/init.d/
 install_rpcd_acl
 
 set_uci openwalla.connection_flows.enabled "1"
-set_uci openwalla.connection_flows.db_path "/tmp/openwalla-connection-flows.sqlite"
+set_uci openwalla.connection_flows.db_path "/tmp/openwalla/openwalla-connection-flows.sqlite"
 set_uci openwalla.connection_flows.poll_seconds "15"
 set_uci openwalla.connection_flows.retention_rows "50000"
 set_uci openwalla.connection_flows.exclude_endpoints "127.0.0.1"

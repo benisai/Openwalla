@@ -5,17 +5,19 @@
 
 set -e
 
+mkdir -p /tmp/openwalla
+
 DEFAULT_HOST="127.0.0.1"
 DEFAULT_PORT="7150"
-DEFAULT_DB="/tmp/openwalla-netify.sqlite"
-DEFAULT_FLOW_STATS_DB="/tmp/openwalla-netify-flow-stats.sqlite"
+DEFAULT_DB="/tmp/openwalla/openwalla-netify.sqlite"
+DEFAULT_FLOW_STATS_DB="/tmp/openwalla/openwalla-netify-flow-stats.sqlite"
 DEFAULT_RETENTION_ROWS="500000"
 DEFAULT_RETENTION_HOURS="24"
 DEFAULT_STREAM_TIMEOUT="45"
 DEFAULT_EXCLUDE_PROTOCOLS="MDNS,DNS,QUIC,DHCPv6,ICMP"
 RECONNECT_DELAY="3"
-LOG_FILE="/tmp/openwalla-netify-collector.log"
-FLOW_STATS_WORK_DIR="/tmp/openwalla-netify-stats-work"
+LOG_FILE="/tmp/openwalla/openwalla-netify-collector.log"
+FLOW_STATS_WORK_DIR="/tmp/openwalla/openwalla-netify-stats-work"
 PRUNE_CRON_MARKER="# OPENWALLA_NETIFY_PRUNE"
 CRON_PATH="/etc/crontabs/root"
 
@@ -334,7 +336,7 @@ reload_cron() {
 
 install_prune_cron() {
 	local enabled tmp
-	tmp="/tmp/.openwalla_netify_prune_cron.$$"
+	tmp="/tmp/openwalla/.openwalla_netify_prune_cron.$$"
 	enabled="$(uci -q get openwalla.collector.enabled 2>/dev/null || echo 0)"
 	mkdir -p "$(dirname "$CRON_PATH")"
 	if [ -f "$CRON_PATH" ]; then

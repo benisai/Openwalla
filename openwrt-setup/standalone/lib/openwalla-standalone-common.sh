@@ -22,7 +22,10 @@ esac
 FILES_DIR="$OPENWALLA_SETUP_DIR/files"
 RPCD_ACL="$OPENWALLA_SETUP_DIR/rpcd-acl.json"
 OPENWALLA_RAW_BASE="${OPENWALLA_RAW_BASE:-https://raw.githubusercontent.com/benisai/Openwalla/main/openwrt-setup}"
+OPENWALLA_RUNTIME_DIR="${OPENWALLA_RUNTIME_DIR:-/tmp/openwalla}"
 PKG_MGR=""
+
+mkdir -p "$OPENWALLA_RUNTIME_DIR"
 
 log() {
 	echo "[openwalla-standalone] $*"
@@ -182,10 +185,75 @@ set_uci_default() {
 	uci -q get "$key" >/dev/null 2>&1 || set_uci "$key" "$value"
 }
 
+migrate_openwalla_runtime_path() {
+	local key target service current suffix
+	key="$1"
+	target="$2"
+	service="${3:-}"
+	current="$(uci -q get "$key" 2>/dev/null || true)"
+	case "$current" in
+	/tmp/openwalla-*|/tmp/.openwalla*)
+		if [ -n "$service" ] && [ -x "/etc/init.d/$service" ]; then
+			case " $OPENWALLA_MIGRATED_SERVICES " in
+			*" $service "*) ;;
+			*)
+				if /etc/init.d/"$service" status >/dev/null 2>&1; then
+					/etc/init.d/"$service" stop >/dev/null 2>&1 || true
+					OPENWALLA_MIGRATED_SERVICES="$OPENWALLA_MIGRATED_SERVICES $service"
+				fi
+				;;
+			esac
+		fi
+		mkdir -p "$(dirname "$target")"
+		if [ -d "$current" ]; then
+			mkdir -p "$target"
+			cp -R "$current"/. "$target"/ 2>/dev/null || true
+		elif [ -f "$current" ] && [ ! -e "$target" ]; then
+			cp -p "$current" "$target" 2>/dev/null || cp "$current" "$target" 2>/dev/null || true
+		fi
+		for suffix in -wal -shm; do
+			if [ -f "$current$suffix" ] && [ ! -e "$target$suffix" ]; then
+				cp -p "$current$suffix" "$target$suffix" 2>/dev/null || cp "$current$suffix" "$target$suffix" 2>/dev/null || true
+			fi
+		done
+		set_uci "$key" "$target"
+		OPENWALLA_CONFIG_CHANGED=1
+		;;
+	esac
+}
+
+migrate_openwalla_runtime_paths() {
+	local service
+	OPENWALLA_CONFIG_CHANGED=0
+	OPENWALLA_MIGRATED_SERVICES=""
+	migrate_openwalla_runtime_path openwalla.collector.db_path "$OPENWALLA_RUNTIME_DIR/openwalla-netify.sqlite" openwalla-netify-collector
+	migrate_openwalla_runtime_path openwalla.flow_stats.db_path "$OPENWALLA_RUNTIME_DIR/openwalla-netify-flow-stats.sqlite" openwalla-netify-collector
+	migrate_openwalla_runtime_path openwalla.connection_flows.db_path "$OPENWALLA_RUNTIME_DIR/openwalla-connection-flows.sqlite" openwalla-connection-flows-collector
+	migrate_openwalla_runtime_path openwalla.device_bandwidth.db_path "$OPENWALLA_RUNTIME_DIR/openwalla-device-bandwidth.sqlite" openwalla-device-bandwidth-collector
+	migrate_openwalla_runtime_path openwalla.devices.db_path "$OPENWALLA_RUNTIME_DIR/openwalla-devices.sqlite" openwalla-devices-collector
+	migrate_openwalla_runtime_path openwalla.parental.db_path "$OPENWALLA_RUNTIME_DIR/openwalla-parental.sqlite"
+	migrate_openwalla_runtime_path openwalla.ping_monitor.output_file "$OPENWALLA_RUNTIME_DIR/openwalla-ping-monitor.txt" openwalla-network-monitor
+	migrate_openwalla_runtime_path openwalla.ping_monitor.state_file "$OPENWALLA_RUNTIME_DIR/openwalla-network-monitor.state" openwalla-network-monitor
+	migrate_openwalla_runtime_path openwalla.ping_monitor.interface_state_file "$OPENWALLA_RUNTIME_DIR/openwalla-interface-monitor.state" openwalla-network-monitor
+	migrate_openwalla_runtime_path openwalla.ping_monitor.wireguard_state_file "$OPENWALLA_RUNTIME_DIR/openwalla-wireguard-monitor.state" openwalla-network-monitor
+	migrate_openwalla_runtime_path openwalla.dns_monitor.output_file "$OPENWALLA_RUNTIME_DIR/openwalla-dns-monitor.txt" openwalla-dns-monitor
+	migrate_openwalla_runtime_path openwalla.speedtest_monitor.output_file "$OPENWALLA_RUNTIME_DIR/openwalla-speedtest-monitor.txt"
+	migrate_openwalla_runtime_path openwalla.quarantine.state_file "$OPENWALLA_RUNTIME_DIR/openwalla-quarantine-known.txt"
+	migrate_openwalla_runtime_path openwalla.notifications.db_path "$OPENWALLA_RUNTIME_DIR/openwalla-notifications.sqlite"
+	if [ "$OPENWALLA_CONFIG_CHANGED" = "1" ]; then
+		uci commit openwalla
+		log "Migrated runtime files to $OPENWALLA_RUNTIME_DIR"
+	fi
+	for service in $OPENWALLA_MIGRATED_SERVICES; do
+		/etc/init.d/"$service" start >/dev/null 2>&1 || true
+	done
+}
+
 ensure_openwalla_config() {
 	if [ ! -f /etc/config/openwalla ]; then
 		install_file "$FILES_DIR/openwalla.config" /etc/config/openwalla 0644
 	fi
+	migrate_openwalla_runtime_paths
 }
 
 ensure_uci_section() {

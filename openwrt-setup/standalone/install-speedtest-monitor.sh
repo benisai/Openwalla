@@ -28,7 +28,7 @@ uci -q delete openwalla.speedtest_monitor.run_date >/dev/null 2>&1 || true
 set_uci_default openwalla.speedtest_monitor.run_hour "3"
 set_uci_default openwalla.speedtest_monitor.run_minute "15"
 set_uci_default openwalla.speedtest_monitor.bin "/usr/bin/speedtest"
-set_uci_default openwalla.speedtest_monitor.output_file "/tmp/openwalla-speedtest-monitor.txt"
+set_uci_default openwalla.speedtest_monitor.output_file "/tmp/openwalla/openwalla-speedtest-monitor.txt"
 set_uci_default openwalla.speedtest_monitor.max_lines "365"
 uci commit openwalla
 
@@ -36,7 +36,7 @@ uci commit openwalla
 
 SPEEDTEST_MARKER="# OPENWALLA_SPEEDTEST_MONITOR"
 CRON_PATH="/etc/crontabs/root"
-TMP_CRON="/tmp/.openwalla_speedtest_cron.$$"
+TMP_CRON="/tmp/openwalla/.openwalla_speedtest_cron.$$"
 HOUR="$(uci -q get openwalla.speedtest_monitor.run_hour 2>/dev/null || echo 3)"
 MINUTE="$(uci -q get openwalla.speedtest_monitor.run_minute 2>/dev/null || echo 15)"
 ENABLED="$(uci -q get openwalla.speedtest_monitor.enabled 2>/dev/null || echo 1)"
@@ -50,7 +50,7 @@ else
 	: >"$TMP_CRON"
 fi
 if [ "$ENABLED" = "1" ]; then
-	echo "$MINUTE $HOUR * * * /usr/bin/openwalla-speedtest-monitor --scheduled >/tmp/openwalla-speedtest-monitor.last.log 2>&1 $SPEEDTEST_MARKER" >>"$TMP_CRON"
+	echo "$MINUTE $HOUR * * * mkdir -p /tmp/openwalla; /usr/bin/openwalla-speedtest-monitor --scheduled >/tmp/openwalla/openwalla-speedtest-monitor.last.log 2>&1 $SPEEDTEST_MARKER" >>"$TMP_CRON"
 fi
 cp "$TMP_CRON" "$CRON_PATH"
 rm -f "$TMP_CRON"

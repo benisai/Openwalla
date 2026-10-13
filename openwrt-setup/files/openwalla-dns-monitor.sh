@@ -1,14 +1,16 @@
 #!/bin/sh
 
 # Openwalla DNS Monitor
-# Runs continuously on OpenWrt and writes DNS resolution samples to /tmp/openwalla-dns-monitor.txt
+# Runs continuously on OpenWrt and writes DNS resolution samples to /tmp/openwalla/openwalla-dns-monitor.txt
 
 set -u
+
+mkdir -p /tmp/openwalla
 
 DEFAULT_TARGET="openwrt.org"
 DEFAULT_INTERVAL="60"
 DEFAULT_TIMEOUT="3"
-DEFAULT_OUTPUT="/tmp/openwalla-dns-monitor.txt"
+DEFAULT_OUTPUT="/tmp/openwalla/openwalla-dns-monitor.txt"
 DEFAULT_MAX_LINES="2000"
 
 DNS_TARGET="$DEFAULT_TARGET"

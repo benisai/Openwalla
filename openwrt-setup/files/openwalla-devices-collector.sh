@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Openwalla devices collector for OpenWrt.
-# Maintains /tmp/openwalla-devices.sqlite as the app's local device inventory.
+# Maintains /tmp/openwalla/openwalla-devices.sqlite as the app's local device inventory.
 # MAC address is the primary key so renamed devices, quarantine state, usage
 # totals, and static IP metadata can stay attached to the same client over time.
 # Device discovery is gathered from IPv4 DHCP leases, ARP, IPv4 neighbors, and
@@ -16,17 +16,18 @@ set -u
 
 PATH="/usr/sbin:/usr/bin:/sbin:/bin"
 export PATH
+mkdir -p /tmp/openwalla
 
-DEFAULT_DB="/tmp/openwalla-devices.sqlite"
+DEFAULT_DB="/tmp/openwalla/openwalla-devices.sqlite"
 DEFAULT_POLL_SECONDS="60"
 DEFAULT_OFFLINE_AFTER_SECONDS="90"
 DEFAULT_LAN_NETWORK="lan"
 DEFAULT_LAN_DEVICE="br-lan"
 DEFAULT_RULE_PREFIX="openwalla_quarantine_"
-DEFAULT_STATE_FILE="/tmp/openwalla-quarantine-known.txt"
-DEFAULT_NOTIFICATIONS_DB="/tmp/openwalla-notifications.sqlite"
-LOG_FILE="/tmp/openwalla-devices-collector.log"
-LOCK_DIR="/tmp/openwalla-devices-collector.lock"
+DEFAULT_STATE_FILE="/tmp/openwalla/openwalla-quarantine-known.txt"
+DEFAULT_NOTIFICATIONS_DB="/tmp/openwalla/openwalla-notifications.sqlite"
+LOG_FILE="/tmp/openwalla/openwalla-devices-collector.log"
+LOCK_DIR="/tmp/openwalla/openwalla-devices-collector.lock"
 
 DB_PATH="$DEFAULT_DB"
 POLL_SECONDS="$DEFAULT_POLL_SECONDS"
@@ -539,9 +540,9 @@ collect_once() {
 	local now cutoff candidates totals quarantined sql mac ip host active_now rx tx is_quarantined esc_mac esc_ip esc_host changed fresh_state
 	now="$(date +%s)"
 	cutoff=$((now - OFFLINE_AFTER_SECONDS))
-	candidates="/tmp/.openwalla-devices-candidates.$$"
-	totals="/tmp/.openwalla-devices-totals.$$"
-	quarantined="/tmp/.openwalla-devices-quarantined.$$"
+	candidates="/tmp/openwalla/.openwalla-devices-candidates.$$"
+	totals="/tmp/openwalla/.openwalla-devices-totals.$$"
+	quarantined="/tmp/openwalla/.openwalla-devices-quarantined.$$"
 
 	collect_candidates >"$candidates"
 	collect_totals >"$totals"

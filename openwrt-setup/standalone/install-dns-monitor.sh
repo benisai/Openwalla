@@ -27,7 +27,7 @@ set_uci_default openwalla.dns_monitor.target "openwrt.org"
 set_uci_default openwalla.dns_monitor.interval "60"
 set_uci_default openwalla.dns_monitor.threshold "1000"
 set_uci_default openwalla.dns_monitor.timeout "3"
-set_uci_default openwalla.dns_monitor.output_file "/tmp/openwalla-dns-monitor.txt"
+set_uci_default openwalla.dns_monitor.output_file "/tmp/openwalla/openwalla-dns-monitor.txt"
 set_uci_default openwalla.dns_monitor.max_lines "2000"
 uci commit openwalla
 

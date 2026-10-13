@@ -7,8 +7,9 @@ set -u
 
 PATH="/usr/sbin:/usr/bin:/sbin:/bin"
 export PATH
+mkdir -p /tmp/openwalla
 
-DEFAULT_OUTPUT="/tmp/openwalla-speedtest-monitor.txt"
+DEFAULT_OUTPUT="/tmp/openwalla/openwalla-speedtest-monitor.txt"
 DEFAULT_MAX_LINES="365"
 DEFAULT_BIN="/usr/bin/speedtest"
 

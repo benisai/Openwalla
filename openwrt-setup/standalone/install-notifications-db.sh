@@ -23,7 +23,7 @@ ensure_uci_section notifications notifications
 install_file "$FILES_DIR/openwalla-notifications-db.sh" /usr/bin/openwalla-notifications-db 0755
 install_rpcd_acl
 
-set_uci_default openwalla.notifications.db_path "/tmp/openwalla-notifications.sqlite"
+set_uci_default openwalla.notifications.db_path "/tmp/openwalla/openwalla-notifications.sqlite"
 uci commit openwalla
 
 /usr/bin/openwalla-notifications-db --init-db || true

@@ -34,7 +34,7 @@ install_file "$FILES_DIR/Openwalla-1hr-run.sh" /usr/bin/Openwalla-1hr-run.sh 075
 install_rpcd_acl
 
 set_uci_default openwalla.devices.enabled "1"
-set_uci_default openwalla.devices.db_path "/tmp/openwalla-devices.sqlite"
+set_uci_default openwalla.devices.db_path "/tmp/openwalla/openwalla-devices.sqlite"
 set_uci openwalla.devices.poll_seconds "60"
 set_uci_default openwalla.devices.offline_after_seconds "90"
 uci commit openwalla

@@ -34,7 +34,7 @@ uci commit openwalla
 
 if [ -f /etc/rc.local ]; then
 	if ! grep -q '/usr/bin/openwalla-state-sync restore' /etc/rc.local 2>/dev/null; then
-		RC_TMP="/tmp/.openwalla_rc_local.$$"
+		RC_TMP="/tmp/openwalla/.openwalla_rc_local.$$"
 		awk '
 			BEGIN { added=0 }
 			/^exit 0$/ && !added { print "/usr/bin/openwalla-state-sync restore"; added=1 }

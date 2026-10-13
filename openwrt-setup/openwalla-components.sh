@@ -8,12 +8,53 @@ set -u
 RAW_BASE="${OPENWALLA_RAW_BASE:-https://raw.githubusercontent.com/benisai/Openwalla/main/openwrt-setup}"
 VERSION_URL="${OPENWALLA_VERSION_URL:-${RAW_BASE%/openwrt-setup}/pub_script_version.yaml}"
 ACTION="${1:-status}"
-TMP_DIR="/tmp/openwalla-component-update.$$"
+TMP_DIR="/tmp/openwalla/openwalla-component-update.$$"
 UPDATED=0
 CURRENT=0
 MANAGED=0
 FAILED=0
 TOUCHED_SERVICES=""
+
+mkdir -p /tmp/openwalla
+
+migrate_runtime_path() {
+	local key="$1" target="$2" service="${3:-}" current suffix
+	current="$(uci -q get "$key" 2>/dev/null || true)"
+	case "$current" in
+	/tmp/openwalla-*|/tmp/.openwalla*)
+		mkdir -p "$(dirname "$target")"
+		if [ -d "$current" ]; then
+			mkdir -p "$target"
+			cp -R "$current"/. "$target"/ 2>/dev/null || true
+		elif [ -f "$current" ] && [ ! -e "$target" ]; then
+			cp -p "$current" "$target" 2>/dev/null || cp "$current" "$target" 2>/dev/null || true
+		fi
+		for suffix in -wal -shm; do
+			[ -f "$current$suffix" ] || continue
+			[ -e "$target$suffix" ] || cp "$current$suffix" "$target$suffix" 2>/dev/null || true
+		done
+		uci set "$key=$target"
+		[ -n "$service" ] && touch_service "$service"
+		;;
+	esac
+}
+
+migrate_runtime_paths() {
+	migrate_runtime_path openwalla.collector.db_path /tmp/openwalla/openwalla-netify.sqlite openwalla-netify-collector
+	migrate_runtime_path openwalla.flow_stats.db_path /tmp/openwalla/openwalla-netify-flow-stats.sqlite openwalla-netify-collector
+	migrate_runtime_path openwalla.connection_flows.db_path /tmp/openwalla/openwalla-connection-flows.sqlite openwalla-connection-flows-collector
+	migrate_runtime_path openwalla.device_bandwidth.db_path /tmp/openwalla/openwalla-device-bandwidth.sqlite openwalla-device-bandwidth-collector
+	migrate_runtime_path openwalla.devices.db_path /tmp/openwalla/openwalla-devices.sqlite openwalla-devices-collector
+	migrate_runtime_path openwalla.parental.db_path /tmp/openwalla/openwalla-parental.sqlite
+	migrate_runtime_path openwalla.ping_monitor.output_file /tmp/openwalla/openwalla-ping-monitor.txt openwalla-network-monitor
+	migrate_runtime_path openwalla.ping_monitor.state_file /tmp/openwalla/openwalla-network-monitor.state openwalla-network-monitor
+	migrate_runtime_path openwalla.ping_monitor.interface_state_file /tmp/openwalla/openwalla-interface-monitor.state openwalla-network-monitor
+	migrate_runtime_path openwalla.ping_monitor.wireguard_state_file /tmp/openwalla/openwalla-wireguard-monitor.state openwalla-network-monitor
+	migrate_runtime_path openwalla.dns_monitor.output_file /tmp/openwalla/openwalla-dns-monitor.txt openwalla-dns-monitor
+	migrate_runtime_path openwalla.speedtest_monitor.output_file /tmp/openwalla/openwalla-speedtest-monitor.txt
+	migrate_runtime_path openwalla.quarantine.state_file /tmp/openwalla/openwalla-quarantine-known.txt
+	migrate_runtime_path openwalla.notifications.db_path /tmp/openwalla/openwalla-notifications.sqlite
+}
 
 cleanup() {
 	rm -rf "$TMP_DIR"
@@ -27,7 +68,7 @@ migrate_speedtest_schedule() {
 
 	marker="# OPENWALLA_SPEEDTEST_MONITOR"
 	cron_path="/etc/crontabs/root"
-	tmp_cron="/tmp/.openwalla_speedtest_migrate.$$"
+	tmp_cron="/tmp/openwalla/.openwalla_speedtest_migrate.$$"
 	hour="$(uci -q get openwalla.speedtest_monitor.run_hour 2>/dev/null || echo 3)"
 	minute="$(uci -q get openwalla.speedtest_monitor.run_minute 2>/dev/null || echo 15)"
 	enabled="$(uci -q get openwalla.speedtest_monitor.enabled 2>/dev/null || echo 1)"
@@ -43,7 +84,7 @@ migrate_speedtest_schedule() {
 		: >"$tmp_cron"
 	fi
 	if [ "$enabled" = "1" ]; then
-		echo "$minute $hour * * * /usr/bin/openwalla-speedtest-monitor --scheduled >/tmp/openwalla-speedtest-monitor.last.log 2>&1 $marker" >>"$tmp_cron"
+		echo "$minute $hour * * * mkdir -p /tmp/openwalla; /usr/bin/openwalla-speedtest-monitor --scheduled >/tmp/openwalla/openwalla-speedtest-monitor.last.log 2>&1 $marker" >>"$tmp_cron"
 	fi
 	mv "$tmp_cron" "$cron_path"
 	uci -q delete openwalla.speedtest_monitor.run_date >/dev/null 2>&1 || true
@@ -168,6 +209,7 @@ rpcd-acl.json|/usr/share/rpcd/acl.d/openwalla.json|0644|rpcd
 EOF
 
 if [ "$ACTION" = "update" ] && [ "$FAILED" -eq 0 ]; then
+	migrate_runtime_paths
 	for service in $TOUCHED_SERVICES; do
 		[ -x "/etc/init.d/$service" ] || continue
 		/etc/init.d/"$service" restart >/dev/null 2>&1 || true

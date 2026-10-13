@@ -6,14 +6,15 @@
 
 PATH="/usr/sbin:/usr/bin:/sbin:/bin"
 export PATH
+mkdir -p /tmp/openwalla
 
-DEFAULT_DB="/tmp/openwalla-connection-flows.sqlite"
+DEFAULT_DB="/tmp/openwalla/openwalla-connection-flows.sqlite"
 DEFAULT_POLL_SECONDS="15"
 DEFAULT_RETENTION_ROWS="50000"
 DEFAULT_EXCLUDE_ENDPOINTS="127.0.0.1"
 DEFAULT_IGNORE_IPV6="1"
 DEFAULT_LAN_TO_WAN_ONLY="0"
-LOG_FILE="/tmp/openwalla-connection-flows-collector.log"
+LOG_FILE="/tmp/openwalla/openwalla-connection-flows-collector.log"
 
 FLOW_DB="${OPENWALLA_CONNECTION_FLOWS_DB:-$DEFAULT_DB}"
 POLL_SECONDS="$DEFAULT_POLL_SECONDS"

@@ -25,13 +25,13 @@ uci commit openwalla
 
 PATERNAL_PAUSE_MARKER="# OPENWALLA_PATERNAL_PAUSE"
 CRON_PATH="/etc/crontabs/root"
-TMP_CRON="/tmp/.openwalla_paternal_pause_cron.$$"
+TMP_CRON="/tmp/openwalla/.openwalla_paternal_pause_cron.$$"
 if [ -f "$CRON_PATH" ]; then
 	grep -v "$PATERNAL_PAUSE_MARKER" "$CRON_PATH" >"$TMP_CRON" 2>/dev/null || : >"$TMP_CRON"
 else
 	: >"$TMP_CRON"
 fi
-echo "* * * * * /usr/bin/openwalla-paternal-pause apply >/tmp/openwalla-paternal-pause.last.log 2>&1 $PATERNAL_PAUSE_MARKER" >>"$TMP_CRON"
+echo "* * * * * mkdir -p /tmp/openwalla; /usr/bin/openwalla-paternal-pause apply >/tmp/openwalla/openwalla-paternal-pause.last.log 2>&1 $PATERNAL_PAUSE_MARKER" >>"$TMP_CRON"
 cp "$TMP_CRON" "$CRON_PATH"
 rm -f "$TMP_CRON"
 reload_cron

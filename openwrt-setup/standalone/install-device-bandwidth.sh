@@ -29,7 +29,7 @@ install_file "$FILES_DIR/openwalla-device-bandwidth-collector.init" /etc/init.d/
 install_rpcd_acl
 
 set_uci_default openwalla.device_bandwidth.enabled "1"
-set_uci_default openwalla.device_bandwidth.db_path "/tmp/openwalla-device-bandwidth.sqlite"
+set_uci_default openwalla.device_bandwidth.db_path "/tmp/openwalla/openwalla-device-bandwidth.sqlite"
 set_uci_default openwalla.device_bandwidth.poll_seconds "60"
 set_uci_default openwalla.device_bandwidth.bucket_seconds "900"
 set_uci_default openwalla.device_bandwidth.retention_seconds "86400"

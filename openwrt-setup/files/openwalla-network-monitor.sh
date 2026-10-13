@@ -5,19 +5,21 @@
 
 set -u
 
+mkdir -p /tmp/openwalla
+
 DEFAULT_TARGET="1.1.1.1"
 DEFAULT_INTERVAL="60"
 DEFAULT_TIMEOUT="2"
-DEFAULT_OUTPUT="/tmp/openwalla-ping-monitor.txt"
+DEFAULT_OUTPUT="/tmp/openwalla/openwalla-ping-monitor.txt"
 DEFAULT_MAX_LINES="2000"
 DEFAULT_THRESHOLD="100"
-DEFAULT_NOTIFICATIONS_DB="/tmp/openwalla-notifications.sqlite"
-DEFAULT_STATE_FILE="/tmp/openwalla-network-monitor.state"
+DEFAULT_NOTIFICATIONS_DB="/tmp/openwalla/openwalla-notifications.sqlite"
+DEFAULT_STATE_FILE="/tmp/openwalla/openwalla-network-monitor.state"
 DEFAULT_OUTAGE_FAILURES="2"
 DEFAULT_RESTORE_SUCCESSES="2"
 DEFAULT_ALERT_COOLDOWN="1800"
-DEFAULT_INTERFACE_STATE_FILE="/tmp/openwalla-interface-monitor.state"
-DEFAULT_WIREGUARD_STATE_FILE="/tmp/openwalla-wireguard-monitor.state"
+DEFAULT_INTERFACE_STATE_FILE="/tmp/openwalla/openwalla-interface-monitor.state"
+DEFAULT_WIREGUARD_STATE_FILE="/tmp/openwalla/openwalla-wireguard-monitor.state"
 DEFAULT_WIREGUARD_ACTIVE_WINDOW="180"
 
 PING_TARGET="$DEFAULT_TARGET"

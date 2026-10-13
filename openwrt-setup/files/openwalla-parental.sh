@@ -2,7 +2,9 @@
 
 # Router-side Openwalla parental controls database and enforcement helper.
 
-DEFAULT_DB="/tmp/openwalla-parental.sqlite"
+mkdir -p /tmp/openwalla
+
+DEFAULT_DB="/tmp/openwalla/openwalla-parental.sqlite"
 RULE_PREFIX="openwalla_parental_profile_"
 
 uci_get() { uci -q get "$1" 2>/dev/null || true; }
@@ -140,7 +142,7 @@ add_rule() {
 
 apply_profiles() {
 	init_db || return 1
-	now="$(date +%s)"; today="$(date +%F)"; devices_db="$(uci_get openwalla.devices.db_path)"; [ -n "$devices_db" ] || devices_db="/tmp/openwalla-devices.sqlite"
+	now="$(date +%s)"; today="$(date +%F)"; devices_db="$(uci_get openwalla.devices.db_path)"; [ -n "$devices_db" ] || devices_db="/tmp/openwalla/openwalla-devices.sqlite"
 	sql_exec "UPDATE profiles SET paused=0,pause_until=0 WHERE paused=1 AND pause_until>0 AND pause_until<=$now;" >/dev/null
 	# Count one minute when at least one assigned member is currently online.
 	bin="$(sqlite_bin)"
@@ -153,7 +155,7 @@ apply_profiles() {
 			sql_exec "INSERT INTO daily_usage(profile_id,usage_date,minutes) VALUES('$(sql_escape "$id")','$today',1) ON CONFLICT(profile_id,usage_date) DO UPDATE SET minutes=minutes+1;" >/dev/null
 		done
 	fi
-	active="/tmp/.openwalla-parental-active.$$"; : >"$active"
+	active="/tmp/openwalla/.openwalla-parental-active.$$"; : >"$active"
 	sql_exec "SELECT id,paused,pause_until,daily_limit,active_days,block_time,resume_time FROM profiles WHERE enabled=1;" | while IFS='|' read -r id paused until limit days block resume; do
 		blocked=0
 		[ "$paused" = 1 ] && blocked=1

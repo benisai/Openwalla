@@ -37,10 +37,10 @@ install_rpcd_acl
 set_uci_default openwalla.quarantine.enabled "0"
 set_uci_default openwalla.quarantine.interval "15"
 set_uci_default openwalla.quarantine.leases_file "/tmp/dhcp.leases"
-set_uci_default openwalla.quarantine.state_file "/tmp/openwalla-quarantine-known.txt"
+set_uci_default openwalla.quarantine.state_file "/tmp/openwalla/openwalla-quarantine-known.txt"
 set_uci_default openwalla.quarantine.rule_prefix "openwalla_quarantine_"
 set_uci_default openwalla.devices.enabled "1"
-set_uci_default openwalla.devices.db_path "/tmp/openwalla-devices.sqlite"
+set_uci_default openwalla.devices.db_path "/tmp/openwalla/openwalla-devices.sqlite"
 set_uci openwalla.devices.poll_seconds "60"
 set_uci openwalla.features.quarantine "1"
 uci commit openwalla

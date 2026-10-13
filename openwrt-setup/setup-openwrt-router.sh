@@ -6,6 +6,8 @@
 set -u
 
 OPENWALLA_INSTALL_LOG_DIR="${OPENWALLA_INSTALL_LOG_DIR:-/root/openwalla/install-logs}"
+OPENWALLA_RUNTIME_DIR="${OPENWALLA_RUNTIME_DIR:-/tmp/openwalla}"
+mkdir -p "$OPENWALLA_RUNTIME_DIR"
 
 # Re-run once through tee so package-manager and nested installer output is
 # retained on the router as well as streamed to the app's SSH console.
@@ -13,7 +15,7 @@ if [ "${OPENWALLA_INSTALL_LOG_ACTIVE:-0}" != "1" ] && command -v tee >/dev/null 
 	mkdir -p "$OPENWALLA_INSTALL_LOG_DIR"
 	install_started="$(date '+%Y%m%d-%H%M%S' 2>/dev/null || date +%s)"
 	install_log="$OPENWALLA_INSTALL_LOG_DIR/install-$install_started.log"
-	install_status="/tmp/openwalla-install-status-$$"
+	install_status="/tmp/openwalla/openwalla-install-status-$$"
 	: >"$install_log"
 	ls -1t "$OPENWALLA_INSTALL_LOG_DIR"/install-*.log 2>/dev/null |
 		sed -n '11,$p' |
@@ -402,7 +404,7 @@ download_file() {
 }
 
 load_component_version() {
-	version_file="/tmp/openwalla-pub-script-version.$$"
+	version_file="/tmp/openwalla/openwalla-pub-script-version.$$"
 	if download_file "$OPENWALLA_VERSION_URL" "$version_file"; then
 		OPENWALLA_COMPONENT_VERSION="$(awk -F ': *' '$1 == "version" { print $2; exit }' "$version_file")"
 	fi
@@ -518,7 +520,7 @@ stop_disable_service() {
 remove_cron_marker() {
 	marker="$1"
 	cron_path="/etc/crontabs/root"
-	tmp_cron="/tmp/.openwalla_uninstall_cron.$$"
+	tmp_cron="/tmp/openwalla/.openwalla_uninstall_cron.$$"
 	[ -f "$cron_path" ] || return 0
 	grep -v "$marker" "$cron_path" >"$tmp_cron" 2>/dev/null || : >"$tmp_cron"
 	cp "$tmp_cron" "$cron_path"

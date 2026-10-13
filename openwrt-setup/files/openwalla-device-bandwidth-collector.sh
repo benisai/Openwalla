@@ -5,12 +5,13 @@
 
 PATH="/usr/sbin:/usr/bin:/sbin:/bin"
 export PATH
+mkdir -p /tmp/openwalla
 
-DEFAULT_DB="/tmp/openwalla-device-bandwidth.sqlite"
+DEFAULT_DB="/tmp/openwalla/openwalla-device-bandwidth.sqlite"
 DEFAULT_POLL_SECONDS="60"
 DEFAULT_BUCKET_SECONDS="900"
 DEFAULT_RETENTION_SECONDS="86400"
-LOG_FILE="/tmp/openwalla-device-bandwidth-collector.log"
+LOG_FILE="/tmp/openwalla/openwalla-device-bandwidth-collector.log"
 
 DB_PATH="$DEFAULT_DB"
 POLL_SECONDS="$DEFAULT_POLL_SECONDS"
@@ -163,7 +164,7 @@ collect_once() {
 	local now bucket tmp rows values snapshots mac rx tx old_rx old_tx rx_delta tx_delta esc_mac
 	now="$(date +%s)"
 	bucket=$((now - (now % BUCKET_SECONDS)))
-	tmp="/tmp/.openwalla-device-bandwidth.$$"
+	tmp="/tmp/openwalla/.openwalla-device-bandwidth.$$"
 	: >"$tmp"
 
 	parse_nlbw_csv >"$tmp"

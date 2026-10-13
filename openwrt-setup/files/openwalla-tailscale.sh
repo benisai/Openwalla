@@ -4,6 +4,8 @@
 
 set -u
 
+mkdir -p /tmp/openwalla
+
 find_tailscale() {
 	command -v tailscale 2>/dev/null || true
 }
@@ -74,7 +76,7 @@ login() {
 	[ -n "$bin" ] || { echo 'Tailscale is not installed.' >&2; exit 1; }
 	/etc/init.d/tailscale enable >/dev/null 2>&1 || true
 	/etc/init.d/tailscale start >/dev/null 2>&1 || true
-	log_file='/tmp/openwalla-tailscale-login.log'
+	log_file='/tmp/openwalla/openwalla-tailscale-login.log'
 	: >"$log_file"
 	"$bin" up --timeout=5m >"$log_file" 2>&1 &
 	pid=$!

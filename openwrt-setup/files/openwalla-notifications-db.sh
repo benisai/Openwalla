@@ -1,14 +1,15 @@
 #!/bin/sh
 
 # Openwalla notifications database helper for OpenWrt.
-# Initializes and maintains /tmp/openwalla-notifications.sqlite for router-side
+# Initializes and maintains /tmp/openwalla/openwalla-notifications.sqlite for router-side
 # events. Other Openwalla scripts call this helper to insert, archive, delete,
 # or query notifications that the mobile app displays.
 
 set -eu
 
 PATH="/usr/sbin:/usr/bin:/sbin:/bin"
-DB_PATH_DEFAULT="/tmp/openwalla-notifications.sqlite"
+mkdir -p /tmp/openwalla
+DB_PATH_DEFAULT="/tmp/openwalla/openwalla-notifications.sqlite"
 DB_PATH="$(uci -q get openwalla.notifications.db_path 2>/dev/null || true)"
 [ -n "$DB_PATH" ] || DB_PATH="$DB_PATH_DEFAULT"
 

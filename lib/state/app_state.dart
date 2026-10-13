@@ -2884,9 +2884,10 @@ class AppState extends ChangeNotifier {
     final commandParts = [
       openwallaInternetPreflightShellBlock,
       'export OPENWALLA_RAW_BASE=https://raw.githubusercontent.com/benisai/Openwalla/main/openwrt-setup',
-      'export OPENWALLA_ROOT=/tmp/openwalla-app-setup',
+      'export OPENWALLA_ROOT=/tmp/openwalla/openwalla-app-setup',
       'fetch() { if command -v wget >/dev/null 2>&1; then wget -qO "\$2" "\$1"; else curl -fsSL "\$1" -o "\$2"; fi; }',
-      'cd /tmp',
+      'mkdir -p /tmp/openwalla',
+      'cd /tmp/openwalla',
       'rm -rf "\$OPENWALLA_ROOT"',
       'rm -f setup-openwrt-router.sh',
       'fetch "\$OPENWALLA_RAW_BASE/setup-openwrt-router.sh" "setup-openwrt-router.sh"',
@@ -3280,7 +3281,7 @@ echo OPENWALLA_FLOW_SETTINGS_APPLIED
         "uci -q get openwalla.collector >/dev/null 2>&1 || "
         "uci set openwalla.collector=netify; "
         "uci set openwalla.flow_stats.enabled='$enabled' && "
-        "uci set openwalla.flow_stats.db_path='/tmp/openwalla-netify-flow-stats.sqlite' && "
+        "uci set openwalla.flow_stats.db_path='/tmp/openwalla/openwalla-netify-flow-stats.sqlite' && "
         "uci set openwalla.flow_stats.poll='$poll' && "
         "uci set openwalla.flow_stats.bucket_seconds='300' && "
         "uci set openwalla.flow_stats.retention_seconds='2592000' && "
@@ -3576,7 +3577,7 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
       enabled
           ? 'uci set banip.global.ban_enabled=1; uci commit banip; '
                 '/etc/init.d/banip enable; '
-                '( /etc/init.d/banip restart >/tmp/openwalla-banip.log 2>&1 ) & '
+                'mkdir -p /tmp/openwalla; ( /etc/init.d/banip restart >/tmp/openwalla/openwalla-banip.log 2>&1 ) & '
                 'echo "banIP geo-blocking enabled."'
           : 'uci set banip.global.ban_enabled=0; uci commit banip; '
                 '/etc/init.d/banip stop 2>&1; /etc/init.d/banip disable; '
@@ -5492,23 +5493,23 @@ done | sort -t "|" -k1,1nr | head -n ''' +
   }
 
   String _connectionFlowsDbExpression() {
-    return r'$(uci -q get openwalla.connection_flows.db_path 2>/dev/null || echo /tmp/openwalla-connection-flows.sqlite)';
+    return r'$(uci -q get openwalla.connection_flows.db_path 2>/dev/null || echo /tmp/openwalla/openwalla-connection-flows.sqlite)';
   }
 
   String _netifyDbExpression() {
-    return r'$(uci -q get openwalla.collector.db_path 2>/dev/null || echo /tmp/openwalla-netify.sqlite)';
+    return r'$(uci -q get openwalla.collector.db_path 2>/dev/null || echo /tmp/openwalla/openwalla-netify.sqlite)';
   }
 
   String _netifyFlowStatsDbExpression() {
-    return r'$(uci -q get openwalla.flow_stats.db_path 2>/dev/null || echo /tmp/openwalla-netify-flow-stats.sqlite)';
+    return r'$(uci -q get openwalla.flow_stats.db_path 2>/dev/null || echo /tmp/openwalla/openwalla-netify-flow-stats.sqlite)';
   }
 
   String _notificationsDbExpression() {
-    return r'$(uci -q get openwalla.notifications.db_path 2>/dev/null || echo /tmp/openwalla-notifications.sqlite)';
+    return r'$(uci -q get openwalla.notifications.db_path 2>/dev/null || echo /tmp/openwalla/openwalla-notifications.sqlite)';
   }
 
   String _devicesDbExpression() {
-    return r'$(uci -q get openwalla.devices.db_path 2>/dev/null || echo /tmp/openwalla-devices.sqlite)';
+    return r'$(uci -q get openwalla.devices.db_path 2>/dev/null || echo /tmp/openwalla/openwalla-devices.sqlite)';
   }
 
   Future<String> _sqliteQueryOutput({
@@ -9998,7 +9999,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
           'command': '/bin/sh',
           'params': [
             '-c',
-            r'file="$(uci -q get openwalla.ping_monitor.output_file 2>/dev/null || echo /tmp/openwalla-ping-monitor.txt)"; '
+            r'file="$(uci -q get openwalla.ping_monitor.output_file 2>/dev/null || echo /tmp/openwalla/openwalla-ping-monitor.txt)"; '
                 'if [ -f "\$file" ]; then tail -n $safeLimit "\$file" 2>/dev/null; fi',
           ],
         },
@@ -10053,7 +10054,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
           'command': '/bin/sh',
           'params': [
             '-c',
-            r'file="$(uci -q get openwalla.speedtest_monitor.output_file 2>/dev/null || echo /tmp/openwalla-speedtest-monitor.txt)"; '
+            r'file="$(uci -q get openwalla.speedtest_monitor.output_file 2>/dev/null || echo /tmp/openwalla/openwalla-speedtest-monitor.txt)"; '
                 'if [ -f "\$file" ]; then tail -n $safeLimit "\$file" 2>/dev/null; fi',
           ],
         },
@@ -10092,7 +10093,8 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         'params': [
           '-c',
           '[ -x /usr/bin/openwalla-speedtest-monitor ] || { echo "Speedtest monitor is not installed"; exit 1; }; '
-              'LOG=/tmp/openwalla-speedtest-monitor.last.log; '
+              'mkdir -p /tmp/openwalla; '
+              'LOG=/tmp/openwalla/openwalla-speedtest-monitor.last.log; '
               ': >"\$LOG"; '
               '/usr/bin/openwalla-speedtest-monitor --once >"\$LOG" 2>&1 </dev/null & '
               'PID=\$!; sleep 1; '
@@ -10893,7 +10895,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       config: 'openwalla',
     );
     final output = await runRouterSetupCommand(
-      r'MARKER="# OPENWALLA_SPEEDTEST_MONITOR"; CRON="/etc/crontabs/root"; TMP="/tmp/.openwalla_cron_app.$$"; HOUR="$(uci -q get openwalla.speedtest_monitor.run_hour 2>/dev/null || echo 3)"; MINUTE="$(uci -q get openwalla.speedtest_monitor.run_minute 2>/dev/null || echo 15)"; ENABLED="$(uci -q get openwalla.speedtest_monitor.enabled 2>/dev/null || echo 1)"; uci -q delete openwalla.speedtest_monitor.run_date >/dev/null 2>&1 || true; uci commit openwalla; case "$HOUR" in ""|*[!0-9]*) HOUR=3 ;; esac; case "$MINUTE" in ""|*[!0-9]*) MINUTE=15 ;; esac; [ "$HOUR" -gt 23 ] && HOUR=3; [ "$MINUTE" -gt 59 ] && MINUTE=15; if [ -f "$CRON" ]; then grep -v "$MARKER" "$CRON" >"$TMP" 2>/dev/null || : >"$TMP"; else : >"$TMP"; fi; if [ "$ENABLED" = "1" ]; then echo "$MINUTE $HOUR * * * /usr/bin/openwalla-speedtest-monitor --scheduled >/tmp/openwalla-speedtest-monitor.last.log 2>&1 $MARKER" >>"$TMP"; fi; mv "$TMP" "$CRON"; if [ -x /etc/init.d/cron ]; then /etc/init.d/cron enable >/dev/null 2>&1 || true; /etc/init.d/cron restart >/dev/null 2>&1 || /etc/init.d/cron start >/dev/null 2>&1 || true; elif [ -x /etc/init.d/crond ]; then /etc/init.d/crond enable >/dev/null 2>&1 || true; /etc/init.d/crond restart >/dev/null 2>&1 || /etc/init.d/crond start >/dev/null 2>&1 || true; fi; if [ "$ENABLED" = "1" ]; then grep -Fq "$MARKER" "$CRON" || exit 1; fi; echo OPENWALLA_SPEEDTEST_CRON_OK',
+      r'MARKER="# OPENWALLA_SPEEDTEST_MONITOR"; CRON="/etc/crontabs/root"; mkdir -p /tmp/openwalla; TMP="/tmp/openwalla/.openwalla_cron_app.$$"; HOUR="$(uci -q get openwalla.speedtest_monitor.run_hour 2>/dev/null || echo 3)"; MINUTE="$(uci -q get openwalla.speedtest_monitor.run_minute 2>/dev/null || echo 15)"; ENABLED="$(uci -q get openwalla.speedtest_monitor.enabled 2>/dev/null || echo 1)"; uci -q delete openwalla.speedtest_monitor.run_date >/dev/null 2>&1 || true; uci commit openwalla; case "$HOUR" in ""|*[!0-9]*) HOUR=3 ;; esac; case "$MINUTE" in ""|*[!0-9]*) MINUTE=15 ;; esac; [ "$HOUR" -gt 23 ] && HOUR=3; [ "$MINUTE" -gt 59 ] && MINUTE=15; if [ -f "$CRON" ]; then grep -v "$MARKER" "$CRON" >"$TMP" 2>/dev/null || : >"$TMP"; else : >"$TMP"; fi; if [ "$ENABLED" = "1" ]; then echo "$MINUTE $HOUR * * * mkdir -p /tmp/openwalla; /usr/bin/openwalla-speedtest-monitor --scheduled >/tmp/openwalla/openwalla-speedtest-monitor.last.log 2>&1 $MARKER" >>"$TMP"; fi; mv "$TMP" "$CRON"; if [ -x /etc/init.d/cron ]; then /etc/init.d/cron enable >/dev/null 2>&1 || true; /etc/init.d/cron restart >/dev/null 2>&1 || /etc/init.d/cron start >/dev/null 2>&1 || true; elif [ -x /etc/init.d/crond ]; then /etc/init.d/crond enable >/dev/null 2>&1 || true; /etc/init.d/crond restart >/dev/null 2>&1 || /etc/init.d/crond start >/dev/null 2>&1 || true; fi; if [ "$ENABLED" = "1" ]; then grep -Fq "$MARKER" "$CRON" || exit 1; fi; echo OPENWALLA_SPEEDTEST_CRON_OK',
     );
     if (!output.contains('OPENWALLA_SPEEDTEST_CRON_OK')) {
       throw StateError('Router did not confirm the speedtest schedule');
@@ -11172,9 +11174,9 @@ done | sort -t "|" -k1,1nr | head -n ''' +
     if (_reviewerModeEnabled) {
       return Uint8List.fromList([0x1f, 0x8b, ...List<int>.filled(510, 0)]);
     }
-    const archive = '/tmp/openwalla-config-backup.tar.gz';
+    const archive = '/tmp/openwalla/openwalla-config-backup.tar.gz';
     final output = await runRouterSetupCommandViaSsh(
-      'rm -f $archive; sysupgrade -b $archive >/dev/null && base64 $archive; status=\$?; rm -f $archive; exit \$status',
+      'mkdir -p /tmp/openwalla; rm -f $archive; sysupgrade -b $archive >/dev/null && base64 $archive; status=\$?; rm -f $archive; exit \$status',
     );
     final encoded = output.replaceAll(RegExp(r'\s+'), '');
     try {
@@ -11201,10 +11203,12 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       onProgress?.call(1);
       return;
     }
-    const archive = '/tmp/openwalla-restore.tar.gz';
-    const encodedArchive = '/tmp/openwalla-restore.tar.gz.b64';
+    const archive = '/tmp/openwalla/openwalla-restore.tar.gz';
+    const encodedArchive = '/tmp/openwalla/openwalla-restore.tar.gz.b64';
     final encoded = base64Encode(bytes);
-    await runRouterSetupCommand('rm -f $archive $encodedArchive');
+    await runRouterSetupCommand(
+      'mkdir -p /tmp/openwalla; rm -f $archive $encodedArchive',
+    );
     const chunkSize = 8000;
     for (var offset = 0; offset < encoded.length; offset += chunkSize) {
       final end = (offset + chunkSize).clamp(0, encoded.length);

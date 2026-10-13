@@ -5,7 +5,9 @@
 # applies active schedules as firewall reject rules, and marks matching devices
 # with status='block-scheduled' while the schedule is active.
 
-DEFAULT_DB="/tmp/openwalla-devices.sqlite"
+mkdir -p /tmp/openwalla
+
+DEFAULT_DB="/tmp/openwalla/openwalla-devices.sqlite"
 DEFAULT_RULE_PREFIX="openwalla_schedule_"
 
 uci_get() {
@@ -283,7 +285,7 @@ apply_schedules() {
 	init_db || return 1
 	current="$(date +%s)"
 	sql_exec "DELETE FROM schedule_pauses WHERE pause_until <= $current;" >/dev/null 2>&1 || true
-	active="/tmp/.openwalla-schedule-active.$$"
+	active="/tmp/openwalla/.openwalla-schedule-active.$$"
 	: >"$active"
 	sql_exec "SELECT g.name, s.start_time, s.end_time, m.mac, COALESCE(p.pause_until,0) FROM schedules s JOIN schedule_groups g ON g.id = s.group_id JOIN schedule_members m ON m.group_id = g.id LEFT JOIN schedule_pauses p ON p.group_id = g.id WHERE s.enabled = 1;" |
 	while IFS='|' read -r name start_time end_time mac pause_until; do
