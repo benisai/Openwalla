@@ -441,8 +441,20 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _titleRow('$interfaceName Usage'),
-          const SizedBox(height: 14),
+          _titleRow(
+            '$interfaceName Usage',
+            trailing: Text(
+              _usageSubtitle(_usageRange),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurfaceVariant.withValues(alpha: 0.78),
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           _usageRangePager(interfaceName),
         ],
       ),
@@ -781,15 +793,6 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     );
   }
 
-  String _usageRangeLabel(_StatsUsageRange range) {
-    return switch (range) {
-      _StatsUsageRange.minute => 'Minute',
-      _StatsUsageRange.hour => 'Hour',
-      _StatsUsageRange.day => 'Day',
-      _StatsUsageRange.week => 'Week',
-    };
-  }
-
   String _usageSubtitle(_StatsUsageRange range) {
     return switch (range) {
       _StatsUsageRange.minute => 'Last 60 minutes',
@@ -803,7 +806,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     return Column(
       children: [
         SizedBox(
-          height: 336,
+          height: 252,
           child: PageView.builder(
             controller: _usageRangeController,
             physics: const BouncingScrollPhysics(),
@@ -827,31 +830,6 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                _usageRangeLabel(range),
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0,
-                ),
-              ),
-            ),
-            Text(
-              _usageSubtitle(range),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurfaceVariant.withValues(alpha: 0.78),
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
         FutureBuilder<List<VnstatUsageSample>>(
           future: _usageFuture(range, interfaceName),
           builder: (context, snapshot) {
@@ -998,8 +976,6 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _usageTotalSummary(totalDownload, totalUpload),
-        const SizedBox(height: 12),
         SizedBox(
           height: 204,
           child: LayoutBuilder(
@@ -1179,6 +1155,18 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                   ),
                   if (!hasAnyData)
                     Text('No usage data yet', style: _mutedTextStyle()),
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    child: Text(
+                      'Total ${_formatUsageTotal(totalDownload + totalUpload)}',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ),
                 ],
               );
             },
@@ -1367,34 +1355,6 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
         backgroundColor: colorScheme.surfaceContainerHighest,
         valueColor: const AlwaysStoppedAnimation<Color>(_cyan),
       ),
-    );
-  }
-
-  Widget _usageTotalSummary(int downloadBytes, int uploadBytes) {
-    final total = downloadBytes + uploadBytes;
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            'Total ${_formatUsageTotal(total)}',
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurface,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 0,
-            ),
-          ),
-        ),
-        Flexible(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerRight,
-            child: Text(
-              'Down ${_formatUsageTotal(downloadBytes)}  Up ${_formatUsageTotal(uploadBytes)}',
-              style: _mutedTextStyle(),
-            ),
-          ),
-        ),
-      ],
     );
   }
 
