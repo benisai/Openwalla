@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Openwalla Network Monitor
-# Tracks internet latency, outages, and physical Ethernet link changes.
+# Tracks internet latency, outages, and Ethernet/Wi-Fi link changes.
 
 set -u
 
@@ -209,6 +209,21 @@ format_link_speed() {
 	fi
 }
 
+interface_link_type() {
+	local path="$1" interface="${1##*/}"
+	case "$interface" in
+		sta|sta[0-9]*|*-sta*|*_sta*|*.sta*|wwan*) echo wifi-sta ;;
+		ap|ap[0-9]*|*-ap*|*_ap*|*.ap*) echo wifi-ap ;;
+		*)
+			if [ -d "$path/phy80211" ] || [ -d "$path/wireless" ]; then
+				echo wifi
+			else
+				echo ethernet
+			fi
+			;;
+	esac
+}
+
 interface_state_value() {
 	local interface="$1" field="$2" state_file="$3"
 	awk -F '|' -v interface="$interface" -v field="$field" \
@@ -216,7 +231,7 @@ interface_state_value() {
 }
 
 monitor_interfaces() {
-	local previous_state temp_state path resolved_path interface carrier speed old_carrier old_speed severity title details
+	local previous_state temp_state path resolved_path interface carrier speed old_carrier old_speed severity title details link_type link_label
 	previous_state="$INTERFACE_STATE_FILE"
 	temp_state="${INTERFACE_STATE_FILE}.tmp"
 	mkdir -p "$(dirname "$INTERFACE_STATE_FILE")"
@@ -224,15 +239,25 @@ monitor_interfaces() {
 
 	for path in /sys/class/net/*; do
 		[ -d "$path" ] || continue
-		[ -r "$path/speed" ] || continue
+		link_type="$(interface_link_type "$path")"
+		if [ "$link_type" = ethernet ]; then
+			[ -r "$path/speed" ] || continue
+		fi
 		resolved_path="$(readlink -f "$path" 2>/dev/null || echo "$path")"
 		case "$resolved_path" in
 			*/devices/virtual/*) continue ;;
 		esac
 		interface="${path##*/}"
 		[ "$interface" = "lo" ] && continue
+		case "$link_type" in
+			wifi-sta) link_label="Wi-Fi uplink (WWAN)" ;;
+			wifi-ap) link_label="Wi-Fi access point" ;;
+			wifi) link_label="Wi-Fi interface" ;;
+			*) link_label="Ethernet port" ;;
+		esac
 		carrier="$(cat "$path/carrier" 2>/dev/null || echo 0)"
-		speed="$(cat "$path/speed" 2>/dev/null || echo 0)"
+		speed="0"
+		[ "$link_type" != ethernet ] || speed="$(cat "$path/speed" 2>/dev/null || echo 0)"
 		carrier="$(sanitize_int "$carrier" "0")"
 		speed="$(sanitize_int "$speed" "0")"
 		[ "$carrier" -eq 1 ] || speed="0"
@@ -246,14 +271,16 @@ monitor_interfaces() {
 		old_speed="$(sanitize_int "$old_speed" "0")"
 
 		if [ "$old_carrier" -eq 0 ] && [ "$carrier" -eq 1 ]; then
-			write_notification "resolved" "Ethernet port connected" \
-				"$interface connected at $(format_link_speed "$speed")." \
-				"interface=$interface;carrier=1;speed_mbps=$speed" "interface"
+			details="$interface wireless link is up."
+			[ "$link_type" != ethernet ] || details="$interface connected at $(format_link_speed "$speed")."
+			write_notification "resolved" "$link_label connected" \
+				"$details" "interface=$interface;link_type=$link_type;carrier=1;speed_mbps=$speed" "interface"
 		elif [ "$old_carrier" -eq 1 ] && [ "$carrier" -eq 0 ]; then
-			write_notification "critical" "Ethernet port disconnected" \
-				"$interface lost its Ethernet link. Its previous speed was $(format_link_speed "$old_speed")." \
-				"interface=$interface;carrier=0;previous_speed_mbps=$old_speed" "interface"
-		elif [ "$carrier" -eq 1 ] && [ "$old_speed" -gt 0 ] && \
+			details="$interface wireless link is down."
+			[ "$link_type" != ethernet ] || details="$interface lost its Ethernet link. Its previous speed was $(format_link_speed "$old_speed")."
+			write_notification "critical" "$link_label disconnected" \
+				"$details" "interface=$interface;link_type=$link_type;carrier=0;previous_speed_mbps=$old_speed" "interface"
+		elif [ "$link_type" = ethernet ] && [ "$carrier" -eq 1 ] && [ "$old_speed" -gt 0 ] && \
 			[ "$speed" -gt 0 ] && [ "$old_speed" -ne "$speed" ]; then
 			severity="resolved"
 			title="Ethernet link speed increased"

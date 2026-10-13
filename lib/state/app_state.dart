@@ -439,6 +439,10 @@ class OpenwallaNotification {
   }
 
   String get displayTitle {
+    final wirelessLabel = _wirelessInterfaceLabel;
+    if (wirelessLabel != null && title.startsWith('Ethernet port ')) {
+      return title.replaceFirst('Ethernet port', wirelessLabel);
+    }
     if (title.trim().isNotEmpty) return title.trim();
     final lower = message.toLowerCase();
     if (lower.contains('ping outage')) return 'Internet connection lost';
@@ -449,9 +453,48 @@ class OpenwallaNotification {
   }
 
   String get displayDetails {
+    if (isWirelessInterfaceEvent && title.startsWith('Ethernet port ')) {
+      final name =
+          _interfaceMetadata['interface'] ??
+          (details.isNotEmpty ? details : message).split(' ').first;
+      final disconnected = title.contains('disconnected');
+      return '$name wireless link is ${disconnected ? 'down' : 'up'}.';
+    }
     if (details.trim().isNotEmpty) return details.trim();
     return message.trim();
   }
+
+  Map<String, String> get _interfaceMetadata => {
+    for (final field in metadata.split(';'))
+      if (field.contains('='))
+        field.substring(0, field.indexOf('=')).trim(): field
+            .substring(field.indexOf('=') + 1)
+            .trim(),
+  };
+
+  String? get _wirelessInterfaceLabel {
+    if (effectiveCategory != 'interface') return null;
+    final fields = _interfaceMetadata;
+    final type = fields['link_type'];
+    if (type == 'wifi-sta') return 'Wi-Fi uplink (WWAN)';
+    if (type == 'wifi-ap') return 'Wi-Fi access point';
+    if (type == 'wifi') return 'Wi-Fi interface';
+    if (type == 'ethernet') return null;
+    final name =
+        (fields['interface'] ??
+                (details.isNotEmpty ? details : message).split(' ').first)
+            .toLowerCase();
+    if (RegExp(r'(^|[-_.])sta\d*($|[-_.])').hasMatch(name) ||
+        name.startsWith('wwan')) {
+      return 'Wi-Fi uplink (WWAN)';
+    }
+    if (RegExp(r'(^|[-_.])ap\d*($|[-_.])').hasMatch(name)) {
+      return 'Wi-Fi access point';
+    }
+    return null;
+  }
+
+  bool get isWirelessInterfaceEvent => _wirelessInterfaceLabel != null;
 
   bool get isQuarantineEvent =>
       app.toLowerCase().contains('quarantine') ||

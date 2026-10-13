@@ -418,6 +418,11 @@ class _NotificationCard extends StatelessWidget {
       return Icons.devices_rounded;
     }
     if (notification.effectiveCategory == 'interface') {
+      if (notification.isWirelessInterfaceEvent) {
+        return notification.effectiveSeverity == 'critical'
+            ? Icons.wifi_off_rounded
+            : Icons.wifi_rounded;
+      }
       return Icons.settings_ethernet_rounded;
     }
     if (notification.effectiveCategory == 'vpn') {
