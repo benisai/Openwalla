@@ -11,6 +11,7 @@ import 'package:openwalla/screens/settings_screen.dart';
 import 'package:openwalla/screens/tunnel_settings_screen.dart';
 import 'package:openwalla/services/tunnel_monitor_service.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 import 'package:openwalla/design/luci_design_system.dart';
 import 'package:openwalla/utils/http_client_manager.dart';
 import 'package:openwalla/state/app_state.dart';
@@ -70,37 +71,11 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
 
   void _showRouterBackOnlineMessage() {
     if (mounted) {
-      final theme = Theme.of(context);
-      final colorScheme = theme.colorScheme;
-      // Dismiss the warning snackbar
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(Icons.check_circle, color: colorScheme.onPrimary, size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Router is back online, reconnecting…',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onPrimary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: colorScheme.primary,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          margin: const EdgeInsets.symmetric(
-            horizontal: LuciSpacing.lg,
-            vertical: LuciSpacing.md,
-          ),
-          duration: const Duration(seconds: 3),
-        ),
+      context.showToastSuccess(
+        'Router is back online',
+        subtitle: 'Reconnecting…',
+        actionKey: 'router-connectivity',
+        duration: const Duration(seconds: 3),
       );
     }
   }

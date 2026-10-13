@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../design/luci_design_system.dart';
+import 'luci_toast.dart';
 
 /// A standardized pull-to-refresh widget that provides consistent
 /// visual feedback and behavior across all screens in the app.
@@ -99,17 +100,7 @@ class _LuciPullToRefreshState extends State<LuciPullToRefresh>
     } catch (e) {
       // Handle any errors that might occur during refresh
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Refresh failed: ${e.toString()}'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            behavior: SnackBarBehavior.floating,
-            margin: EdgeInsets.all(LuciSpacing.md),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(LuciSpacing.sm),
-            ),
-          ),
-        );
+        context.showToastError('Refresh failed', subtitle: e.toString());
       }
     }
   }

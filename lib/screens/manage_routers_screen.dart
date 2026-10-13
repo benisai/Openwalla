@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/main.dart';
 import 'package:openwalla/models/router.dart' as model;
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 import 'package:openwalla/utils/url_parser.dart';
 
 class ManageRoutersScreen extends ConsumerStatefulWidget {
@@ -23,11 +24,15 @@ class _ManageRoutersScreenState extends ConsumerState<ManageRoutersScreen> {
   String? _switchingRouterId;
   bool _profileIoBusy = false;
 
-  void _message(String message) {
+  void _message(String message, {bool error = false, bool warning = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+    if (error) {
+      context.showToastError(message, actionKey: 'router-profile-message');
+    } else if (warning) {
+      context.showToastWarning(message, actionKey: 'router-profile-message');
+    } else {
+      context.showToastSuccess(message, actionKey: 'router-profile-message');
+    }
   }
 
   Future<void> _importProfiles() async {
@@ -45,13 +50,18 @@ class _ManageRoutersScreenState extends ConsumerState<ManageRoutersScreen> {
           .read(appStateProvider)
           .importRouterProfiles(utf8.decode(bytes, allowMalformed: true));
       if (!mounted) return;
-      _message(
-        result.success
-            ? 'Imported ${result.importedCount} and updated ${result.updatedCount} router profiles.'
-            : result.errorMessage ?? 'Unable to import router profiles.',
-      );
+      if (result.success) {
+        _message(
+          'Imported ${result.importedCount} and updated ${result.updatedCount} router profiles.',
+        );
+      } else {
+        _message(
+          result.errorMessage ?? 'Unable to import router profiles.',
+          error: true,
+        );
+      }
     } catch (error) {
-      _message('Unable to import profiles: $error');
+      _message('Unable to import profiles: $error', error: true);
     } finally {
       if (mounted) setState(() => _profileIoBusy = false);
     }
@@ -61,7 +71,7 @@ class _ManageRoutersScreenState extends ConsumerState<ManageRoutersScreen> {
     if (_profileIoBusy) return;
     final appState = ref.read(appStateProvider);
     if (appState.routers.isEmpty) {
-      _message('There are no saved routers to export.');
+      _message('There are no saved routers to export.', warning: true);
       return;
     }
     final confirmed = await showDialog<bool>(
@@ -96,7 +106,7 @@ class _ManageRoutersScreenState extends ConsumerState<ManageRoutersScreen> {
       );
       if (path != null) _message('Router profiles exported.');
     } catch (error) {
-      _message('Unable to export profiles: $error');
+      _message('Unable to export profiles: $error', error: true);
     } finally {
       if (mounted) setState(() => _profileIoBusy = false);
     }

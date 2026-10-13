@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../design/luci_design_system.dart';
+import 'openwalla_toast.dart';
 
 /// Enhanced error handling widget with consistent styling and animations
 class LuciErrorCard extends StatefulWidget {
@@ -368,60 +369,50 @@ class LuciErrorSnackbar {
     VoidCallback? onAction,
     Duration duration = const Duration(seconds: 4),
   }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final color = _getSnackbarColor(type, colorScheme);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (title != null) ...[
-              Text(
-                title,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: colorScheme.onInverseSurface,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              SizedBox(height: LuciSpacing.xs),
-            ],
-            Text(
-              message,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onInverseSurface,
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: LuciCardStyles.standardRadius,
-        ),
-        action: actionLabel != null && onAction != null
-            ? SnackBarAction(
-                label: actionLabel,
-                textColor: colorScheme.onInverseSurface,
-                onPressed: onAction,
-              )
-            : null,
-        duration: duration,
-      ),
-    );
-  }
-
-  static Color _getSnackbarColor(LuciErrorType type, ColorScheme colorScheme) {
+    final toastMessage = title ?? message;
+    final subtitle = title == null ? null : message;
+    final key = 'luci-${type.name}-$toastMessage';
     switch (type) {
       case LuciErrorType.error:
-        return colorScheme.error;
+        OpenwallaToast.showError(
+          context,
+          key: key,
+          message: toastMessage,
+          subtitle: subtitle,
+          actionLabel: actionLabel,
+          onAction: onAction,
+          duration: duration,
+        );
       case LuciErrorType.warning:
-        return colorScheme.secondary;
+        OpenwallaToast.showWarning(
+          context,
+          key: key,
+          message: toastMessage,
+          subtitle: subtitle,
+          actionLabel: actionLabel,
+          onAction: onAction,
+          duration: duration,
+        );
       case LuciErrorType.info:
-        return colorScheme.primary;
+        OpenwallaToast.showInfo(
+          context,
+          key: key,
+          message: toastMessage,
+          subtitle: subtitle,
+          actionLabel: actionLabel,
+          onAction: onAction,
+          duration: duration,
+        );
       case LuciErrorType.success:
-        return colorScheme.tertiary;
+        OpenwallaToast.showSuccess(
+          context,
+          key: key,
+          message: toastMessage,
+          subtitle: subtitle,
+          actionLabel: actionLabel,
+          onAction: onAction,
+          duration: duration,
+        );
     }
   }
 }

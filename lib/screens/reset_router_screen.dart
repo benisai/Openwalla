@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/main.dart';
 import 'package:openwalla/screens/reboot_countdown_screen.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 
 class ResetRouterScreen extends ConsumerStatefulWidget {
   const ResetRouterScreen({super.key});
@@ -48,9 +49,7 @@ class _ResetRouterScreenState extends ConsumerState<ResetRouterScreen> {
     if (!mounted) return;
     setState(() => _resetting = false);
     if (!started) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Router reset could not be started.')),
-      );
+      context.showToastError('Router reset could not be started');
       return;
     }
     await showDialog<void>(

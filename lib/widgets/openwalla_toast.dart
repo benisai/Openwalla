@@ -15,12 +15,16 @@ class OpenwallaToast {
     required String key,
     required String message,
     String? subtitle,
+    String? actionLabel,
+    VoidCallback? onAction,
   }) {
     _show(
       context,
       key: key,
       message: message,
       subtitle: subtitle,
+      actionLabel: actionLabel,
+      onAction: onAction,
       type: OpenwallaToastType.loading,
       duration: const Duration(seconds: 45),
     );
@@ -31,14 +35,19 @@ class OpenwallaToast {
     required String key,
     required String message,
     String? subtitle,
+    String? actionLabel,
+    VoidCallback? onAction,
+    Duration duration = const Duration(seconds: 4),
   }) {
     _show(
       context,
       key: key,
       message: message,
       subtitle: subtitle,
+      actionLabel: actionLabel,
+      onAction: onAction,
       type: OpenwallaToastType.success,
-      duration: const Duration(seconds: 4),
+      duration: duration,
     );
   }
 
@@ -47,14 +56,19 @@ class OpenwallaToast {
     required String key,
     required String message,
     String? subtitle,
+    String? actionLabel,
+    VoidCallback? onAction,
+    Duration duration = const Duration(seconds: 6),
   }) {
     _show(
       context,
       key: key,
       message: message,
       subtitle: subtitle,
+      actionLabel: actionLabel,
+      onAction: onAction,
       type: OpenwallaToastType.error,
-      duration: const Duration(seconds: 6),
+      duration: duration,
     );
   }
 
@@ -63,14 +77,19 @@ class OpenwallaToast {
     required String key,
     required String message,
     String? subtitle,
+    String? actionLabel,
+    VoidCallback? onAction,
+    Duration duration = const Duration(seconds: 5),
   }) {
     _show(
       context,
       key: key,
       message: message,
       subtitle: subtitle,
+      actionLabel: actionLabel,
+      onAction: onAction,
       type: OpenwallaToastType.warning,
-      duration: const Duration(seconds: 5),
+      duration: duration,
     );
   }
 
@@ -79,14 +98,19 @@ class OpenwallaToast {
     required String key,
     required String message,
     String? subtitle,
+    String? actionLabel,
+    VoidCallback? onAction,
+    Duration duration = const Duration(seconds: 4),
   }) {
     _show(
       context,
       key: key,
       message: message,
       subtitle: subtitle,
+      actionLabel: actionLabel,
+      onAction: onAction,
       type: OpenwallaToastType.info,
-      duration: const Duration(seconds: 4),
+      duration: duration,
     );
   }
 
@@ -95,6 +119,8 @@ class OpenwallaToast {
     required String key,
     required String message,
     String? subtitle,
+    String? actionLabel,
+    VoidCallback? onAction,
     required OpenwallaToastType type,
     required Duration duration,
   }) {
@@ -107,6 +133,8 @@ class OpenwallaToast {
       builder: (context) => _OpenwallaToastCard(
         message: message,
         subtitle: subtitle,
+        actionLabel: actionLabel,
+        onAction: onAction,
         type: type,
         duration: duration,
         onDismiss: () {
@@ -128,6 +156,8 @@ class _OpenwallaToastCard extends StatefulWidget {
   const _OpenwallaToastCard({
     required this.message,
     this.subtitle,
+    this.actionLabel,
+    this.onAction,
     required this.type,
     required this.duration,
     required this.onDismiss,
@@ -135,6 +165,8 @@ class _OpenwallaToastCard extends StatefulWidget {
 
   final String message;
   final String? subtitle;
+  final String? actionLabel;
+  final VoidCallback? onAction;
   final OpenwallaToastType type;
   final Duration duration;
   final VoidCallback onDismiss;
@@ -292,6 +324,22 @@ class _OpenwallaToastCardState extends State<_OpenwallaToastCard>
                                 ],
                               ),
                             ),
+                            if (widget.actionLabel?.trim().isNotEmpty == true &&
+                                widget.onAction != null)
+                              TextButton(
+                                onPressed: () {
+                                  widget.onAction!();
+                                  widget.onDismiss();
+                                },
+                                style: TextButton.styleFrom(
+                                  foregroundColor: accent,
+                                  visualDensity: VisualDensity.compact,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                  ),
+                                ),
+                                child: Text(widget.actionLabel!),
+                              ),
                             IconButton(
                               tooltip: 'Dismiss',
                               onPressed: widget.onDismiss,

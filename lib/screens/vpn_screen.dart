@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/main.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 import 'package:openwalla/widgets/openwrt_feature_gate.dart';
 
 enum _VpnPanel { server, client }
@@ -456,9 +457,20 @@ class _VpnScreenState extends ConsumerState<VpnScreen> {
   }
 
   void _showSnack(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    if (message.startsWith('Failed') || message.startsWith('Unable')) {
+      context.showToastError(message);
+    } else if (message.startsWith('Enter') ||
+        message.startsWith('Save') ||
+        message.startsWith('Import') ||
+        message.startsWith('Complete') ||
+        message.startsWith('This does not') ||
+        message.contains('required')) {
+      context.showToastWarning(message);
+    } else if (message.contains('imported')) {
+      context.showToastInfo(message);
+    } else {
+      context.showToastSuccess(message);
+    }
   }
 
   void _updateEnabled(bool enabled) {
@@ -1194,9 +1206,7 @@ class _ServerProfileDialogState extends State<_ServerProfileDialog> {
     final endpoint = _endpoint.text.trim();
     final dns = _dns.text.trim();
     if (name.isEmpty || address.isEmpty || endpoint.isEmpty || dns.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Complete all profile fields.')),
-      );
+      context.showToastWarning('Complete all profile fields');
       return;
     }
     Navigator.pop(

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/main.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 import 'package:openwalla/widgets/openwrt_feature_gate.dart';
 
 class MultiWanScreen extends ConsumerStatefulWidget {
@@ -48,14 +49,10 @@ class _MultiWanScreenState extends ConsumerState<MultiWanScreen> {
       await ref.read(appStateProvider).restartMwan3(context: context);
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Multi-WAN service restarted.')),
-      );
+      context.showToastSuccess('Multi-WAN service restarted');
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to restart Multi-WAN: $error')),
-      );
+      context.showToastError('Unable to restart Multi-WAN', subtitle: '$error');
     } finally {
       if (mounted) setState(() => _restarting = false);
     }

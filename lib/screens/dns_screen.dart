@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/main.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 
 enum _DnsPanel { dns, blocked }
 
@@ -88,15 +89,11 @@ class _DnsScreenState extends ConsumerState<DnsScreen> {
     try {
       await ref.read(appStateProvider).deleteDnsHostEntry(entry.section);
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('DNS entry deleted.')));
+      context.showToastSuccess('DNS entry deleted');
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to delete entry: $e')));
+      context.showToastError('Could not delete DNS entry', subtitle: '$e');
     }
   }
 
@@ -464,9 +461,7 @@ class _DnsEntrySheetState extends ConsumerState<_DnsEntrySheet> {
     final hostname = _hostnameController.text.trim();
     final ip = _ipController.text.trim();
     if (hostname.isEmpty || ip.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Hostname and IP address are required.')),
-      );
+      context.showToastWarning('Hostname and IP address are required');
       return;
     }
 
@@ -485,9 +480,7 @@ class _DnsEntrySheetState extends ConsumerState<_DnsEntrySheet> {
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to save entry: $e')));
+      context.showToastError('Could not save DNS entry', subtitle: '$e');
       setState(() => _isSaving = false);
     }
   }

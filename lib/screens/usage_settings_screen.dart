@@ -4,6 +4,7 @@ import 'package:openwalla/design/luci_design_system.dart';
 import 'package:openwalla/main.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 
 class UsageSettingsScreen extends ConsumerStatefulWidget {
   const UsageSettingsScreen({super.key});
@@ -71,10 +72,9 @@ class _UsageSettingsScreenState extends ConsumerState<UsageSettingsScreen> {
 
   Future<void> _saveSettings() async {
     if (_selectedInterface.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('vnStat is not monitoring any interfaces yet.'),
-        ),
+      context.showToastWarning(
+        'No monitored interface found',
+        subtitle: 'vnStat is not monitoring any interfaces yet.',
       );
       return;
     }
@@ -93,14 +93,10 @@ class _UsageSettingsScreenState extends ConsumerState<UsageSettingsScreen> {
             context: context,
           );
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Usage settings saved.')));
+      context.showToastSuccess('Usage settings saved');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save usage settings: $e')),
-      );
+      context.showToastError('Could not save usage settings', subtitle: '$e');
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }

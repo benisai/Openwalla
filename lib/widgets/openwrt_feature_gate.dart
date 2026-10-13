@@ -7,6 +7,7 @@ import 'package:openwalla/screens/router_setup_screen.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/ssh_console_sheet.dart';
 import 'package:openwalla/widgets/hide_dashboard_shortcut_button.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 
 class OpenwrtFeatureInstallOption {
   final String feature;
@@ -164,24 +165,21 @@ class _OpenwrtFeatureGateState extends ConsumerState<OpenwrtFeatureGate> {
             ? '${status.label} install finished. The router did not return console output.'
             : outputBuffer.toString().trimRight(),
       );
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            status.installed
-                ? '${status.label} installed.'
-                : '${status.label} install finished, but it was not detected yet.',
-          ),
-        ),
-      );
+      if (status.installed) {
+        context.showToastSuccess('${status.label} installed');
+      } else {
+        context.showToastWarning(
+          '${status.label} install finished',
+          subtitle: 'The feature was not detected yet.',
+        );
+      }
       setState(() {
         _statusFuture = Future.value(status);
       });
     } catch (e) {
       console.setOutput('Install failed.\n\n$e');
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Install failed: $e')));
+      context.showToastError('Install failed', subtitle: '$e');
     } finally {
       console.complete();
       if (mounted) setState(() => _isInstalling = false);

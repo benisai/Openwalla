@@ -436,10 +436,9 @@ class _NetworkMonitorSettingsScreenState
     final threshold = int.tryParse(_thresholdController.text.trim());
 
     if (target.isEmpty || threshold == null || threshold <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Enter a target and a threshold greater than 0ms.'),
-        ),
+      context.showToastWarning(
+        'Enter a valid monitor target',
+        subtitle: 'The alert threshold must be greater than 0 ms.',
       );
       return;
     }
@@ -453,13 +452,12 @@ class _NetworkMonitorSettingsScreenState
             context: context,
           );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Network monitor settings saved.')),
-      );
+      context.showToastSuccess('Network monitor settings saved');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save network monitor settings: $e')),
+      context.showToastError(
+        'Could not save network monitor settings',
+        subtitle: '$e',
       );
     } finally {
       if (mounted) {
@@ -558,9 +556,7 @@ class _DnsTestSettingsScreenState
     final hostname = _hostnameController.text.trim();
 
     if (hostname.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a hostname to monitor.')),
-      );
+      context.showToastWarning('Enter a hostname to monitor');
       return;
     }
 
@@ -573,13 +569,12 @@ class _DnsTestSettingsScreenState
             context: context,
           );
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('DNS test settings saved.')));
+      context.showToastSuccess('DNS test settings saved');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save DNS settings: $e')),
+      context.showToastError(
+        'Could not save DNS test settings',
+        subtitle: '$e',
       );
     } finally {
       if (mounted) {
@@ -824,10 +819,9 @@ class _MonthlyUsageSettingsScreenState
 
   Future<void> _saveSettings() async {
     if (_selectedInterface.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('vnStat is not monitoring any interfaces yet.'),
-        ),
+      context.showToastWarning(
+        'No monitored interface found',
+        subtitle: 'vnStat is not monitoring any interfaces yet.',
       );
       return;
     }
@@ -846,13 +840,12 @@ class _MonthlyUsageSettingsScreenState
             context: context,
           );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Monthly usage settings saved.')),
-      );
+      context.showToastSuccess('Monthly usage settings saved');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save monthly usage settings: $e')),
+      context.showToastError(
+        'Could not save monthly usage settings',
+        subtitle: '$e',
       );
     } finally {
       if (mounted) {

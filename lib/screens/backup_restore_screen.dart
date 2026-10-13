@@ -9,6 +9,7 @@ import 'package:openwalla/screens/router_setup_screen.dart';
 import 'package:openwalla/screens/reboot_countdown_screen.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 
 class BackupRestoreScreen extends ConsumerStatefulWidget {
   const BackupRestoreScreen({super.key});
@@ -74,15 +75,11 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
           .read(appStateProvider)
           .runOpenwallaStateBackupAction(action, context: context);
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      context.showToastSuccess(message);
       await _refresh();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('State sync failed: $e')));
+      context.showToastError('State sync failed', subtitle: '$e');
     } finally {
       if (mounted) setState(() => _busyAction = null);
     }
@@ -105,14 +102,10 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
         bytes: bytes,
       );
       if (!mounted || path == null) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Router configuration backup saved.')),
-      );
+      context.showToastSuccess('Router configuration backup saved');
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Router backup failed: $error')));
+      context.showToastError('Router backup failed', subtitle: '$error');
     } finally {
       if (mounted) setState(() => _busyAction = null);
     }
@@ -134,9 +127,7 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
         bytes[0] != 0x1f ||
         bytes[1] != 0x8b) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Choose a valid OpenWrt gzip backup.')),
-      );
+      context.showToastWarning('Choose a valid OpenWrt gzip backup');
       return;
     }
     if (!mounted) return;
@@ -212,9 +203,7 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
       }
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Router restore failed: $error')));
+      context.showToastError('Router restore failed', subtitle: '$error');
     } finally {
       if (mounted) {
         setState(() {

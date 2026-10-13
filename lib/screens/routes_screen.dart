@@ -971,9 +971,7 @@ class _AddRouteSheetState extends ConsumerState<_AddRouteSheet> {
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to add route: $e')));
+      context.showToastError('Could not add route', subtitle: '$e');
       setState(() => _isSaving = false);
     }
   }

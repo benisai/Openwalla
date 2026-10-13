@@ -5,6 +5,7 @@ import 'package:openwalla/main.dart';
 import 'package:openwalla/models/ddns_info.dart';
 import 'package:openwalla/screens/router_setup_screen.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 import 'package:openwalla/widgets/hide_dashboard_shortcut_button.dart';
 
 class DdnsScreen extends ConsumerStatefulWidget {
@@ -68,9 +69,11 @@ class _DdnsScreenState extends ConsumerState<DdnsScreen> {
         .read(appStateProvider)
         .toggleGlobalDdns(enabled, context: context);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(ok ? 'DDNS updated.' : 'Failed to update DDNS.')),
-    );
+    if (ok) {
+      context.showToastSuccess('DDNS updated');
+    } else {
+      context.showToastError('Could not update DDNS');
+    }
     await _load();
   }
 
@@ -98,9 +101,11 @@ class _DdnsScreenState extends ConsumerState<DdnsScreen> {
         .read(appStateProvider)
         .deleteDdnsInstance(instance.name, context: context);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(ok ? 'DDNS entry deleted.' : 'Delete failed.')),
-    );
+    if (ok) {
+      context.showToastSuccess('DDNS entry deleted');
+    } else {
+      context.showToastError('Could not delete DDNS entry');
+    }
     await _load();
   }
 
@@ -560,9 +565,7 @@ class _DdnsEditorSheetState extends ConsumerState<_DdnsEditorSheet> {
     if (ok) {
       Navigator.of(context).pop(true);
     } else {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Failed to save DDNS.')));
+      context.showToastError('Could not save DDNS');
     }
   }
 

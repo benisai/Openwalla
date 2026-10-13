@@ -252,15 +252,11 @@ class _NetworkPerformanceScreenState
       });
       await _refreshSamples();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Network monitoring installed.')),
-      );
+      context.showToastSuccess('Network monitoring installed');
     } catch (e) {
       console.setOutput('Install failed.\n\n$e');
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Install failed: $e')));
+      context.showToastError('Network monitor install failed', subtitle: '$e');
     } finally {
       console.complete();
       if (mounted) setState(() => _isInstallingSupport = false);

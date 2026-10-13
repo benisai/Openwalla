@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/main.dart';
 import 'package:openwalla/models/client.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 import '../models/parental_profile.dart';
 import '../models/parental_controls_store.dart';
 
@@ -212,17 +213,14 @@ class _AddEditProfileDialogState extends ConsumerState<AddEditProfileDialog> {
     if (raw.isEmpty) return;
     final isValid = RegExp(r'^([0-9A-F]{2}:){5}[0-9A-F]{2}$').hasMatch(raw);
     if (!isValid) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invalid MAC address format (e.g. AA:BB:CC:DD:EE:FF)'),
-        ),
+      context.showToastWarning(
+        'Invalid MAC address format',
+        subtitle: 'Use a value like AA:BB:CC:DD:EE:FF.',
       );
       return;
     }
     if (_macAddresses.any((m) => m.toUpperCase() == raw)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('MAC address already added')),
-      );
+      context.showToastWarning('MAC address already added');
       return;
     }
     setState(() {

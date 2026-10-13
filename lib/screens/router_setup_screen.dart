@@ -10,6 +10,7 @@ import 'package:openwalla/screens/ssh_terminal_screen.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/utils/router_setup_commands.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 import 'package:openwalla/widgets/ssh_console_sheet.dart';
 
 enum _SetupProfile { basic, standard, advanced, everything, custom, remove }
@@ -152,7 +153,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
     }
     await Clipboard.setData(ClipboardData(text: command));
     if (!mounted) return;
-    _showSnack('Router setup command copied.');
+    _showSnack('Router setup command copied.', success: true);
   }
 
   Future<void> _runSetup() async {
@@ -477,7 +478,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
             : output.trim();
       });
       console.setOutput(_lastOutput!);
-      _showSnack('Selected components removed.');
+      _showSnack('Selected components removed.', success: true);
     } catch (e) {
       if (!mounted) return;
       console.setOutput('SSH uninstall failed.\n\n$e');
@@ -527,12 +528,13 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
   }
 
   void _showSnack(String message, {bool success = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: success ? const Color(0xFF20CF70) : null,
-      ),
-    );
+    if (success) {
+      context.showToastSuccess(message);
+    } else if (message.startsWith('Choose ')) {
+      context.showToastWarning(message);
+    } else {
+      context.showToastError(message);
+    }
   }
 
   void _previousStep() {

@@ -11,6 +11,7 @@ import 'package:openwalla/screens/usage_settings_screen.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
 import 'package:openwalla/widgets/luci_refresh_components.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 import 'package:openwalla/widgets/ssh_console_sheet.dart';
 
 enum _StatsUsageRange { minute, hour, day, week }
@@ -358,15 +359,11 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
       });
       await ref.read(appStateProvider).fetchDashboardData();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Statistics tools installed.')),
-      );
+      context.showToastSuccess('Statistics tools installed');
     } catch (e) {
       console.setOutput('Install failed.\n\n$e');
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Install failed: $e')));
+      context.showToastError('Statistics install failed', subtitle: '$e');
     } finally {
       console.complete();
       if (mounted) setState(() => _isInstallingSupport = false);

@@ -15,6 +15,7 @@ import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/utils/gateway_utils.dart';
 import 'package:openwalla/utils/url_parser.dart';
 import 'package:openwalla/widgets/ssh_console_sheet.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -246,12 +247,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     });
 
     if (!showResult) return;
-    final message = detectedAddress == null
-        ? 'No router address found. Check your Wi-Fi connection.'
-        : 'Router address found: $detectedAddress';
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+    if (detectedAddress == null) {
+      context.showToastWarning(
+        'No router address found',
+        subtitle: 'Check your Wi-Fi connection.',
+        actionKey: 'router-address-detection',
+      );
+    } else {
+      context.showToastSuccess(
+        'Router address found',
+        subtitle: detectedAddress,
+        actionKey: 'router-address-detection',
+      );
+    }
   }
 
   void _prefillRouter(model.Router router) {
@@ -378,12 +386,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       mode: LaunchMode.externalApplication,
     );
     if (!success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Could not open Openwalla on GitHub'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
+      context.showToastError('Could not open Openwalla on GitHub');
     }
   }
 

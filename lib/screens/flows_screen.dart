@@ -1529,17 +1529,14 @@ class _FlowBlockSheetState extends ConsumerState<_FlowBlockSheet> {
     setState(() => _isSaving = true);
     try {
       final appState = ref.read(appStateProvider);
-      final messenger = ScaffoldMessenger.of(context);
       if (_blockType == _FlowBlockType.domain) {
         final blockedDomain = await appState.blockNetifyFlowDomain(
           domain: widget.flow.destination,
           rootDomain: _domainScope == _FlowDomainScope.root,
         );
         if (!mounted) return;
+        context.showToastSuccess('Blocked DNS for $blockedDomain');
         Navigator.of(context).pop();
-        messenger.showSnackBar(
-          SnackBar(content: Text('Blocked DNS for $blockedDomain')),
-        );
       } else {
         await appState.blockNetifyFlowDestinationIp(
           destinationIp: widget.flow.destinationIp,
@@ -1547,22 +1544,16 @@ class _FlowBlockSheetState extends ConsumerState<_FlowBlockSheet> {
           wholeNetwork: _ipScope == _FlowIpScope.network,
         );
         if (!mounted) return;
-        Navigator.of(context).pop();
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              _ipScope == _FlowIpScope.network
-                  ? 'Blocked ${widget.flow.destinationIp} for the network'
-                  : 'Blocked ${widget.flow.destinationIp} for this device',
-            ),
-          ),
+        context.showToastSuccess(
+          _ipScope == _FlowIpScope.network
+              ? 'Blocked ${widget.flow.destinationIp} for the network'
+              : 'Blocked ${widget.flow.destinationIp} for this device',
         );
+        Navigator.of(context).pop();
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to save block: $e')));
+      context.showToastError('Could not save block', subtitle: '$e');
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }

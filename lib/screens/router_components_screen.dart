@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/main.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 import 'package:openwalla/widgets/ssh_console_sheet.dart';
 
 const _routerComponentsRawBase =
@@ -93,9 +94,7 @@ class _RouterComponentsScreenState
         _status = RouterComponentStatus.parse(output);
         _error = null;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Router components are up to date.')),
-      );
+      context.showToastSuccess('Router components are up to date');
     } catch (error) {
       console.setOutput('Component update failed.\n\n$error');
       console.complete();

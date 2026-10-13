@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/main.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 
 class RouterPasswordScreen extends ConsumerStatefulWidget {
   const RouterPasswordScreen({super.key});
@@ -90,11 +91,9 @@ class _RouterPasswordScreenState extends ConsumerState<RouterPasswordScreen> {
       if (mounted) Navigator.of(context).pop();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not update the router password: $error'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
+      context.showToastError(
+        'Could not update the router password',
+        subtitle: '$error',
       );
     } finally {
       if (mounted) setState(() => _isSaving = false);

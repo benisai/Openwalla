@@ -143,15 +143,11 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
         );
     if (!mounted || !context.mounted) return;
     setState(() => _updatingWirelessRadios.remove(radioName));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          success
-              ? '$radioName turned ${enabled ? 'on' : 'off'}'
-              : 'Could not update $radioName',
-        ),
-      ),
-    );
+    if (success) {
+      context.showToastSuccess('$radioName turned ${enabled ? 'on' : 'off'}');
+    } else {
+      context.showToastError('Could not update $radioName');
+    }
   }
 
   Future<void> _setWirelessInterfaceEnabled(
@@ -168,15 +164,11 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
         .setWirelessInterfaceState(section, enabled, context: context);
     if (!mounted || !context.mounted) return;
     setState(() => _updatingWirelessInterfaces.remove(section));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          success
-              ? 'Repeater ${enabled ? 'enabled' : 'disabled'}'
-              : 'Could not update repeater',
-        ),
-      ),
-    );
+    if (success) {
+      context.showToastSuccess('Repeater ${enabled ? 'enabled' : 'disabled'}');
+    } else {
+      context.showToastError('Could not update repeater');
+    }
   }
 
   // Unified key generator for all interfaces
@@ -702,10 +694,8 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
           : interface.isUp
           ? 'stop'
           : 'turn on';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${interface.name.toUpperCase()} $action scheduled.'),
-        ),
+      context.showToastSuccess(
+        '${interface.name.toUpperCase()} $action scheduled',
       );
       Future<void>.delayed(const Duration(seconds: 4), () async {
         if (!mounted) return;
@@ -713,12 +703,9 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
       });
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Could not update ${interface.name.toUpperCase()}: $error',
-          ),
-        ),
+      context.showToastError(
+        'Could not update ${interface.name.toUpperCase()}',
+        subtitle: '$error',
       );
     } finally {
       if (mounted) {
@@ -1285,14 +1272,13 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
             context: context,
           );
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('${zone.name} zone updated.')));
+      context.showToastSuccess('${zone.name} zone updated');
       await _loadNetworkPanels();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update ${zone.name}: $error')),
+      context.showToastError(
+        'Could not update ${zone.name}',
+        subtitle: '$error',
       );
     }
   }
@@ -2366,11 +2352,9 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
 
   void _copyToClipboard(BuildContext context, String text, String label) {
     Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$label copied to clipboard'),
-        duration: const Duration(seconds: 2),
-      ),
+    context.showToastInfo(
+      '$label copied to clipboard',
+      duration: const Duration(seconds: 2),
     );
   }
 
@@ -4197,11 +4181,7 @@ class _ShareWifiSheet extends StatelessWidget {
                         ? null
                         : () {
                             Clipboard.setData(ClipboardData(text: password));
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Wi-Fi password copied.'),
-                              ),
-                            );
+                            context.showToastInfo('Wi-Fi password copied');
                           },
                     icon: const Icon(Icons.copy_rounded),
                     label: const Text('Copy'),
@@ -4458,9 +4438,7 @@ class _NetworkInterfaceEditSheetState
       dhcpEnd: end,
     );
     if (validationError != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(validationError)));
+      context.showToastWarning(validationError);
       return;
     }
 
@@ -4514,9 +4492,7 @@ class _NetworkInterfaceEditSheetState
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to save interface: $e')));
+      context.showToastError('Could not save interface', subtitle: '$e');
       setState(() => _isSaving = false);
     }
   }

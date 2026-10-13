@@ -4,6 +4,7 @@ import 'package:openwalla/main.dart';
 import 'package:openwalla/models/client.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 import 'package:openwalla/widgets/hide_dashboard_shortcut_button.dart';
 
 class SchedulerScreen extends ConsumerStatefulWidget {
@@ -80,15 +81,11 @@ class _SchedulerScreenState extends ConsumerState<SchedulerScreen> {
       final label = duration.inMinutes >= 60
           ? '${duration.inHours} hour${duration.inHours == 1 ? '' : 's'}'
           : '${duration.inMinutes} minutes';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Paused ${schedule.name} for $label.')),
-      );
+      context.showToastSuccess('Paused ${schedule.name} for $label');
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to pause schedule: $e')));
+      context.showToastError('Could not pause schedule', subtitle: '$e');
     }
   }
 
@@ -98,15 +95,11 @@ class _SchedulerScreenState extends ConsumerState<SchedulerScreen> {
           .read(appStateProvider)
           .resumeDeviceSchedule(schedule, context: context);
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Resumed ${schedule.name}.')));
+      context.showToastSuccess('Resumed ${schedule.name}');
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to resume schedule: $e')));
+      context.showToastError('Could not resume schedule', subtitle: '$e');
     }
   }
 
@@ -619,9 +612,7 @@ class _ScheduleEditorSheetState extends ConsumerState<_ScheduleEditorSheet> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    context.showToastError(message);
   }
 
   @override

@@ -4,6 +4,7 @@ import 'package:openwalla/main.dart';
 import 'package:openwalla/models/client.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 import 'package:openwalla/widgets/openwrt_feature_gate.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
@@ -60,16 +61,13 @@ class _TorScreenState extends ConsumerState<TorScreen> {
           .saveTorSettings(_settings, context: context);
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Tor routing updated.')));
+      context.showToastSuccess('Tor routing updated');
     } catch (error) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.toString().replaceFirst('Bad state: ', '')),
-        ),
+      context.showToastError(
+        'Could not update Tor routing',
+        subtitle: error.toString().replaceFirst('Bad state: ', ''),
       );
     }
   }
@@ -80,9 +78,7 @@ class _TorScreenState extends ConsumerState<TorScreen> {
       mode: LaunchMode.inAppBrowserView,
     );
     if (!opened && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to open the Tor check.')),
-      );
+      context.showToastError('Unable to open the Tor check');
     }
   }
 

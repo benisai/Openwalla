@@ -5,6 +5,7 @@ import 'package:openwalla/main.dart';
 import 'package:openwalla/models/app_version.dart';
 import 'package:openwalla/screens/router_components_screen.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher_string.dart';
@@ -67,9 +68,7 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
       mode: LaunchMode.externalApplication,
     );
     if (!opened && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open this link.')),
-      );
+      context.showToastError('Could not open this link');
     }
   }
 

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/main.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 import 'package:openwalla/widgets/openwrt_feature_gate.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
@@ -89,9 +90,7 @@ class _TailscaleScreenState extends ConsumerState<TailscaleScreen> {
           .saveTailscaleSettings(updated, context: context);
       await _load();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tailscale settings updated.')),
-        );
+        context.showToastSuccess('Tailscale settings updated');
       }
     } catch (error) {
       if (mounted) _showError(error);
@@ -134,8 +133,9 @@ class _TailscaleScreenState extends ConsumerState<TailscaleScreen> {
   }
 
   void _showError(Object error) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))),
+    context.showToastError(
+      'Tailscale action failed',
+      subtitle: error.toString().replaceFirst('Bad state: ', ''),
     );
   }
 

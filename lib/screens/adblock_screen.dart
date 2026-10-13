@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/main.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 import 'package:openwalla/widgets/openwrt_feature_gate.dart';
 
 const List<_AdblockFeedOption> _adblockFeedOptions = [
@@ -116,9 +117,7 @@ class _AdblockScreenState extends ConsumerState<AdblockScreen> {
         _isSaving = false;
         _feedSaveStatus = 'Save failed';
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to save feeds: $e')));
+      context.showToastError('Could not save AdBlock feeds', subtitle: '$e');
     }
   }
 
@@ -131,15 +130,11 @@ class _AdblockScreenState extends ConsumerState<AdblockScreen> {
       await ref.read(appStateProvider).saveAdblockSettings(settings);
       if (!mounted) return;
       setState(() => _feedSaveStatus = 'Changes saved');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('AdBlock settings saved.')));
+      context.showToastSuccess('AdBlock settings saved');
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to save AdBlock: $e')));
+      context.showToastError('Could not save AdBlock settings', subtitle: '$e');
       setState(() => _isSaving = false);
     }
   }
@@ -150,15 +145,11 @@ class _AdblockScreenState extends ConsumerState<AdblockScreen> {
     try {
       await ref.read(appStateProvider).runAdblockServiceAction(action);
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('AdBlock $action requested.')));
+      context.showToastSuccess('AdBlock $action requested');
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to run AdBlock action: $e')),
-      );
+      context.showToastError('AdBlock action failed', subtitle: '$e');
       setState(() => _isSaving = false);
     }
   }

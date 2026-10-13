@@ -48,4 +48,36 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
     expect(find.text('Static lease reserved'), findsNothing);
   });
+
+  testWidgets('supports a consistent action inside the toast', (tester) async {
+    var retried = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => OpenwallaToast.showError(
+                context,
+                key: 'retry-test',
+                message: 'Refresh failed',
+                actionLabel: 'Retry',
+                onAction: () => retried = true,
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Show'));
+    await tester.pump();
+    expect(find.text('Refresh failed'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+
+    await tester.tap(find.text('Retry'));
+    await tester.pump();
+    expect(retried, isTrue);
+    expect(find.text('Refresh failed'), findsNothing);
+  });
 }

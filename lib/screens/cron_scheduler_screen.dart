@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/main.dart';
 import 'package:openwalla/models/cron_job.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 
 class CronSchedulerScreen extends ConsumerStatefulWidget {
   const CronSchedulerScreen({super.key});
@@ -55,15 +56,11 @@ class _CronSchedulerScreenState extends ConsumerState<CronSchedulerScreen> {
     if (!mounted) return false;
     setState(() => _saving = false);
     if (!saved) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Scheduled tasks could not be saved.')),
-      );
+      context.showToastError('Scheduled tasks could not be saved');
       return false;
     }
     setState(() => _document = CronDocument.parse(content));
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Scheduled tasks updated.')));
+    context.showToastSuccess('Scheduled tasks updated');
     return true;
   }
 

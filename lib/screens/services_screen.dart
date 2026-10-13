@@ -4,6 +4,7 @@ import 'package:openwalla/design/luci_design_system.dart';
 import 'package:openwalla/main.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 
 class ServicesScreen extends ConsumerStatefulWidget {
   const ServicesScreen({super.key});
@@ -235,9 +236,7 @@ class _ServiceDetailScreenState extends ConsumerState<ServiceDetailScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to refresh service: $e')));
+      context.showToastError('Could not refresh service', subtitle: '$e');
     }
   }
 
@@ -266,15 +265,11 @@ class _ServiceDetailScreenState extends ConsumerState<ServiceDetailScreen> {
     try {
       await action();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(success)));
+      context.showToastSuccess(success);
       await _refresh();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Service action failed: $e')));
+      context.showToastError('Service action failed', subtitle: '$e');
     } finally {
       if (mounted) setState(() => _isBusy = false);
     }

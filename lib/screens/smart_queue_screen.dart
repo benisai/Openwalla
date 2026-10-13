@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/main.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 import 'package:openwalla/widgets/openwrt_feature_gate.dart';
 
 class SmartQueueScreen extends ConsumerStatefulWidget {
@@ -77,15 +78,11 @@ class _SmartQueueScreenState extends ConsumerState<SmartQueueScreen> {
     try {
       await ref.read(appStateProvider).saveSqmQueue(queue);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Smart Queue settings saved.')),
-      );
+      context.showToastSuccess('Smart Queue settings saved');
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save SQM settings: $e')),
-      );
+      context.showToastError('Could not save SQM settings', subtitle: '$e');
       setState(() => _isSaving = false);
     }
   }

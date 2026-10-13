@@ -73,19 +73,15 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
   }
 
   Future<void> _setRuleEnabled(OpenwrtFirewallRule rule, bool enabled) async {
-    final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(appStateProvider).setFirewallRuleEnabled(rule, enabled);
       if (!mounted) return;
       await _loadRules();
-      messenger.showSnackBar(
-        SnackBar(content: Text(enabled ? 'Rule enabled.' : 'Rule disabled.')),
-      );
+      if (!mounted) return;
+      context.showToastSuccess(enabled ? 'Rule enabled' : 'Rule disabled');
     } catch (e) {
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text('Failed to update rule: $e')),
-      );
+      context.showToastError('Could not update rule', subtitle: '$e');
     }
   }
 
@@ -110,17 +106,15 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     if (confirmed != true) return;
     if (!mounted) return;
 
-    final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(appStateProvider).deleteFirewallRule(rule);
       if (!mounted) return;
       await _loadRules();
-      messenger.showSnackBar(const SnackBar(content: Text('Rule deleted.')));
+      if (!mounted) return;
+      context.showToastSuccess('Rule deleted');
     } catch (e) {
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text('Failed to delete rule: $e')),
-      );
+      context.showToastError('Could not delete rule', subtitle: '$e');
     }
   }
 

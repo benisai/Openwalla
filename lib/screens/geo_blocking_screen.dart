@@ -7,6 +7,7 @@ import 'package:openwalla/main.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/utils/geo_blocking.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/luci_toast.dart';
 import 'package:openwalla/widgets/openwrt_feature_gate.dart';
 import 'package:openwalla/widgets/ssh_console_sheet.dart';
 
@@ -58,9 +59,7 @@ class _GeoBlockingScreenState extends ConsumerState<GeoBlockingScreen> {
     try {
       countries = normalizeGeoCountryCodes(_selectedCountryCodes.join(' '));
     } on GeoBlockingInputException catch (error) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+      context.showToastWarning(error.message);
       return;
     }
 
@@ -115,19 +114,16 @@ class _GeoBlockingScreenState extends ConsumerState<GeoBlockingScreen> {
       if (outputBuffer.isEmpty) {
         console.setOutput('banIP country blocking configured.');
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Blocked countries updated.')),
-      );
+      context.showToastSuccess('Blocked countries updated');
     } catch (error) {
       console.setOutput(
         'banIP configuration failed.\n\n'
         '${error.toString().replaceFirst('Bad state: ', '')}',
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.toString().replaceFirst('Bad state: ', '')),
-        ),
+      context.showToastError(
+        'Could not update blocked countries',
+        subtitle: error.toString().replaceFirst('Bad state: ', ''),
       );
     } finally {
       console.complete();
@@ -141,17 +137,14 @@ class _GeoBlockingScreenState extends ConsumerState<GeoBlockingScreen> {
       await ref.read(appStateProvider).setGeoBlockingEnabled(enabled);
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Geo-blocking ${enabled ? 'enabled' : 'disabled'}.'),
-        ),
+      context.showToastSuccess(
+        'Geo-blocking ${enabled ? 'enabled' : 'disabled'}',
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.toString().replaceFirst('Bad state: ', '')),
-        ),
+      context.showToastError(
+        'Could not update geo-blocking',
+        subtitle: error.toString().replaceFirst('Bad state: ', ''),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
