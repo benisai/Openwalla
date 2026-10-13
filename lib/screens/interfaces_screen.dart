@@ -14,6 +14,15 @@ import 'package:openwalla/widgets/luci_refresh_components.dart';
 import 'package:openwalla/widgets/luci_toast.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+bool shouldShowInterfacePublicIp(NetworkInterface interface) {
+  final name = interface.name.trim().toLowerCase();
+  final device = interface.device.trim().toLowerCase();
+  return name == 'wan' ||
+      name.startsWith('wwan') ||
+      name.contains('sta') ||
+      device.contains('sta');
+}
+
 bool shouldShowWiredInterface({
   required Map<String, dynamic> interface,
   required Set<String> enabledInterfaces,
@@ -2009,7 +2018,7 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
 
   Widget _buildWiredDetails(BuildContext context, NetworkInterface interface) {
     final canEditLan = _normalizeInterfaceKey(interface.name) == 'lan';
-    final isWan = _normalizeInterfaceKey(interface.name) == 'wan';
+    final showPublicIp = shouldShowInterfacePublicIp(interface);
     return Column(
       children: [
         _buildDetailRow(context, 'Device', interface.device),
@@ -2022,7 +2031,7 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
             onTap: () =>
                 _copyToClipboard(context, interface.ipAddress!, 'IP Address'),
           ),
-        if (isWan)
+        if (showPublicIp)
           _buildDetailRow(
             context,
             'Public IP',
