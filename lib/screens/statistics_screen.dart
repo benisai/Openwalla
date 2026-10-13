@@ -858,7 +858,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
               range,
               snapshot.data ?? const [],
             );
-            return _usageLineGraph(samples);
+            return _usageBarGraph(samples);
           },
         ),
         const SizedBox(height: 12),
@@ -967,7 +967,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     });
   }
 
-  Widget _usageLineGraph(
+  Widget _usageBarGraph(
     List<({String label, int downloadBytes, int uploadBytes, bool hasData})>
     samples,
   ) {
@@ -981,9 +981,10 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
       (sum, sample) => sum + sample.uploadBytes,
     );
     final maxValue = samples
-        .expand((sample) => [sample.downloadBytes, sample.uploadBytes])
+        .map((sample) => sample.downloadBytes + sample.uploadBytes)
         .fold<int>(0, max);
-    final maxY = _niceMax(maxValue);
+    final trackMaxY = _niceMax(maxValue);
+    final chartMaxY = trackMaxY * 1.18;
     final labelIndexes = _bottomLabelIndexes(samples.length);
     final hasAnyData = samples.any((sample) => sample.hasData);
 
@@ -993,129 +994,148 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
         _usageTotalSummary(totalDownload, totalUpload),
         const SizedBox(height: 12),
         SizedBox(
-          height: 188,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              LineChart(
-                LineChartData(
-                  minX: 0,
-                  maxX: (samples.length - 1)
-                      .clamp(1, samples.length)
-                      .toDouble(),
-                  minY: 0,
-                  maxY: maxY,
-                  gridData: FlGridData(
-                    drawVerticalLine: false,
-                    horizontalInterval: maxY / 4,
-                    getDrawingHorizontalLine: (value) => FlLine(
-                      color: colorScheme.outlineVariant.withValues(alpha: 0.22),
-                      strokeWidth: 1,
-                    ),
-                  ),
-                  borderData: FlBorderData(show: false),
-                  titlesData: FlTitlesData(
-                    topTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    rightTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    leftTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 42,
-                        interval: maxY / 4,
-                        getTitlesWidget: (value, meta) {
-                          if (value == 0) return const SizedBox.shrink();
-                          return Text(
-                            _formatUsageTotal(value.round()),
-                            textAlign: TextAlign.right,
-                            style: Theme.of(context).textTheme.labelSmall
-                                ?.copyWith(
-                                  color: colorScheme.onSurfaceVariant
-                                      .withValues(alpha: 0.74),
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0,
-                                ),
-                          );
-                        },
+          height: 204,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final slotWidth = constraints.maxWidth / max(1, samples.length);
+              final barWidth = (slotWidth * 0.52).clamp(4.0, 24.0);
+              final maxTotalLabels = (constraints.maxWidth / 42).floor().clamp(
+                2,
+                samples.length,
+              );
+              final totalLabelIndexes = _distributedIndexes(
+                samples.length,
+                maxTotalLabels,
+              );
+              final barGroups = List.generate(samples.length, (index) {
+                final sample = samples[index];
+                final download = sample.hasData
+                    ? sample.downloadBytes.toDouble()
+                    : 0.0;
+                final upload = sample.hasData
+                    ? sample.uploadBytes.toDouble()
+                    : 0.0;
+                final total = download + upload;
+                final showTotal =
+                    total > 0 && totalLabelIndexes.contains(index);
+                return BarChartGroupData(
+                  x: index,
+                  showingTooltipIndicators: showTotal ? const [0] : const [],
+                  barRods: [
+                    BarChartRodData(
+                      toY: total,
+                      width: barWidth,
+                      color: _cyan,
+                      borderRadius: BorderRadius.circular(4),
+                      rodStackItems: [
+                        if (download > 0)
+                          BarChartRodStackItem(0, download, _cyan),
+                        if (upload > 0)
+                          BarChartRodStackItem(download, total, _orange),
+                      ],
+                      backDrawRodData: BackgroundBarChartRodData(
+                        show: true,
+                        toY: trackMaxY,
+                        color: colorScheme.surfaceContainerHighest.withValues(
+                          alpha: 0.68,
+                        ),
                       ),
                     ),
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 28,
-                        interval: 1,
-                        getTitlesWidget: (value, meta) {
-                          final index = value.round();
-                          if (!labelIndexes.contains(index) ||
-                              index < 0 ||
-                              index >= samples.length) {
-                            return const SizedBox.shrink();
-                          }
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Text(
-                              samples[index].label,
-                              style: Theme.of(context).textTheme.labelSmall
-                                  ?.copyWith(
-                                    color: index == samples.length - 1
-                                        ? colorScheme.onSurface
-                                        : colorScheme.onSurfaceVariant,
-                                    fontWeight: index == samples.length - 1
-                                        ? FontWeight.w900
-                                        : FontWeight.w700,
-                                    letterSpacing: 0,
-                                  ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                  lineBarsData: [
-                    _lineBar(samples, _cyan, (sample) => sample.downloadBytes),
-                    _lineBar(samples, _orange, (sample) => sample.uploadBytes),
                   ],
-                ),
-              ),
-              if (!hasAnyData)
-                Text('No usage data yet', style: _mutedTextStyle()),
-            ],
+                );
+              });
+
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  BarChart(
+                    BarChartData(
+                      minY: 0,
+                      maxY: chartMaxY,
+                      alignment: BarChartAlignment.spaceAround,
+                      groupsSpace: 0,
+                      gridData: const FlGridData(show: false),
+                      borderData: FlBorderData(show: false),
+                      barGroups: barGroups,
+                      barTouchData: BarTouchData(
+                        enabled: true,
+                        handleBuiltInTouches: false,
+                        touchTooltipData: BarTouchTooltipData(
+                          direction: TooltipDirection.top,
+                          tooltipPadding: EdgeInsets.zero,
+                          tooltipMargin: 5,
+                          maxContentWidth: 52,
+                          fitInsideHorizontally: true,
+                          fitInsideVertically: true,
+                          getTooltipColor: (_) => Colors.transparent,
+                          getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                            final sample = samples[group.x];
+                            return BarTooltipItem(
+                              _formatUsageTotal(
+                                sample.downloadBytes + sample.uploadBytes,
+                              ),
+                              Theme.of(context).textTheme.labelSmall!.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      titlesData: FlTitlesData(
+                        topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        leftTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 28,
+                            interval: 1,
+                            getTitlesWidget: (value, meta) {
+                              final index = value.round();
+                              if (!labelIndexes.contains(index) ||
+                                  index < 0 ||
+                                  index >= samples.length) {
+                                return const SizedBox.shrink();
+                              }
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Text(
+                                  samples[index].label,
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(
+                                        color: index == samples.length - 1
+                                            ? colorScheme.onSurface
+                                            : colorScheme.onSurfaceVariant,
+                                        fontWeight: index == samples.length - 1
+                                            ? FontWeight.w900
+                                            : FontWeight.w700,
+                                        letterSpacing: 0,
+                                      ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (!hasAnyData)
+                    Text('No usage data yet', style: _mutedTextStyle()),
+                ],
+              );
+            },
           ),
         ),
       ],
-    );
-  }
-
-  LineChartBarData _lineBar(
-    List<({String label, int downloadBytes, int uploadBytes, bool hasData})>
-    samples,
-    Color color,
-    int Function(
-      ({String label, int downloadBytes, int uploadBytes, bool hasData}) sample,
-    )
-    selector,
-  ) {
-    return LineChartBarData(
-      spots: List.generate(samples.length, (index) {
-        final sample = samples[index];
-        return FlSpot(
-          index.toDouble(),
-          sample.hasData ? selector(sample).toDouble() : 0,
-        );
-      }),
-      isCurved: false,
-      color: color,
-      barWidth: 2,
-      isStrokeCapRound: true,
-      isStrokeJoinRound: false,
-      dotData: FlDotData(show: false),
-      belowBarData: BarAreaData(
-        show: true,
-        color: color.withValues(alpha: 0.12),
-      ),
     );
   }
 
@@ -1385,6 +1405,15 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   Set<int> _bottomLabelIndexes(int length) {
     if (length <= 1) return {0};
     return {0, (length / 3).floor(), ((length * 2) / 3).floor(), length - 1};
+  }
+
+  Set<int> _distributedIndexes(int length, int count) {
+    if (length <= 1 || count <= 1) return {0};
+    final visibleCount = min(length, count);
+    return {
+      for (var index = 0; index < visibleCount; index++)
+        ((length - 1) * index / (visibleCount - 1)).round(),
+    };
   }
 
   ({int totalBytes, int daysLeft, double progress}) _monthlySummary(
