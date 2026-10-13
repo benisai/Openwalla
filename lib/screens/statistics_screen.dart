@@ -42,6 +42,8 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   Future<List<NlbwProtocolUsage>>? _preloadProtocolUsageFuture;
   final Map<String, Future<List<VnstatUsageSample>>> _preloadUsageFutures = {};
   bool _isInstallingSupport = false;
+  bool _topDevicesExpanded = true;
+  bool _activityAnalysisExpanded = true;
   final PageController _usageRangeController = PageController(
     initialPage: _StatsUsageRange.day.index,
   );
@@ -516,41 +518,57 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _titleRow('Top Devices'),
-          const SizedBox(height: 16),
-          FutureBuilder<List<NlbwDeviceUsage>>(
-            future: _topDevices(),
-            builder: (context, snapshot) {
-              final rows = snapshot.data ?? const <NlbwDeviceUsage>[];
-              if (snapshot.connectionState == ConnectionState.waiting &&
-                  rows.isEmpty) {
-                return const SizedBox(
-                  height: 92,
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-              if (rows.isEmpty) {
-                return _emptyStatText('No nlbwmon device usage yet');
-              }
-
-              final maxBytes = rows.map((row) => row.totalBytes).reduce(max);
-              return Column(
-                children: rows
-                    .map(
-                      (row) => _usageBreakdownRow(
-                        icon: Icons.devices_rounded,
-                        iconColor: _cyan,
-                        title: row.label,
-                        subtitle:
-                            'Down ${_formatUsageTotal(row.downloadBytes)}  Up ${_formatUsageTotal(row.uploadBytes)}',
-                        totalBytes: row.totalBytes,
-                        maxBytes: maxBytes,
-                      ),
-                    )
-                    .toList(),
-              );
-            },
+          _titleRow(
+            'Top Devices',
+            trailing: IconButton(
+              tooltip: _topDevicesExpanded
+                  ? 'Collapse Top Devices'
+                  : 'Expand Top Devices',
+              icon: Icon(
+                _topDevicesExpanded
+                    ? Icons.expand_less_rounded
+                    : Icons.expand_more_rounded,
+              ),
+              onPressed: () =>
+                  setState(() => _topDevicesExpanded = !_topDevicesExpanded),
+            ),
           ),
+          if (_topDevicesExpanded) ...[
+            const SizedBox(height: 16),
+            FutureBuilder<List<NlbwDeviceUsage>>(
+              future: _topDevices(),
+              builder: (context, snapshot) {
+                final rows = snapshot.data ?? const <NlbwDeviceUsage>[];
+                if (snapshot.connectionState == ConnectionState.waiting &&
+                    rows.isEmpty) {
+                  return const SizedBox(
+                    height: 92,
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                if (rows.isEmpty) {
+                  return _emptyStatText('No nlbwmon device usage yet');
+                }
+
+                final maxBytes = rows.map((row) => row.totalBytes).reduce(max);
+                return Column(
+                  children: rows
+                      .map(
+                        (row) => _usageBreakdownRow(
+                          icon: Icons.devices_rounded,
+                          iconColor: _cyan,
+                          title: row.label,
+                          subtitle:
+                              'Down ${_formatUsageTotal(row.downloadBytes)}  Up ${_formatUsageTotal(row.uploadBytes)}',
+                          totalBytes: row.totalBytes,
+                          maxBytes: maxBytes,
+                        ),
+                      )
+                      .toList(),
+                );
+              },
+            ),
+          ],
         ],
       ),
     );
@@ -561,45 +579,62 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _titleRow('Activity Analysis'),
-          const SizedBox(height: 16),
-          FutureBuilder<List<NlbwProtocolUsage>>(
-            future: _protocolUsage(),
-            builder: (context, snapshot) {
-              final rows = snapshot.data ?? const <NlbwProtocolUsage>[];
-              if (snapshot.connectionState == ConnectionState.waiting &&
-                  rows.isEmpty) {
-                return const SizedBox(
-                  height: 92,
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-              if (rows.isEmpty) {
-                return _emptyStatText('No nlbwmon protocol usage yet');
-              }
-
-              final totalBytes = rows.fold<int>(
-                0,
-                (sum, row) => sum + row.totalBytes,
-              );
-              final maxBytes = rows.map((row) => row.totalBytes).reduce(max);
-              return Column(
-                children: rows
-                    .map(
-                      (row) => _usageBreakdownRow(
-                        icon: _protocolIcon(row.protocol),
-                        iconColor: _protocolColor(row.protocol),
-                        title: _protocolLabel(row.protocol),
-                        subtitle:
-                            '${_formatPercent(row.totalBytes, totalBytes)} of shown traffic',
-                        totalBytes: row.totalBytes,
-                        maxBytes: maxBytes,
-                      ),
-                    )
-                    .toList(),
-              );
-            },
+          _titleRow(
+            'Activity Analysis',
+            trailing: IconButton(
+              tooltip: _activityAnalysisExpanded
+                  ? 'Collapse Activity Analysis'
+                  : 'Expand Activity Analysis',
+              icon: Icon(
+                _activityAnalysisExpanded
+                    ? Icons.expand_less_rounded
+                    : Icons.expand_more_rounded,
+              ),
+              onPressed: () => setState(
+                () => _activityAnalysisExpanded = !_activityAnalysisExpanded,
+              ),
+            ),
           ),
+          if (_activityAnalysisExpanded) ...[
+            const SizedBox(height: 16),
+            FutureBuilder<List<NlbwProtocolUsage>>(
+              future: _protocolUsage(),
+              builder: (context, snapshot) {
+                final rows = snapshot.data ?? const <NlbwProtocolUsage>[];
+                if (snapshot.connectionState == ConnectionState.waiting &&
+                    rows.isEmpty) {
+                  return const SizedBox(
+                    height: 92,
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                if (rows.isEmpty) {
+                  return _emptyStatText('No nlbwmon protocol usage yet');
+                }
+
+                final totalBytes = rows.fold<int>(
+                  0,
+                  (sum, row) => sum + row.totalBytes,
+                );
+                final maxBytes = rows.map((row) => row.totalBytes).reduce(max);
+                return Column(
+                  children: rows
+                      .map(
+                        (row) => _usageBreakdownRow(
+                          icon: _protocolIcon(row.protocol),
+                          iconColor: _protocolColor(row.protocol),
+                          title: _protocolLabel(row.protocol),
+                          subtitle:
+                              '${_formatPercent(row.totalBytes, totalBytes)} of shown traffic',
+                          totalBytes: row.totalBytes,
+                          maxBytes: maxBytes,
+                        ),
+                      )
+                      .toList(),
+                );
+              },
+            ),
+          ],
         ],
       ),
     );
