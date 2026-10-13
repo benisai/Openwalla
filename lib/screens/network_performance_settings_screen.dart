@@ -23,6 +23,12 @@ class _NetworkPerformanceSettingsScreenState
   bool _isLoading = true;
   bool _isSaving = false;
   TimeOfDay _speedtestTime = const TimeOfDay(hour: 3, minute: 15);
+  String _savedPingTarget = '1.1.1.1';
+  int _savedPingThreshold = 100;
+  String _savedDnsHostname = 'openwrt.org';
+  bool _savedSpeedtestEnabled = true;
+  int _savedSpeedtestHour = 3;
+  int _savedSpeedtestMinute = 15;
 
   @override
   void initState() {
@@ -60,6 +66,12 @@ class _NetworkPerformanceSettingsScreenState
         hour: speedtest.runHour,
         minute: speedtest.runMinute,
       );
+      _savedPingTarget = ping.target;
+      _savedPingThreshold = ping.thresholdMs;
+      _savedDnsHostname = dns.hostname;
+      _savedSpeedtestEnabled = speedtest.enabled;
+      _savedSpeedtestHour = speedtest.runHour;
+      _savedSpeedtestMinute = speedtest.runMinute;
       _isLoading = false;
     });
   }
@@ -78,35 +90,71 @@ class _NetworkPerformanceSettingsScreenState
       return;
     }
 
+    final pingChanged =
+        pingTarget != _savedPingTarget || threshold != _savedPingThreshold;
+    final dnsChanged = dnsHostname != _savedDnsHostname;
+    final speedtestChanged =
+        _speedtestEnabled != _savedSpeedtestEnabled ||
+        _speedtestTime.hour != _savedSpeedtestHour ||
+        _speedtestTime.minute != _savedSpeedtestMinute;
+    if (!pingChanged && !dnsChanged && !speedtestChanged) {
+      _showSnack('Settings are already up to date.');
+      return;
+    }
+
     setState(() => _isSaving = true);
     try {
       final appState = ref.read(appStateProvider);
-      await appState.saveNetworkMonitorSettings(
-        NetworkMonitorSettings(target: pingTarget, thresholdMs: threshold),
-      );
-      await appState.saveDnsMonitorSettings(
-        DnsMonitorSettings(hostname: dnsHostname),
-      );
-      await appState.saveSpeedtestMonitorSettings(
-        SpeedtestMonitorSettings(
-          enabled: _speedtestEnabled,
-          runDate: null,
-          runHour: _speedtestTime.hour,
-          runMinute: _speedtestTime.minute,
-        ),
-      );
+      if (pingChanged) {
+        await appState.saveNetworkMonitorSettings(
+          NetworkMonitorSettings(target: pingTarget, thresholdMs: threshold),
+          context: context,
+        );
+        _savedPingTarget = pingTarget;
+        _savedPingThreshold = threshold;
+      }
+      if (dnsChanged) {
+        if (!mounted) return;
+        await appState.saveDnsMonitorSettings(
+          DnsMonitorSettings(hostname: dnsHostname),
+          context: context,
+        );
+        _savedDnsHostname = dnsHostname;
+      }
+      if (speedtestChanged) {
+        if (!mounted) return;
+        await appState.saveSpeedtestMonitorSettings(
+          SpeedtestMonitorSettings(
+            enabled: _speedtestEnabled,
+            runDate: null,
+            runHour: _speedtestTime.hour,
+            runMinute: _speedtestTime.minute,
+          ),
+          context: context,
+        );
+        _savedSpeedtestEnabled = _speedtestEnabled;
+        _savedSpeedtestHour = _speedtestTime.hour;
+        _savedSpeedtestMinute = _speedtestTime.minute;
+      }
       if (!mounted) return;
       _showSnack('Network performance settings saved.');
     } catch (e) {
       if (!mounted) return;
-      _showSnack('Failed to save settings: $e');
+      context.showToastError(
+        'Could not save settings',
+        subtitle: e.toString().replaceFirst(
+          RegExp(r'^(Bad state: |Exception: )'),
+          '',
+        ),
+        actionKey: 'performance-settings',
+      );
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
   }
 
   void _showSnack(String message) {
-    if (message.startsWith('Failed') || message.startsWith('Enter')) {
+    if (message.startsWith('Enter')) {
       context.showToastError(message, actionKey: 'performance-settings');
     } else {
       context.showToastSuccess(message, actionKey: 'performance-settings');

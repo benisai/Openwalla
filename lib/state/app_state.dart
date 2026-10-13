@@ -9781,7 +9781,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       throw Exception('Router is not connected');
     }
 
-    await _apiService!.uciSet(
+    final setResult = await _apiService!.uciSet(
       router.ipAddress,
       sysauth,
       router.useHttps,
@@ -9793,19 +9793,19 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       },
       context: context,
     );
-    await _apiService!.uciCommit(
+    if (!_rpcCallSucceeded(setResult)) {
+      throw StateError('The router rejected the Ping Test settings.');
+    }
+    final commitResult = await _apiService!.uciCommit(
       router.ipAddress,
       sysauth,
       router.useHttps,
       config: 'openwalla',
     );
-    await _apiService!.systemExec(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      command:
-          '/etc/init.d/openwalla-network-monitor restart >/dev/null 2>&1 || true',
-    );
+    if (!_rpcCallSucceeded(commitResult)) {
+      throw StateError('The router did not commit the Ping Test settings.');
+    }
+    await _runOptionalInitAction('openwalla-network-monitor', 'restart');
   }
 
   Future<DnsMonitorSettings> fetchDnsMonitorSettings({
@@ -9843,7 +9843,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       throw Exception('Router is not connected');
     }
 
-    await _apiService!.uciSet(
+    final setResult = await _apiService!.uciSet(
       router.ipAddress,
       sysauth,
       router.useHttps,
@@ -9852,19 +9852,19 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       values: {'target': settings.hostname},
       context: context,
     );
-    await _apiService!.uciCommit(
+    if (!_rpcCallSucceeded(setResult)) {
+      throw StateError('The router rejected the DNS Test settings.');
+    }
+    final commitResult = await _apiService!.uciCommit(
       router.ipAddress,
       sysauth,
       router.useHttps,
       config: 'openwalla',
     );
-    await _apiService!.systemExec(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      command:
-          '/etc/init.d/openwalla-dns-monitor restart >/dev/null 2>&1 || true',
-    );
+    if (!_rpcCallSucceeded(commitResult)) {
+      throw StateError('The router did not commit the DNS Test settings.');
+    }
+    await _runOptionalInitAction('openwalla-dns-monitor', 'restart');
   }
 
   Future<List<PingMonitorSample>> fetchPingMonitorSamples({
