@@ -57,4 +57,19 @@ void main() {
     expect(preferences.showQuarantineShortcut, isFalse);
     expect(preferences.showGeoBlockingShortcut, isFalse);
   });
+
+  test('statistics section expansion preferences persist', () {
+    final defaults = DashboardPreferences.fromJson({});
+    expect(defaults.statisticsTopDevicesExpanded, isTrue);
+    expect(defaults.statisticsActivityAnalysisExpanded, isTrue);
+
+    final collapsed = defaults.copyWith(
+      statisticsTopDevicesExpanded: false,
+      statisticsActivityAnalysisExpanded: false,
+    );
+    final restored = DashboardPreferences.fromJson(collapsed.toJson());
+
+    expect(restored.statisticsTopDevicesExpanded, isFalse);
+    expect(restored.statisticsActivityAnalysisExpanded, isFalse);
+  });
 }

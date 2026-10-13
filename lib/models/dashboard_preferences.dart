@@ -28,6 +28,8 @@ class DashboardPreferences {
   final List<String> shortcutOrder;
   final int liveThroughputRefreshSeconds;
   final int systemResourcesRefreshSeconds;
+  final bool statisticsTopDevicesExpanded;
+  final bool statisticsActivityAnalysisExpanded;
   final DashboardFlowMode flowMode;
 
   DashboardPreferences({
@@ -58,6 +60,8 @@ class DashboardPreferences {
     List<String>? shortcutOrder,
     this.liveThroughputRefreshSeconds = 3,
     this.systemResourcesRefreshSeconds = 5,
+    this.statisticsTopDevicesExpanded = true,
+    this.statisticsActivityAnalysisExpanded = true,
     this.flowMode = DashboardFlowMode.detailed,
   }) : enabledWirelessInterfaces = enabledWirelessInterfaces ?? {},
        enabledWiredInterfaces = enabledWiredInterfaces ?? {},
@@ -110,6 +114,8 @@ class DashboardPreferences {
     List<String>? shortcutOrder,
     int? liveThroughputRefreshSeconds,
     int? systemResourcesRefreshSeconds,
+    bool? statisticsTopDevicesExpanded,
+    bool? statisticsActivityAnalysisExpanded,
     DashboardFlowMode? flowMode,
   }) {
     return DashboardPreferences(
@@ -157,6 +163,11 @@ class DashboardPreferences {
           liveThroughputRefreshSeconds ?? this.liveThroughputRefreshSeconds,
       systemResourcesRefreshSeconds:
           systemResourcesRefreshSeconds ?? this.systemResourcesRefreshSeconds,
+      statisticsTopDevicesExpanded:
+          statisticsTopDevicesExpanded ?? this.statisticsTopDevicesExpanded,
+      statisticsActivityAnalysisExpanded:
+          statisticsActivityAnalysisExpanded ??
+          this.statisticsActivityAnalysisExpanded,
       flowMode: flowMode ?? this.flowMode,
     );
   }
@@ -211,6 +222,8 @@ class DashboardPreferences {
     'shortcutOrder': shortcutOrder,
     'liveThroughputRefreshSeconds': liveThroughputRefreshSeconds,
     'systemResourcesRefreshSeconds': systemResourcesRefreshSeconds,
+    'statisticsTopDevicesExpanded': statisticsTopDevicesExpanded,
+    'statisticsActivityAnalysisExpanded': statisticsActivityAnalysisExpanded,
     'flowMode': flowMode.name,
   };
 
@@ -257,6 +270,10 @@ class DashboardPreferences {
       systemResourcesRefreshSeconds: _parseSystemResourcesRefreshSeconds(
         json['systemResourcesRefreshSeconds'],
       ),
+      statisticsTopDevicesExpanded:
+          json['statisticsTopDevicesExpanded'] ?? true,
+      statisticsActivityAnalysisExpanded:
+          json['statisticsActivityAnalysisExpanded'] ?? true,
       flowMode: DashboardFlowMode.values.firstWhere(
         (mode) => mode.name == json['flowMode']?.toString(),
         orElse: () => DashboardFlowMode.detailed,

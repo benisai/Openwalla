@@ -42,11 +42,19 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   Future<List<NlbwProtocolUsage>>? _preloadProtocolUsageFuture;
   final Map<String, Future<List<VnstatUsageSample>>> _preloadUsageFutures = {};
   bool _isInstallingSupport = false;
-  bool _topDevicesExpanded = true;
-  bool _activityAnalysisExpanded = true;
+  late bool _topDevicesExpanded;
+  late bool _activityAnalysisExpanded;
   final PageController _usageRangeController = PageController(
     initialPage: _StatsUsageRange.day.index,
   );
+
+  @override
+  void initState() {
+    super.initState();
+    final preferences = ref.read(appStateProvider).dashboardPreferences;
+    _topDevicesExpanded = preferences.statisticsTopDevicesExpanded;
+    _activityAnalysisExpanded = preferences.statisticsActivityAnalysisExpanded;
+  }
 
   @override
   void dispose() {
@@ -529,8 +537,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                     ? Icons.expand_less_rounded
                     : Icons.expand_more_rounded,
               ),
-              onPressed: () =>
-                  setState(() => _topDevicesExpanded = !_topDevicesExpanded),
+              onPressed: _toggleTopDevices,
             ),
           ),
           if (_topDevicesExpanded) ...[
@@ -590,9 +597,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                     ? Icons.expand_less_rounded
                     : Icons.expand_more_rounded,
               ),
-              onPressed: () => setState(
-                () => _activityAnalysisExpanded = !_activityAnalysisExpanded,
-              ),
+              onPressed: _toggleActivityAnalysis,
             ),
           ),
           if (_activityAnalysisExpanded) ...[
@@ -638,6 +643,38 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _toggleTopDevices() async {
+    final previous = _topDevicesExpanded;
+    final next = !previous;
+    setState(() => _topDevicesExpanded = next);
+    final appState = ref.read(appStateProvider);
+    try {
+      await appState.saveDashboardPreferences(
+        appState.dashboardPreferences.copyWith(
+          statisticsTopDevicesExpanded: next,
+        ),
+      );
+    } catch (_) {
+      if (mounted) setState(() => _topDevicesExpanded = previous);
+    }
+  }
+
+  Future<void> _toggleActivityAnalysis() async {
+    final previous = _activityAnalysisExpanded;
+    final next = !previous;
+    setState(() => _activityAnalysisExpanded = next);
+    final appState = ref.read(appStateProvider);
+    try {
+      await appState.saveDashboardPreferences(
+        appState.dashboardPreferences.copyWith(
+          statisticsActivityAnalysisExpanded: next,
+        ),
+      );
+    } catch (_) {
+      if (mounted) setState(() => _activityAnalysisExpanded = previous);
+    }
   }
 
   Future<List<VnstatUsageSample>> _monthlyUsageFuture(String interfaceName) {
