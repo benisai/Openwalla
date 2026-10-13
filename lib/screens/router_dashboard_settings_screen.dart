@@ -635,6 +635,18 @@ class _RouterDashboardSettingsScreenState
                   _onPreferenceChanged();
                 },
               ),
+              _buildCardVisibilitySwitch(
+                title: 'Tunnel',
+                subtitle: 'Show Tunnel under Openwalla in the More menu',
+                icon: Icons.lan_outlined,
+                value: _preferences.showTunnelPage,
+                onChanged: (value) {
+                  setState(() {
+                    _preferences = _preferences.copyWith(showTunnelPage: value);
+                  });
+                  _onPreferenceChanged();
+                },
+              ),
             ],
           ),
         ),

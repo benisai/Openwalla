@@ -182,6 +182,11 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final showTunnel = ref.watch(
+      appStateProvider.select(
+        (state) => state.dashboardPreferences.showTunnelPage,
+      ),
+    );
     return Scaffold(
       appBar: const LuciAppBar(title: 'More'),
       body: SingleChildScrollView(
@@ -242,33 +247,34 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                     );
                   },
                 ),
-                _buildMoreTile(
-                  context,
-                  icon: Icons.lan_outlined,
-                  iconColor: Theme.of(context).colorScheme.primary,
-                  title: 'Tunnel',
-                  subtitle: 'Connect to and monitor Openwalla Server',
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => TunnelSettingsScreen(
-                          routerId:
-                              ref.read(appStateProvider).selectedRouter?.id ??
-                              'app',
-                          loadInitialSettings: () async {
-                            final settings = await ref
-                                .read(appStateProvider)
-                                .fetchFlowStatsSettings();
-                            return TunnelMonitorSettings(
-                              serverUrl: settings.serverUrl,
-                              apiToken: settings.apiToken,
-                            );
-                          },
+                if (showTunnel)
+                  _buildMoreTile(
+                    context,
+                    icon: Icons.lan_outlined,
+                    iconColor: Theme.of(context).colorScheme.primary,
+                    title: 'Tunnel',
+                    subtitle: 'Connect to and monitor Openwalla Server',
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => TunnelSettingsScreen(
+                            routerId:
+                                ref.read(appStateProvider).selectedRouter?.id ??
+                                'app',
+                            loadInitialSettings: () async {
+                              final settings = await ref
+                                  .read(appStateProvider)
+                                  .fetchFlowStatsSettings();
+                              return TunnelMonitorSettings(
+                                serverUrl: settings.serverUrl,
+                                apiToken: settings.apiToken,
+                              );
+                            },
+                          ),
                         ),
-                      ),
-                    );
-                  },
-                ),
+                      );
+                    },
+                  ),
                 _buildMoreTile(
                   context,
                   icon: Icons.info_outline_rounded,

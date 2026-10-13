@@ -2,6 +2,26 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:openwalla/models/dashboard_preferences.dart';
 
 void main() {
+  test('Tunnel is hidden by default and in older saved preferences', () {
+    expect(DashboardPreferences().showTunnelPage, isFalse);
+    expect(DashboardPreferences.fromJson({}).showTunnelPage, isFalse);
+    expect(
+      DashboardPreferences.fromJson({'showFlowsCard': true}).showTunnelPage,
+      isFalse,
+    );
+  });
+
+  test('Tunnel visibility persists without changing flow visibility', () {
+    final original = DashboardPreferences(showFlowsCard: true);
+    final shown = original.copyWith(showTunnelPage: true);
+    final restored = DashboardPreferences.fromJson(shown.toJson());
+    expect(restored.showTunnelPage, isTrue);
+    expect(restored.showFlowsCard, isTrue);
+    expect(restored.copyWith(showStatisticsTab: true).showTunnelPage, isTrue);
+    expect(restored.copyWith(showTunnelPage: false).showTunnelPage, isFalse);
+    expect(original.showTunnelPage, isFalse);
+  });
+
   test('shortcut visibility helper hides install-dependent shortcuts', () {
     var preferences = DashboardPreferences();
     const shortcutIds = [
