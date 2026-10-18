@@ -8,6 +8,12 @@ typedef QuarantineRpcCall =
     );
 
 const manualDeviceBlockPrefix = 'owrt_device_block_';
+const deviceAccessApplyQueuedMarker = 'OPENWALLA_ACCESS_APPLY_QUEUED';
+const deviceAccessReloadCommand =
+    'mkdir -p /tmp/openwalla; '
+    '(sleep 1; /etc/init.d/firewall reload || '
+    '/etc/init.d/firewall restart) >/tmp/openwalla/openwalla-firewall-apply.log '
+    '2>&1 & echo $deviceAccessApplyQueuedMarker';
 
 Future<void> releaseQuarantineRules({
   required String mac,

@@ -14495,11 +14495,10 @@ fi
       router.ipAddress,
       sysauth,
       router.useHttps,
-      command:
-          '(/etc/init.d/firewall reload || /etc/init.d/firewall restart) && echo OPENWALLA_ACCESS_APPLIED',
+      command: deviceAccessReloadCommand,
     );
     if (!_rpcCallSucceeded(result) ||
-        !_commandOutput(result).contains('OPENWALLA_ACCESS_APPLIED')) {
+        !_commandOutput(result).contains(deviceAccessApplyQueuedMarker)) {
       throw StateError('Router could not apply the device access change');
     }
   }

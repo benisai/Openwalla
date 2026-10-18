@@ -114,4 +114,14 @@ void main() {
     reject = 'apply';
     await expectLater(release(reloadFails: true), throwsStateError);
   });
+
+  test('firewall reload returns before the disruptive work begins', () {
+    expect(deviceAccessReloadCommand, contains('mkdir -p /tmp/openwalla'));
+    expect(deviceAccessReloadCommand, contains('(sleep 1;'));
+    expect(deviceAccessReloadCommand, contains('& echo'));
+    expect(
+      deviceAccessReloadCommand,
+      endsWith('& echo $deviceAccessApplyQueuedMarker'),
+    );
+  });
 }

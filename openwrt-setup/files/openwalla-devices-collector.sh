@@ -131,16 +131,30 @@ is_hidden_mac() {
 }
 
 collect_router_macs() {
-	local address_file mac
-	for address_file in /sys/class/net/*/address; do
-		[ -r "$address_file" ] || continue
-		mac="$(tr '[:upper:]' '[:lower:]' <"$address_file" 2>/dev/null || true)"
-		case "$mac" in
-		[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f])
-			[ "$mac" = "00:00:00:00:00:00" ] || echo "$mac"
-			;;
-		esac
-	done | sort -u
+	local address_file
+	{
+		for address_file in /sys/class/net/*/address; do
+			[ -r "$address_file" ] || continue
+			cat "$address_file" 2>/dev/null || true
+		done
+		ip link show 2>/dev/null | awk '/link\/ether/ { print $2 }'
+		uci -q show network 2>/dev/null | sed -n "s/^network\..*\.macaddr=['\"]\{0,1\}\([^'\"]*\)['\"]\{0,1\}$/\1/p"
+		uci -q show wireless 2>/dev/null | sed -n "s/^wireless\..*\.macaddr=['\"]\{0,1\}\([^'\"]*\)['\"]\{0,1\}$/\1/p"
+		if command -v ubus >/dev/null 2>&1 && command -v jsonfilter >/dev/null 2>&1; then
+			ubus call network.device status 2>/dev/null | jsonfilter -e '@.*.macaddr' 2>/dev/null || true
+		fi
+	} | tr ' ' '\n' | tr '[:upper:]' '[:lower:]' | awk '
+		/^[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]$/ && $0 != "00:00:00:00:00:00" { print }
+	' | sort -u
+}
+
+collect_router_ipv4() {
+	{
+		ip -4 addr show 2>/dev/null | awk '/^[[:space:]]*inet / { address=$2; sub(/\/.*/, "", address); print address }'
+		if command -v ubus >/dev/null 2>&1 && command -v jsonfilter >/dev/null 2>&1; then
+			ubus call network.interface dump 2>/dev/null | jsonfilter -e '@.interface[*]["ipv4-address"][*].address' 2>/dev/null || true
+		fi
+	} | sort -u
 }
 
 is_router_mac() {
@@ -152,6 +166,28 @@ is_router_mac() {
 $(collect_router_macs)
 EOF
 	return 1
+}
+
+is_router_ipv4() {
+	local candidate own_ip
+	candidate="$1"
+	while IFS= read -r own_ip; do
+		[ "$candidate" = "$own_ip" ] && return 0
+	done <<EOF
+$(collect_router_ipv4)
+EOF
+	return 1
+}
+
+collect_router_device_macs() {
+	local router_ip esc_ip
+	while IFS= read -r router_ip; do
+		[ -n "$router_ip" ] || continue
+		esc_ip="$(sql_escape "$router_ip")"
+		"$SQLITE_BIN" "$DB_PATH" "SELECT lower(mac) FROM devices WHERE ip='$esc_ip';" 2>/dev/null || true
+	done <<EOF
+$(collect_router_ipv4)
+EOF
 }
 
 load_config() {
@@ -528,6 +564,7 @@ cleanup_excluded_devices() {
 		sql_exec "DELETE FROM devices WHERE lower(mac)='$esc_mac';" || true
 	done <<EOF
 $(collect_router_macs)
+$(collect_router_device_macs)
 $($SQLITE_BIN "$DB_PATH" "SELECT lower(mac) FROM devices WHERE instr(ip, ':') > 0;" 2>/dev/null || true)
 EOF
 	if [ "$changed" = "1" ]; then
@@ -554,6 +591,7 @@ collect_once() {
 	changed=0
 	while IFS='|' read -r mac ip host active_now; do
 		[ -n "$mac" ] && [ -n "$ip" ] && is_ipv4 "$ip" || continue
+		is_router_ipv4 "$ip" && continue
 		if [ "$fresh_state" = "1" ]; then
 			remember_mac "$mac"
 		elif process_new_device "$mac" "$ip" "$host"; then
@@ -572,6 +610,7 @@ collect_once() {
 	while IFS='|' read -r mac ip host active_now; do
 		[ -n "$mac" ] || continue
 		is_router_mac "$mac" && continue
+		[ -n "$ip" ] && is_router_ipv4 "$ip" && continue
 		is_hidden_mac "$mac" && continue
 		if [ -n "$ip" ] && ! is_ipv4 "$ip"; then
 			continue
@@ -630,6 +669,7 @@ handle_event() {
 	esac
 	[ -n "$ip" ] && is_ipv4 "$ip" || return 0
 	is_router_mac "$mac" && return 0
+	is_router_ipv4 "$ip" && return 0
 	is_hidden_mac "$mac" && return 0
 	mark_device_active "$mac" "$ip" "$host"
 
