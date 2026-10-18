@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:openwalla/models/router.dart' as model;
 import 'package:openwalla/services/secure_storage_service.dart';
+import 'package:openwalla/utils/router_identity.dart';
 
 class RouterService {
   final SecureStorageService _secureStorageService = SecureStorageService();
@@ -14,9 +15,27 @@ class RouterService {
 
   Future<void> loadRouters() async {
     _routers = await _secureStorageService.getRouters();
+    var selectedId = await _secureStorageService.getSelectedRouterId();
+    var migrated = false;
+    final migratedRouters = <model.Router>[];
+    for (final router in _routers) {
+      if (router.identityVersion >= 2) {
+        migratedRouters.add(router);
+        continue;
+      }
+      final newId = generateRouterProfileId();
+      await _secureStorageService.migrateRouterScopedValues(router.id, newId);
+      if (selectedId == router.id) selectedId = newId;
+      migratedRouters.add(router.copyWith(id: newId, identityVersion: 2));
+      migrated = true;
+    }
+    if (migrated) {
+      _routers = migratedRouters;
+      await _secureStorageService.saveRouters(_routers);
+      await _secureStorageService.saveSelectedRouterId(selectedId);
+    }
 
-    // Try to restore the previously selected router
-    final selectedId = await _secureStorageService.getSelectedRouterId();
+    // Try to restore the previously selected router.
     if (selectedId != null && _routers.isNotEmpty) {
       // Try to find the router with the saved ID
       try {
@@ -112,9 +131,8 @@ class RouterService {
     String pass,
     bool useHttps,
   ) {
-    final id = '$ip-$user';
     return model.Router(
-      id: id,
+      id: generateRouterProfileId(),
       ipAddress: ip,
       username: user,
       password: pass,
@@ -122,8 +140,27 @@ class RouterService {
     );
   }
 
+  model.Router? findByFingerprint(String? fingerprint) {
+    if (fingerprint == null || fingerprint.isEmpty) return null;
+    for (final router in _routers) {
+      if (router.fingerprint == fingerprint) return router;
+    }
+    return null;
+  }
+
+  model.Router? findUnboundConnection(String ip, String username) {
+    for (final router in _routers) {
+      if (router.fingerprint == null &&
+          router.ipAddress == ip &&
+          router.username == username) {
+        return router;
+      }
+    }
+    return null;
+  }
+
   String exportRoutersAsJson() => const JsonEncoder.withIndent('  ').convert({
-    'version': 1,
+    'version': 2,
     'exportedAt': DateTime.now().toUtc().toIso8601String(),
     'app': 'Openwalla',
     'profiles': _routers.map((router) => router.toJson()).toList(),
@@ -171,9 +208,13 @@ class RouterService {
       }
       final useHttps =
           values['useHttps'] == true || values['useHttps'] == 'true';
-      final id = values['id']?.toString().trim().isNotEmpty == true
+      final importedIdentityVersion =
+          int.tryParse(values['identityVersion']?.toString() ?? '') ?? 0;
+      final id =
+          importedIdentityVersion >= 2 &&
+              values['id']?.toString().trim().isNotEmpty == true
           ? values['id'].toString().trim()
-          : '$address-$username';
+          : generateRouterProfileId();
       final router = model.Router(
         id: id,
         ipAddress: address,
@@ -184,6 +225,10 @@ class RouterService {
             values['lastKnownHostname']?.toString().trim().isNotEmpty == true
             ? values['lastKnownHostname'].toString().trim()
             : null,
+        fingerprint: values['fingerprint']?.toString().trim().isNotEmpty == true
+            ? values['fingerprint'].toString().trim()
+            : null,
+        identityVersion: 2,
       );
       final existingIndex = _routers.indexWhere((item) => item.id == router.id);
       if (existingIndex >= 0) {

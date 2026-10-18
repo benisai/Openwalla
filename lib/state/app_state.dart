@@ -30,6 +30,7 @@ import 'package:openwalla/utils/logger.dart';
 import 'package:openwalla/utils/rpc_result.dart';
 import 'package:openwalla/utils/quarantine_release.dart';
 import 'package:openwalla/utils/router_setup_commands.dart';
+import 'package:openwalla/utils/router_identity.dart';
 
 typedef _WirelessConnection = ({
   String band,
@@ -4429,6 +4430,60 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
     notifyListeners();
   }
 
+  Future<String?> _discoverRouterFingerprint({
+    required String ipAddress,
+    required String sysauth,
+    required bool useHttps,
+  }) async {
+    try {
+      final board = await _apiService!.call(
+        ipAddress,
+        sysauth,
+        useHttps,
+        object: 'system',
+        method: 'board',
+        params: const {},
+        receiveTimeout: const Duration(seconds: 4),
+      );
+      final serial = routerSerialFingerprint(board);
+      if (serial != null) return serial;
+    } catch (error) {
+      Logger.debug('Router serial fingerprint unavailable: $error');
+    }
+
+    var deviceName = 'br-lan';
+    try {
+      final interface = await _apiService!.call(
+        ipAddress,
+        sysauth,
+        useHttps,
+        object: 'network.interface.lan',
+        method: 'status',
+        params: const {},
+        receiveTimeout: const Duration(seconds: 4),
+      );
+      deviceName = routerInterfaceDeviceName(interface) ?? deviceName;
+    } catch (error) {
+      Logger.debug('Router LAN interface lookup unavailable: $error');
+    }
+
+    try {
+      final device = await _apiService!.call(
+        ipAddress,
+        sysauth,
+        useHttps,
+        object: 'network.device',
+        method: 'status',
+        params: {'name': deviceName},
+        receiveTimeout: const Duration(seconds: 4),
+      );
+      return routerMacFingerprint(device);
+    } catch (error) {
+      Logger.debug('Router LAN MAC fingerprint unavailable: $error');
+      return null;
+    }
+  }
+
   Future<bool> login(
     String ip,
     String user,
@@ -4464,20 +4519,35 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
         _activeSshPassword = pass;
         // Get the actual protocol used (might be different due to redirect)
         final actualUseHttps = _authService!.useHttps;
+        final fingerprint = await _discoverRouterFingerprint(
+          ipAddress: ip,
+          sysauth: _authService!.sysauth!,
+          useHttps: actualUseHttps,
+        );
 
-        if (!fromRouter && saveCredentials) {
-          // If not from router selection, add or update router with detected protocol
-          if (_routerService != null) {
-            final router = _routerService!.createRouter(
-              ip,
-              user,
-              pass,
-              actualUseHttps, // Use the detected protocol
-            );
-            final idx = _routerService!.routers.indexWhere(
-              (r) => r.id == router.id,
-            );
-            if (idx == -1) {
+        if (!fromRouter) {
+          if (saveCredentials && _routerService != null) {
+            // Match the physical router first. The address is connection data,
+            // not identity, because many routers use the same private address.
+            final existing =
+                _routerService!.findByFingerprint(fingerprint) ??
+                _routerService!.findUnboundConnection(ip, user);
+            final router =
+                (existing ??
+                        _routerService!.createRouter(
+                          ip,
+                          user,
+                          pass,
+                          actualUseHttps,
+                        ))
+                    .copyWith(
+                      ipAddress: ip,
+                      username: user,
+                      password: pass,
+                      useHttps: actualUseHttps,
+                      fingerprint: fingerprint,
+                    );
+            if (existing == null) {
               await addRouter(router);
             } else {
               await updateRouter(router);
@@ -4485,15 +4555,28 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
             await _routerService!.setSelectedRouter(router.id);
             await loadDashboardPreferences();
           }
-        } else if (actualUseHttps != useHttps && _routerService != null) {
-          // If we're logging in from a saved router and the protocol changed, update it
+        } else if (_routerService != null) {
           final router = _routerService!.selectedRouter;
           if (router != null) {
-            final updatedRouter = router.copyWith(useHttps: actualUseHttps);
-            await updateRouter(updatedRouter);
-            Logger.info(
-              'Updated router protocol from ${useHttps ? "HTTPS" : "HTTP"} to ${actualUseHttps ? "HTTPS" : "HTTP"}',
-            );
+            if (fingerprint != null &&
+                router.fingerprint != null &&
+                router.fingerprint != fingerprint) {
+              await _authService!.logout();
+              _errorMessage =
+                  'This address answered as a different router. Add it as a new router profile to keep its settings separate.';
+              _isLoading = false;
+              notifyListeners();
+              return false;
+            }
+            if (actualUseHttps != router.useHttps ||
+                (router.fingerprint == null && fingerprint != null)) {
+              await updateRouter(
+                router.copyWith(
+                  useHttps: actualUseHttps,
+                  fingerprint: fingerprint,
+                ),
+              );
+            }
           }
         }
         await _restoreDashboardPreferencesFromRouter();

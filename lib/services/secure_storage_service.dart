@@ -109,6 +109,32 @@ class SecureStorageService {
     }
   }
 
+  Future<void> migrateRouterScopedValues(String oldId, String newId) async {
+    if (oldId == newId) return;
+    try {
+      final values = await _storage.readAll();
+      final suffix = ':$oldId';
+      final entries = values.entries
+          .where((entry) => entry.key.endsWith(suffix))
+          .toList(growable: false);
+      for (final entry in entries) {
+        final newKey =
+            '${entry.key.substring(0, entry.key.length - suffix.length)}:$newId';
+        if (!values.containsKey(newKey)) {
+          await _storage.write(key: newKey, value: entry.value);
+        }
+        await _storage.delete(key: entry.key);
+      }
+    } catch (e, stack) {
+      Logger.exception(
+        'Failed to migrate router storage from $oldId to $newId',
+        e,
+        stack,
+      );
+      rethrow;
+    }
+  }
+
   Future<void> saveRouters(List<Router> routers) async {
     try {
       final jsonList = routers.map((r) => r.toJson()).toList();

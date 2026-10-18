@@ -65,4 +65,59 @@ void main() {
     expect(result.success, isFalse);
     expect(result.errorMessage, contains('Expected'));
   });
+
+  test('new profiles use separate UUIDs for the same router address', () {
+    final service = RouterService();
+    final first = service.createRouter('192.168.1.1', 'root', 'one', false);
+    final second = service.createRouter('192.168.1.1', 'root', 'two', false);
+
+    expect(first.id, isNot(second.id));
+    expect(
+      RegExp(
+        r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+      ).hasMatch(first.id),
+      isTrue,
+    );
+  });
+
+  test('fingerprint locates a profile independently of its address', () async {
+    final service = RouterService();
+    final router = service
+        .createRouter('192.168.1.1', 'root', 'secret', false)
+        .copyWith(fingerprint: 'lan-mac:001122334455');
+    await service.addRouter(router);
+
+    expect(service.findByFingerprint('lan-mac:001122334455')?.id, router.id);
+  });
+
+  test('legacy profile migration keeps selected and scoped settings', () async {
+    const oldId = '192.168.1.1-root';
+    FlutterSecureStorage.setMockInitialValues({
+      'routers': jsonEncode([
+        {
+          'id': oldId,
+          'ipAddress': '192.168.1.1',
+          'username': 'root',
+          'password': 'secret',
+          'useHttps': false,
+        },
+      ]),
+      'selectedRouterId': oldId,
+      'dashboard_preferences:$oldId': '{"showFlowsCard":true}',
+    });
+
+    final service = RouterService();
+    await service.loadRouters();
+    final migrated = service.routers.single;
+    final storage = const FlutterSecureStorage();
+
+    expect(migrated.id, isNot(oldId));
+    expect(migrated.identityVersion, 2);
+    expect(service.selectedRouter?.id, migrated.id);
+    expect(
+      await storage.read(key: 'dashboard_preferences:${migrated.id}'),
+      '{"showFlowsCard":true}',
+    );
+    expect(await storage.read(key: 'dashboard_preferences:$oldId'), isNull);
+  });
 }

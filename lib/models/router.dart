@@ -5,6 +5,8 @@ class Router {
   final String password;
   final bool useHttps;
   final String? lastKnownHostname;
+  final String? fingerprint;
+  final int identityVersion;
 
   Router({
     required this.id,
@@ -13,6 +15,8 @@ class Router {
     required this.password,
     required this.useHttps,
     this.lastKnownHostname,
+    this.fingerprint,
+    this.identityVersion = 2,
   });
 
   factory Router.fromJson(Map<String, dynamic> json) {
@@ -23,6 +27,9 @@ class Router {
       password: json['password'] as String,
       useHttps: json['useHttps'] == true || json['useHttps'] == 'true',
       lastKnownHostname: json['lastKnownHostname'] as String?,
+      fingerprint: json['fingerprint']?.toString(),
+      identityVersion:
+          int.tryParse(json['identityVersion']?.toString() ?? '') ?? 0,
     );
   }
 
@@ -33,6 +40,8 @@ class Router {
     'password': password,
     'useHttps': useHttps,
     if (lastKnownHostname != null) 'lastKnownHostname': lastKnownHostname,
+    if (fingerprint != null) 'fingerprint': fingerprint,
+    'identityVersion': identityVersion,
   };
 
   Router copyWith({
@@ -42,6 +51,8 @@ class Router {
     String? password,
     bool? useHttps,
     String? lastKnownHostname,
+    String? fingerprint,
+    int? identityVersion,
   }) {
     return Router(
       id: id ?? this.id,
@@ -50,6 +61,8 @@ class Router {
       password: password ?? this.password,
       useHttps: useHttps ?? this.useHttps,
       lastKnownHostname: lastKnownHostname ?? this.lastKnownHostname,
+      fingerprint: fingerprint ?? this.fingerprint,
+      identityVersion: identityVersion ?? this.identityVersion,
     );
   }
 }
