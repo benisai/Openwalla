@@ -23,6 +23,7 @@ import 'package:openwalla/services/api_service.dart';
 import 'package:openwalla/services/service_factory.dart';
 import 'package:openwalla/config/app_config.dart';
 import 'package:openwalla/utils/http_client_manager.dart';
+import 'package:openwalla/utils/device_identity.dart';
 import 'package:openwalla/utils/device_firewall_state.dart';
 import 'package:openwalla/utils/geo_blocking.dart';
 import 'package:openwalla/utils/logger.dart';
@@ -14815,89 +14816,118 @@ fi
     final cleanName = hostname.trim().isEmpty
         ? client.hostname
         : hostname.trim();
-    final dhcp = await _apiService!.call(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      object: 'uci',
-      method: 'get',
-      params: {'config': 'dhcp'},
-      context: context,
-    );
-    final dhcpValues = _extractUciValues(dhcp);
-    String? hostSection;
-    dhcpValues.forEach((section, values) {
-      if (hostSection != null || values['.type']?.toString() != 'host') {
-        return;
-      }
-      final configuredMacs = values['mac'] is List
-          ? (values['mac'] as List)
-                .map((value) => _normalizeMacAddress(value.toString()))
-                .toList()
-          : [_normalizeMacAddress(values['mac']?.toString() ?? '')];
-      if (configuredMacs.contains(normalizedMac)) hostSection = section;
-    });
-
-    final dhcpIdentity = {
-      'name': _sanitizeDhcpHostName(cleanName),
-      'mac': normalizedMac,
-    };
-    if (hostSection == null || hostSection!.isEmpty) {
-      var addResult = await _apiService!.call(
+    Future<dynamic> callIdentityUci(
+      String method,
+      Map<String, dynamic> params,
+    ) {
+      return _apiService!.call(
         router.ipAddress,
         sysauth,
         router.useHttps,
         object: 'uci',
-        method: 'add',
-        params: {'config': 'dhcp', 'type': 'host', 'values': dhcpIdentity},
+        method: method,
+        params: params,
+        context: context,
+        receiveTimeout: const Duration(seconds: 30),
       );
-      if (!_rpcCallSucceeded(addResult)) {
-        addResult = await _apiService!.call(
-          router.ipAddress,
-          sysauth,
-          router.useHttps,
-          object: 'uci',
-          method: 'add',
-          params: {'config': 'dhcp', 'type': 'host'},
+    }
+
+    bool responseMayBeLost(Object error) =>
+        error is DioException &&
+        (error.type == DioExceptionType.receiveTimeout ||
+            error.type == DioExceptionType.connectionError ||
+            error.type == DioExceptionType.unknown);
+
+    Future<dynamic> readDhcpIdentityConfig() async {
+      try {
+        return await callIdentityUci('get', {'config': 'dhcp'});
+      } catch (error, stack) {
+        if (!responseMayBeLost(error)) rethrow;
+        Logger.warning('Retrying device name lookup after: $error');
+        Logger.debug('Device name lookup retry stack: $stack');
+        return callIdentityUci('get', {'config': 'dhcp'});
+      }
+    }
+
+    final dhcp = await readDhcpIdentityConfig();
+    String? hostSection = findDhcpHostIdentity(dhcp, normalizedMac)?.section;
+
+    final sanitizedName = _sanitizeDhcpHostName(cleanName);
+    final dhcpIdentity = {'name': sanitizedName, 'mac': normalizedMac};
+
+    Future<bool> identityWasApplied() async {
+      try {
+        final verification = await readDhcpIdentityConfig();
+        return dhcpHostIdentityMatches(
+          verification,
+          mac: normalizedMac,
+          name: sanitizedName,
         );
+      } catch (verificationError, verificationStack) {
+        Logger.debug('Device name verification failed: $verificationError');
+        Logger.debug('Device name verification stack: $verificationStack');
+        return false;
+      }
+    }
+
+    Future<dynamic> callIdentityMutation(
+      String method,
+      Map<String, dynamic> params,
+    ) async {
+      try {
+        return await callIdentityUci(method, params);
+      } catch (error, stack) {
+        if (responseMayBeLost(error) && await identityWasApplied()) {
+          Logger.warning(
+            'Device name RPC response was interrupted after the router applied the change: $error',
+          );
+          Logger.debug('Device name interrupted RPC stack: $stack');
+          return const [0, <String, dynamic>{}];
+        }
+        rethrow;
+      }
+    }
+
+    if (hostSection == null || hostSection.isEmpty) {
+      var addResult = await callIdentityMutation('add', {
+        'config': 'dhcp',
+        'type': 'host',
+        'values': dhcpIdentity,
+      });
+      if (!_rpcCallSucceeded(addResult)) {
+        addResult = await callIdentityUci('add', {
+          'config': 'dhcp',
+          'type': 'host',
+        });
         hostSection = _extractAddedSection(addResult);
         if (!_rpcCallSucceeded(addResult) ||
             hostSection == null ||
-            hostSection!.isEmpty) {
+            hostSection.isEmpty) {
           throw StateError('Unable to create the OpenWrt device name');
         }
-        final setResult = await _apiService!.uciSet(
-          router.ipAddress,
-          sysauth,
-          router.useHttps,
-          config: 'dhcp',
-          section: hostSection!,
-          values: dhcpIdentity,
-        );
+        final setResult = await callIdentityMutation('set', {
+          'config': 'dhcp',
+          'section': hostSection,
+          'values': dhcpIdentity,
+        });
         if (!_rpcCallSucceeded(setResult)) {
           throw StateError('Unable to configure the OpenWrt device name');
         }
       }
     } else {
-      final setResult = await _apiService!.uciSet(
-        router.ipAddress,
-        sysauth,
-        router.useHttps,
-        config: 'dhcp',
-        section: hostSection!,
-        values: dhcpIdentity,
-      );
+      final setResult = await callIdentityMutation('set', {
+        'config': 'dhcp',
+        'section': hostSection,
+        'values': dhcpIdentity,
+      });
       if (!_rpcCallSucceeded(setResult)) {
         throw StateError('Unable to update the OpenWrt device name');
       }
     }
 
-    final commitResult = await _apiService!.uciCommit(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      config: 'dhcp',
-    );
+    final commitResult = await callIdentityMutation('commit', {
+      'config': 'dhcp',
+    });
     if (!_rpcCallSucceeded(commitResult)) {
       throw StateError('Unable to save the OpenWrt device name');
     }
@@ -14908,29 +14938,23 @@ fi
       hostname: cleanName,
       deviceIcon: deviceIcon.trim(),
     );
-    unawaited(
-      _apiService!
-          .call(
-            router.ipAddress,
-            sysauth,
-            router.useHttps,
-            object: 'file',
-            method: 'exec',
-            params: {
-              'command': '/bin/sh',
-              'params': ['-c', dbCommand],
-            },
-          )
-          .catchError((Object e, StackTrace stack) {
-            Logger.debug(
-              'Background device identity database update failed: $e',
-            );
-            Logger.debug(
-              'Background device identity database update stack: $stack',
-            );
-            return <String, dynamic>{};
-          }),
-    );
+    try {
+      await _apiService!.call(
+        router.ipAddress,
+        sysauth,
+        router.useHttps,
+        object: 'file',
+        method: 'exec',
+        params: {
+          'command': '/bin/sh',
+          'params': ['-c', dbCommand],
+        },
+        receiveTimeout: const Duration(seconds: 30),
+      );
+    } catch (e, stack) {
+      Logger.debug('Optional device identity database update failed: $e');
+      Logger.debug('Optional device identity database update stack: $stack');
+    }
     unawaited(
       _apiService!
           .systemExec(

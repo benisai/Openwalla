@@ -133,4 +133,24 @@ collect_router_ipv4
       contains("SELECT lower(mac) FROM devices WHERE ip='\$esc_ip'"),
     );
   });
+
+  test('configured DHCP names win and replace stale cached names', () {
+    final source = File(
+      'openwrt-setup/files/openwalla-devices-collector.sh',
+    ).readAsStringSync();
+    final candidates = source.substring(
+      source.indexOf('collect_candidates()'),
+      source.indexOf('collect_totals()'),
+    );
+
+    expect(
+      candidates.indexOf('collect_static_dhcp'),
+      lessThan(candidates.indexOf('collect_dhcp')),
+    );
+    expect(source, contains('tolower(host) == router_hostname'));
+    expect(
+      RegExp(r'hostname=excluded\.hostname').allMatches(source).length,
+      greaterThanOrEqualTo(2),
+    );
+  });
 }

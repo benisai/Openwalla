@@ -7,8 +7,8 @@
 # Device discovery is gathered from IPv4 DHCP leases, ARP, IPv4 neighbors, and
 # wireless station data. When openwalla.quarantine.enabled is set, newly seen
 # IPv4 devices are quarantined during this same collection pass.
-# Existing hostnames in the DB are preserved, so app-side device renames are not
-# overwritten by DHCP/wireless names.
+# Configured DHCP host names are authoritative. Live DHCP lease names are used
+# as a fallback, and the database mirrors the current resolved name.
 # Run /usr/bin/openwalla-devices-collector --once to trigger an immediate scan
 # from the app or shell without waiting for the background polling interval.
 
@@ -270,13 +270,16 @@ dedupe_devices() {
 }
 
 collect_dhcp() {
+	local router_hostname
 	[ -f /tmp/dhcp.leases ] || return 0
-	awk '{
+	router_hostname="$(uci_get system.@system[0].hostname | tr '[:upper:]' '[:lower:]')"
+	awk -v router_hostname="$router_hostname" '{
 		if ($2 ~ /^[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]:[[:xdigit:]][[:xdigit:]]$/) {
 			mac=tolower($2)
 			ip=$3
 			host=$4
 			if (host == "*") host=""
+			if (router_hostname != "" && tolower(host) == router_hostname) host=""
 			print mac "|" ip "|" host "|0"
 		}
 	}' /tmp/dhcp.leases
@@ -365,8 +368,8 @@ collect_wireless() {
 
 collect_candidates() {
 	{
-		collect_dhcp
 		collect_static_dhcp
+		collect_dhcp
 		collect_arp
 		collect_ip_neigh
 		collect_bridge_fdb
@@ -629,9 +632,9 @@ collect_once() {
 		esc_ip="$(sql_escape "$ip")"
 		esc_host="$(sql_escape "$host")"
 		if [ "$active_now" = "1" ]; then
-			sql="INSERT INTO devices (mac, ip, hostname, vendor, quarantined, last_seen, total_up, total_down, status) VALUES ('$esc_mac', '$esc_ip', '$esc_host', '', $is_quarantined, $now, $tx, $rx, 'online') ON CONFLICT(mac) DO UPDATE SET ip=CASE WHEN excluded.ip != '' THEN excluded.ip ELSE devices.ip END, hostname=CASE WHEN devices.hostname = '' AND excluded.hostname != '' THEN excluded.hostname ELSE devices.hostname END, quarantined=excluded.quarantined, last_seen=excluded.last_seen, total_up=excluded.total_up, total_down=excluded.total_down, status=CASE WHEN devices.scheduled_block=1 THEN 'block-scheduled' ELSE excluded.status END;"
+			sql="INSERT INTO devices (mac, ip, hostname, vendor, quarantined, last_seen, total_up, total_down, status) VALUES ('$esc_mac', '$esc_ip', '$esc_host', '', $is_quarantined, $now, $tx, $rx, 'online') ON CONFLICT(mac) DO UPDATE SET ip=CASE WHEN excluded.ip != '' THEN excluded.ip ELSE devices.ip END, hostname=excluded.hostname, quarantined=excluded.quarantined, last_seen=excluded.last_seen, total_up=excluded.total_up, total_down=excluded.total_down, status=CASE WHEN devices.scheduled_block=1 THEN 'block-scheduled' ELSE excluded.status END;"
 		else
-			sql="INSERT INTO devices (mac, ip, hostname, vendor, quarantined, last_seen, total_up, total_down, status) VALUES ('$esc_mac', '$esc_ip', '$esc_host', '', $is_quarantined, 0, $tx, $rx, 'offline') ON CONFLICT(mac) DO UPDATE SET ip=CASE WHEN excluded.ip != '' THEN excluded.ip ELSE devices.ip END, hostname=CASE WHEN devices.hostname = '' AND excluded.hostname != '' THEN excluded.hostname ELSE devices.hostname END, quarantined=excluded.quarantined, total_up=excluded.total_up, total_down=excluded.total_down;"
+			sql="INSERT INTO devices (mac, ip, hostname, vendor, quarantined, last_seen, total_up, total_down, status) VALUES ('$esc_mac', '$esc_ip', '$esc_host', '', $is_quarantined, 0, $tx, $rx, 'offline') ON CONFLICT(mac) DO UPDATE SET ip=CASE WHEN excluded.ip != '' THEN excluded.ip ELSE devices.ip END, hostname=excluded.hostname, quarantined=excluded.quarantined, total_up=excluded.total_up, total_down=excluded.total_down;"
 		fi
 		sql_exec "$sql" || true
 	done <"$candidates"
