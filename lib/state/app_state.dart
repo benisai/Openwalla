@@ -23,6 +23,7 @@ import 'package:openwalla/services/api_service.dart';
 import 'package:openwalla/services/service_factory.dart';
 import 'package:openwalla/config/app_config.dart';
 import 'package:openwalla/utils/http_client_manager.dart';
+import 'package:openwalla/utils/device_firewall_state.dart';
 import 'package:openwalla/utils/geo_blocking.dart';
 import 'package:openwalla/utils/logger.dart';
 import 'package:openwalla/utils/rpc_result.dart';
@@ -12900,20 +12901,20 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         aggregateAllRouters: true,
       );
       if (activeDeviceRecords.$1.isNotEmpty) {
-        final quarantinedMacs = await fetchAggregatedQuarantinedMacs();
+        final firewallState = await fetchAggregatedDeviceFirewallState();
         return _applyStaticDhcpReservations(
           _applyQuarantineState(
             _applyClientConnectionDetails(
               _clientsFromDeviceDbRecords(activeDeviceRecords),
               await wirelessConnectionsFuture,
             ),
-            quarantinedMacs,
+            firewallState,
           ),
           await staticLeasesFuture,
         ).toList();
       }
 
-      final quarantinedMacsFuture = fetchAggregatedQuarantinedMacs();
+      final firewallStateFuture = fetchAggregatedDeviceFirewallState();
       final deviceRecordsFuture = fetchDeviceRecords(aggregateAllRouters: true);
       // Build a union of wireless MACs across all routers
       final wirelessConnections = await wirelessConnectionsFuture;
@@ -12958,14 +12959,14 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         }
       }
 
-      final quarantinedMacs = await quarantinedMacsFuture;
+      final firewallState = await firewallStateFuture;
       final deviceRecords = await deviceRecordsFuture;
       final list = _applyQuarantineState(
         _applyStaticDhcpReservations(
           _applyDeviceDbRecords(clients.values, deviceRecords),
           await staticLeasesFuture,
         ),
-        quarantinedMacs,
+        firewallState,
       );
 
       // Sort: wireless > wired > unknown, then by hostname
@@ -12999,7 +13000,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
   Future<List<Client>> fetchClientsForSelectedRouter() async {
     try {
       if (_reviewerModeEnabled) {
-        final quarantinedMacs = await fetchQuarantinedMacsForSelectedRouter();
+        final firewallState = await fetchDeviceFirewallStateForSelectedRouter();
         final deviceRecords = await fetchDeviceRecords();
         final stationsMap = await _apiService!.fetchAssociatedStations();
         final macs = <String>{};
@@ -13040,7 +13041,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         }
         final reviewerClients = _applyQuarantineState(
           _applyDeviceDbRecords(clientMap.values, deviceRecords),
-          quarantinedMacs,
+          firewallState,
           includeMockDevice: true,
         );
         reviewerClients.sort((a, b) {
@@ -13079,13 +13080,13 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       );
       final activeDeviceRecords = await fetchDeviceRecords();
       if (activeDeviceRecords.$1.isNotEmpty) {
-        final quarantinedMacs = await fetchQuarantinedMacsForSelectedRouter();
+        final firewallState = await fetchDeviceFirewallStateForSelectedRouter();
         final clients = _applyQuarantineState(
           _applyClientConnectionDetails(
             _clientsFromDeviceDbRecords(activeDeviceRecords),
             await wirelessConnectionsFuture,
           ),
-          quarantinedMacs,
+          firewallState,
         );
         return _applyStaticDhcpReservations(
           clients,
@@ -13104,7 +13105,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
           )
           .catchError((_) => null);
       final deviceRecordsFuture = fetchDeviceRecords();
-      final quarantinedMacsFuture = fetchQuarantinedMacsForSelectedRouter();
+      final firewallStateFuture = fetchDeviceFirewallStateForSelectedRouter();
 
       final wirelessConnections = await wirelessConnectionsFuture;
 
@@ -13150,13 +13151,13 @@ done | sort -t "|" -k1,1nr | head -n ''' +
 
       final clients = clientMap.values.toList();
       final deviceRecords = await deviceRecordsFuture;
-      final quarantinedMacs = await quarantinedMacsFuture;
+      final firewallState = await firewallStateFuture;
       final markedClients = _applyQuarantineState(
         _applyStaticDhcpReservations(
           _applyDeviceDbRecords(clients, deviceRecords),
           await staticLeasesFuture,
         ),
-        quarantinedMacs,
+        firewallState,
       );
 
       // Sort similar to aggregated
@@ -13456,19 +13457,8 @@ done | sort -t "|" -k1,1nr | head -n ''' +
   String _normalizeMacAddress(String mac) =>
       mac.trim().toUpperCase().replaceAll('-', ':');
 
-  static const String _openwallaParentalRulePrefix = 'owrt_parental_';
   static const String _openwallaPauseRulePrefix = 'owrt_pause_';
-  static const List<String> _blockedFirewallRulePrefixes = [
-    _openwallaParentalRulePrefix,
-    'openwalla_parental_',
-    'moci_parental_',
-    'openwalla_quarantine_',
-    manualDeviceBlockPrefix,
-    'openwalla_schedule_',
-  ];
-
   static const String _mockQuarantineMac = 'AA:BB:CC:DD:EE:FF';
-  final Set<String> _legacyManualBlockedMacs = {};
 
   Client _mockQuarantinedClient() {
     return Client(
@@ -13485,11 +13475,24 @@ done | sort -t "|" -k1,1nr | head -n ''' +
 
   List<Client> _applyQuarantineState(
     Iterable<Client> clients,
-    Set<String> quarantinedMacs, {
+    DeviceFirewallState firewallState, {
     bool includeMockDevice = false,
   }) {
-    final normalizedBlocked = quarantinedMacs.map(_normalizeMacAddress).toSet();
-    if (includeMockDevice) normalizedBlocked.add(_mockQuarantineMac);
+    final normalizedBlocked = firewallState.blockedMacs
+        .map(_normalizeMacAddress)
+        .toSet();
+    final normalizedQuarantined = firewallState.quarantinedMacs
+        .map(_normalizeMacAddress)
+        .toSet();
+    if (includeMockDevice) {
+      normalizedBlocked.add(_mockQuarantineMac);
+      normalizedQuarantined.add(_mockQuarantineMac);
+    }
+    final normalizedFirewallState = DeviceFirewallState(
+      available: firewallState.available,
+      blockedMacs: normalizedBlocked,
+      quarantinedMacs: normalizedQuarantined,
+    );
 
     final clientMap = <String, Client>{};
     for (final client in clients) {
@@ -13498,12 +13501,25 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         clientMap[mac] = client;
         continue;
       }
-      final blocked = client.isBlocked || normalizedBlocked.contains(mac);
+      final disposition = resolveDeviceFirewallDisposition(
+        state: normalizedFirewallState,
+        mac: mac,
+        cachedBlocked: client.isBlocked,
+        cachedQuarantined: client.isQuarantined,
+      );
+      final blocked = disposition.blocked;
+      final staleBlockedStatus = const {
+        'blocked',
+        'block-scheduled',
+      }.contains(client.status.toLowerCase());
       clientMap[mac] = client.copyWith(
         isBlocked: blocked,
-        isQuarantined:
-            client.isQuarantined && !_legacyManualBlockedMacs.contains(mac),
-        status: blocked ? 'blocked' : client.status,
+        isQuarantined: disposition.quarantined,
+        status: blocked
+            ? 'blocked'
+            : staleBlockedStatus
+            ? 'online'
+            : client.status,
       );
     }
 
@@ -13555,23 +13571,22 @@ done | sort -t "|" -k1,1nr | head -n ''' +
     }
   }
 
-  Future<Set<String>> fetchQuarantinedMacsForSelectedRouter() async {
-    _legacyManualBlockedMacs.clear();
-    if (_reviewerModeEnabled) return {_mockQuarantineMac};
+  Future<DeviceFirewallState>
+  fetchDeviceFirewallStateForSelectedRouter() async {
+    if (_reviewerModeEnabled) {
+      return const DeviceFirewallState(
+        blockedMacs: {_mockQuarantineMac},
+        quarantinedMacs: {_mockQuarantineMac},
+      );
+    }
     if (_routerService?.selectedRouter == null ||
         _authService?.sysauth == null ||
         _apiService == null) {
-      return {};
+      return const DeviceFirewallState(available: false);
     }
 
     final router = _routerService!.selectedRouter!;
     try {
-      final dbMacs = await _fetchQuarantinedMacsFromDevicesDbForRouter(
-        router: router,
-        sysauth: _authService!.sysauth!,
-        useHttps: router.useHttps,
-      );
-
       final result = await _apiService!.call(
         router.ipAddress,
         _authService!.sysauth!,
@@ -13580,23 +13595,30 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         method: 'get',
         params: {'config': 'firewall'},
       );
+      final state = parseDeviceFirewallState(result);
       _parentalPausedMacs
         ..clear()
-        ..addAll(_extractPausedMacs(result));
-      return {...dbMacs, ..._extractQuarantinedMacs(result)};
+        ..addAll(state.pausedMacs);
+      return state;
     } catch (e, stack) {
       Logger.warning('Optional quarantine firewall read failed: $e');
       Logger.debug('Optional quarantine firewall stack: $stack');
-      return {};
+      return const DeviceFirewallState(available: false);
     }
   }
 
-  Future<Set<String>> fetchAggregatedQuarantinedMacs() async {
-    _legacyManualBlockedMacs.clear();
-    if (_reviewerModeEnabled) return {_mockQuarantineMac};
+  Future<DeviceFirewallState> fetchAggregatedDeviceFirewallState() async {
+    if (_reviewerModeEnabled) {
+      return const DeviceFirewallState(
+        blockedMacs: {_mockQuarantineMac},
+        quarantinedMacs: {_mockQuarantineMac},
+      );
+    }
 
     final routers = _routerService?.routers ?? const <model.Router>[];
-    if (routers.isEmpty || _apiService == null) return {};
+    if (routers.isEmpty || _apiService == null) {
+      return const DeviceFirewallState(available: false);
+    }
     _parentalPausedMacs.clear();
 
     final tasks = routers.map((router) async {
@@ -13616,12 +13638,9 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         } else {
           token = _authService?.sysauth;
         }
-        if (token == null) return <String>{};
-        final dbMacs = await _fetchQuarantinedMacsFromDevicesDbForRouter(
-          router: router,
-          sysauth: token,
-          useHttps: useHttps,
-        );
+        if (token == null) {
+          return const DeviceFirewallState(available: false);
+        }
 
         final result = await _apiService!.call(
           router.ipAddress,
@@ -13631,114 +13650,21 @@ done | sort -t "|" -k1,1nr | head -n ''' +
           method: 'get',
           params: {'config': 'firewall'},
         );
-        _parentalPausedMacs.addAll(_extractPausedMacs(result));
-        return {...dbMacs, ..._extractQuarantinedMacs(result)};
+        return parseDeviceFirewallState(result);
       } catch (e, stack) {
         Logger.warning('Optional aggregated quarantine read failed: $e');
         Logger.debug('Optional aggregated quarantine stack: $stack');
-        return <String>{};
+        return const DeviceFirewallState(available: false);
       }
     }).toList();
 
     final results = await Future.wait(tasks);
-    return results.fold<Set<String>>(<String>{}, (acc, macs) {
-      acc.addAll(macs.map(_normalizeMacAddress));
-      return acc;
-    });
-  }
-
-  Future<Set<String>> _fetchQuarantinedMacsFromDevicesDbForRouter({
-    required model.Router router,
-    required String sysauth,
-    required bool useHttps,
-    BuildContext? context,
-  }) async {
-    try {
-      String output;
-      try {
-        output = await _sqliteQueryOutputForRouter(
-          router: router,
-          sysauth: sysauth,
-          useHttps: useHttps,
-          dbExpression: _devicesDbExpression(),
-          sql:
-              "SELECT mac FROM devices WHERE quarantined = 1 OR status IN ('blocked', 'block-scheduled') OR scheduled_block = 1;",
-          context: context,
-        );
-      } catch (_) {
-        output = await _sqliteQueryOutputForRouter(
-          router: router,
-          sysauth: sysauth,
-          useHttps: useHttps,
-          dbExpression: _devicesDbExpression(),
-          sql:
-              "SELECT mac FROM devices WHERE quarantined = 1 OR status IN ('blocked', 'block-scheduled');",
-        );
-      }
-      final macs = output
-          .split('\n')
-          .map((line) => line.trim())
-          .where(
-            (line) => RegExp(
-              r'^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$',
-            ).hasMatch(line),
-          )
-          .map(_normalizeMacAddress)
-          .toSet();
-      return macs;
-    } catch (e, stack) {
-      Logger.debug('Optional devices DB quarantine read failed: $e');
-      Logger.debug('Optional devices DB quarantine stack: $stack');
-      return {};
-    }
-  }
-
-  Set<String> _extractQuarantinedMacs(dynamic result) {
-    dynamic data = result;
-    if (result is List && result.length > 1 && result[0] == 0) {
-      data = result[1];
-    }
-
-    final values = data is Map ? data['values'] : null;
-    final rules = values is Map
-        ? values.values
-        : data is Map
-        ? data.values
-        : const [];
-    final macs = <String>{};
-    for (final rule in rules) {
-      if (rule is! Map) continue;
-      final name = rule['name']?.toString() ?? '';
-      final matchesOpenwallaBlock = _blockedFirewallRulePrefixes.any(
-        name.startsWith,
-      );
-      if (!matchesOpenwallaBlock) continue;
-      if ((rule['enabled']?.toString() ?? '1') == '0') continue;
-      if (name.startsWith('openwalla_quarantine_') &&
-          name.endsWith('_router')) {
-        _legacyManualBlockedMacs.addAll(_firewallMacValues(rule['src_mac']));
-      }
-      macs.addAll(_firewallMacValues(rule['src_mac']));
-    }
-    return macs;
-  }
-
-  Set<String> _extractPausedMacs(dynamic result) {
-    dynamic data = result;
-    if (result is List && result.length > 1 && result[0] == 0) {
-      data = result[1];
-    }
-    final values = data is Map ? data['values'] : null;
-    final rules = values is Map ? values.values : const [];
-    final macs = <String>{};
-    for (final rule in rules) {
-      if (rule is! Map) continue;
-      final name = rule['name']?.toString() ?? '';
-      if (!name.startsWith(_openwallaPauseRulePrefix)) continue;
-      if ((rule['enabled']?.toString() ?? '1') == '0') continue;
-      macs.addAll(_firewallMacValues(rule['src_mac']));
-    }
-    return macs;
+    final combined = results.fold<DeviceFirewallState>(
+      const DeviceFirewallState(),
+      (state, next) => state.merge(next),
+    );
+    _parentalPausedMacs.addAll(combined.pausedMacs);
+    return combined;
   }
 
   Future<List<OpenwallaDeviceSchedule>> fetchDeviceSchedules({

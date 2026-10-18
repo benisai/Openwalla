@@ -565,6 +565,9 @@ collect_once() {
 		/etc/init.d/firewall reload >/dev/null 2>&1 || /etc/init.d/firewall restart >/dev/null 2>&1 || true
 	fi
 	collect_quarantined >"$quarantined"
+	# Firewall rules are authoritative. Clear cached quarantine flags before
+	# rebuilding them from the rules collected during this pass.
+	sql_exec "UPDATE devices SET quarantined=0;" || true
 
 	while IFS='|' read -r mac ip host active_now; do
 		[ -n "$mac" ] || continue

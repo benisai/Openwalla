@@ -63,4 +63,15 @@ firewall.disabled.enabled='0'
       ]);
     },
   );
+
+  test('collector rebuilds cached quarantine flags from firewall rules', () {
+    final source = File(
+      'openwrt-setup/files/openwalla-devices-collector.sh',
+    ).readAsStringSync();
+    final reset = source.indexOf('UPDATE devices SET quarantined=0;');
+    final rebuild = source.indexOf('UPDATE devices SET quarantined=1');
+
+    expect(reset, greaterThan(-1));
+    expect(rebuild, greaterThan(reset));
+  });
 }
