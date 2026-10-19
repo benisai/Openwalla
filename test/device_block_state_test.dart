@@ -153,4 +153,34 @@ collect_router_ipv4
       greaterThanOrEqualTo(2),
     );
   });
+
+  test('collector reads actual iwinfo associations on the LAN radio', () async {
+    final source = File(
+      'openwrt-setup/files/openwalla-devices-collector.sh',
+    ).readAsStringSync();
+    final function = shellFunction(source, 'collect_wireless');
+    final result = await Process.run('sh', [
+      '-c',
+      '''
+LAN_NETWORK=lan
+ubus() {
+  if [ "\$2" = network.wireless ]; then
+    printf '%s\\n' '{"radio0":{"interfaces":[{"ifname":"phy0-ap0"}]}}'
+  elif [ "\$2" = iwinfo ] && [ "\$3" = assoclist ]; then
+    printf '%s\\n' '{"results":[{"mac":"AA:BB:CC:DD:EE:01"}]}'
+  fi
+}
+jsonfilter() {
+  case "\$*" in
+    *ifname*) printf '%s\\n' phy0-ap0 ;;
+    *results*) printf '%s\\n' AA:BB:CC:DD:EE:01 ;;
+  esac
+}
+$function
+collect_wireless
+''',
+    ]);
+    expect(result.exitCode, 0, reason: result.stderr.toString());
+    expect(result.stdout.toString().trim(), 'aa:bb:cc:dd:ee:01|||1');
+  });
 }

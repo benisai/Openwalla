@@ -318,6 +318,8 @@ collect_static_dhcp() {
 }
 
 collect_arp() {
+	# A complete ARP entry can still be stale. Prefer NUD reachability when available.
+	ip -4 neigh show dev "$LAN_DEVICE" >/dev/null 2>&1 && return 0
 	if [ -r /proc/net/arp ]; then
 		awk -v dev="$LAN_DEVICE" 'NR>1 {
 			ip=$1
@@ -357,13 +359,21 @@ collect_wireless() {
 	command -v jsonfilter >/dev/null 2>&1 || return 0
 	command -v ubus >/dev/null 2>&1 || return 0
 
-	local json
+	local json interface stations
 	json="$(ubus call network.wireless status 2>/dev/null || true)"
 	[ -n "$json" ] || return 0
 	{
-		jsonfilter -s "$json" -e "@.*.interfaces[@.config.network='$LAN_NETWORK'].stations[*].mac" 2>/dev/null || true
-		jsonfilter -s "$json" -e "@.*.interfaces[@.config.network[0]='$LAN_NETWORK'].stations[*].mac" 2>/dev/null || true
-	} | tr ' ' '\n' | sed '/^$/d' | tr '[:upper:]' '[:lower:]' | sort -u | awk '{ print $1 "|||1" }'
+		jsonfilter -s "$json" -e "@.*.interfaces[@.config.network='$LAN_NETWORK'].ifname" 2>/dev/null || true
+		jsonfilter -s "$json" -e "@.*.interfaces[@.config.network[0]='$LAN_NETWORK'].ifname" 2>/dev/null || true
+	} | sort -u | while IFS= read -r interface; do
+		[ -n "$interface" ] || continue
+		stations="$(ubus call iwinfo assoclist "{\"device\":\"$interface\"}" 2>/dev/null || true)"
+		if [ -n "$stations" ]; then
+			jsonfilter -s "$stations" -e '@.results[*].mac' 2>/dev/null || true
+		elif command -v iw >/dev/null 2>&1; then
+			iw dev "$interface" station dump 2>/dev/null | awk '$1 == "Station" { print $2 }'
+		fi
+	done | tr '[:upper:]' '[:lower:]' | sort -u | awk '{ print $1 "|||1" }'
 }
 
 collect_candidates() {

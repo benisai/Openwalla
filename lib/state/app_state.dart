@@ -31,6 +31,7 @@ import 'package:openwalla/utils/rpc_result.dart';
 import 'package:openwalla/utils/quarantine_release.dart';
 import 'package:openwalla/utils/router_setup_commands.dart';
 import 'package:openwalla/utils/router_identity.dart';
+import 'package:openwalla/services/client_discovery_service.dart';
 
 typedef _WirelessConnection = ({
   String band,
@@ -5959,6 +5960,9 @@ done | sort -t "|" -k1,1nr | head -n ''' +
     bool aggregateAllRouters = false,
     bool activeOnly = false,
     BuildContext? context,
+    model.Router? sourceRouter,
+    String? sourceToken,
+    bool? sourceHttps,
   }) async {
     if (_reviewerModeEnabled) {
       final record = OpenwallaDeviceRecord(
@@ -6078,7 +6082,11 @@ done | sort -t "|" -k1,1nr | head -n ''' +
 
     if (!aggregateAllRouters) {
       try {
-        return await readFor();
+        return await readFor(
+          router: sourceRouter,
+          sysauth: sourceToken,
+          useHttps: sourceHttps,
+        );
       } catch (e, stack) {
         Logger.debug('Optional devices DB record read failed: $e');
         Logger.debug('Optional devices DB record stack: $stack');
@@ -12825,6 +12833,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
     required model.Router router,
     required String sysauth,
     required bool useHttps,
+    void Function(bool)? onAvailability,
   }) async {
     final connections = <String, _WirelessConnection>{};
     try {
@@ -12837,7 +12846,9 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         params: {},
       );
       final data = _extractRpcData(result);
-      if (data is! Map) return connections;
+      if (data is! Map) {
+        throw StateError('Wireless device discovery unavailable');
+      }
       for (final radioData in data.values) {
         if (radioData is! Map || radioData['interfaces'] is! List) continue;
         for (final rawInterface in radioData['interfaces'] as List) {
@@ -12853,6 +12864,10 @@ done | sort -t "|" -k1,1nr | head -n ''' +
           final config = rawInterface['config'] is Map
               ? rawInterface['config'] as Map
               : const {};
+          if (config['mode'] == 'sta' ||
+              iwinfo['mode']?.toString().toLowerCase() == 'client') {
+            continue;
+          }
           final ssid =
               (iwinfo['ssid'] ?? config['ssid'] ?? rawInterface['ssid'] ?? '')
                   .toString()
@@ -12879,13 +12894,23 @@ done | sort -t "|" -k1,1nr | head -n ''' +
             _ when channel != null && channel > 0 => '2.4 GHz',
             _ => '',
           };
-          final stations = await _apiService!
-              .fetchAssociatedStationsWithContext(
-                ipAddress: router.ipAddress,
-                sysauth: sysauth,
-                useHttps: useHttps,
-                interface: interfaceName,
-              );
+          final stationResult = await _apiService!.call(
+            router.ipAddress,
+            sysauth,
+            useHttps,
+            object: 'iwinfo',
+            method: 'assoclist',
+            params: {'device': interfaceName},
+            receiveTimeout: const Duration(seconds: 6),
+          );
+          final stationData = rpcDataMap(stationResult);
+          if (stationData?['results'] is! List) {
+            throw StateError('Wireless association query unavailable');
+          }
+          final stations = (stationData!['results'] as List)
+              .whereType<Map>()
+              .map((entry) => entry['mac']?.toString() ?? '')
+              .where((mac) => mac.isNotEmpty);
           for (final station in stations) {
             connections[_normalizeMacAddress(station)] = (
               band: band,
@@ -12895,9 +12920,32 @@ done | sort -t "|" -k1,1nr | head -n ''' +
           }
         }
       }
+      onAvailability?.call(true);
     } catch (e, stack) {
+      onAvailability?.call(false);
       Logger.debug('Optional wireless connection mapping failed: $e');
       Logger.debug('Optional wireless connection mapping stack: $stack');
+      try {
+        final stations = await _apiService!
+            .fetchAllAssociatedWirelessMacsWithContext(
+              ipAddress: router.ipAddress,
+              sysauth: sysauth,
+              useHttps: useHttps,
+            );
+        stations.forEach((interfaceName, macs) {
+          for (final mac in macs) {
+            connections.putIfAbsent(
+              _normalizeMacAddress(mac),
+              () => (band: '', interfaceName: interfaceName, ssid: ''),
+            );
+          }
+        });
+        if (stations.values.any((macs) => macs.isNotEmpty)) {
+          onAvailability?.call(true);
+        }
+      } catch (_) {
+        // Preserve cached status when the router cannot supply associations.
+      }
     }
     return connections;
   }
@@ -12978,6 +13026,51 @@ done | sort -t "|" -k1,1nr | head -n ''' +
   }
 
   Future<List<Client>> _fetchAggregatedClientsRaw() async {
+    if (!_reviewerModeEnabled) {
+      final routers = _routerService?.routers ?? const <model.Router>[];
+      if (routers.length == 1) return fetchClientsForSelectedRouter();
+      final lists = await Future.wait(
+        routers.map((router) async {
+          try {
+            if (router.id == _routerService?.selectedRouter?.id &&
+                _authService?.sysauth != null) {
+              return await _discoverClientsForRouter(
+                router,
+                _authService!.sysauth!,
+                _authService!.useHttps,
+              );
+            }
+            if (_apiService is! RealApiService) return <Client>[];
+            final login = await (_apiService as RealApiService)
+                .loginWithProtocolDetection(
+                  router.ipAddress,
+                  router.username,
+                  router.password,
+                  router.useHttps,
+                );
+            if (login.token == null) return <Client>[];
+            return await _discoverClientsForRouter(
+              router,
+              login.token!,
+              login.actualUseHttps,
+            );
+          } catch (error) {
+            Logger.debug('Client discovery failed for saved router: $error');
+            return <Client>[];
+          }
+        }),
+      );
+      final byMac = <String, Client>{};
+      for (final list in lists) {
+        for (final client in list) {
+          final key = _normalizeMacAddress(client.macAddress);
+          if (byMac[key]?.isConnected != true || client.isConnected) {
+            byMac[key] = client;
+          }
+        }
+      }
+      return byMac.values.toList();
+    }
     try {
       final staticLeasesFuture = fetchAggregatedStaticDhcpReservations();
       final wirelessConnectionsFuture = _fetchAggregatedWirelessConnections();
@@ -13080,6 +13173,99 @@ done | sort -t "|" -k1,1nr | head -n ''' +
     }
   }
 
+  final Map<String, Map<String, DateTime>> _clientWiredLastSeen = {};
+  final Map<String, Set<String>> _clientKnownWireless = {};
+
+  Future<List<Client>> _discoverClientsForRouter(
+    model.Router router,
+    String token,
+    bool useHttps,
+  ) async {
+    Future<dynamic> call(
+      String object,
+      String method,
+      Map<String, dynamic> params,
+    ) => _apiService!.call(
+      router.ipAddress,
+      token,
+      useHttps,
+      object: object,
+      method: method,
+      params: params,
+      receiveTimeout: const Duration(seconds: 6),
+    );
+
+    var wirelessAvailable = false;
+    final snapshotFuture = ClientDiscoveryService(call).fetch();
+    final connectionsFuture = _fetchWirelessConnectionsForRouter(
+      router: router,
+      sysauth: token,
+      useHttps: useHttps,
+      onAvailability: (available) => wirelessAvailable = available,
+    );
+    final recordsFuture = fetchDeviceRecords(
+      sourceRouter: router,
+      sourceToken: token,
+      sourceHttps: useHttps,
+    );
+    final firewallFuture = call('uci', 'get', {'config': 'firewall'})
+        .then(parseDeviceFirewallState)
+        .catchError((_) => const DeviceFirewallState(available: false));
+    final snapshot = await snapshotFuture;
+    final connections = await connectionsFuture;
+    final records = await recordsFuture;
+    final firewall = await firewallFuture;
+    if (_routerService?.selectedRouter?.id == router.id) {
+      _parentalPausedMacs
+        ..clear()
+        ..addAll(firewall.pausedMacs);
+    }
+    final knownWireless = _clientKnownWireless.putIfAbsent(router.id, () => {});
+    knownWireless.addAll(connections.keys);
+    final now = DateTime.now();
+    final recent = _clientWiredLastSeen.putIfAbsent(router.id, () => {});
+    for (final mac in snapshot.activeWired) {
+      recent[mac] = now;
+    }
+    recent.removeWhere(
+      (_, seen) => now.difference(seen) >= const Duration(seconds: 90),
+    );
+    snapshot.activeWired.addAll(recent.keys);
+    snapshot.excludedMacs.addAll(
+      records.$1.values
+          .where((record) => record.hidden)
+          .map((record) => record.mac),
+    );
+    final history = _clientsFromDeviceDbRecords(records).map(
+      (client) =>
+          knownWireless.contains(_normalizeMacAddress(client.macAddress))
+          ? client.copyWith(connectionType: ConnectionType.wireless)
+          : client,
+    );
+    final wireless = <String, Client>{};
+    connections.forEach((mac, connection) {
+      wireless[mac] = Client.fromWirelessStation(mac).copyWith(
+        ssid: connection.ssid,
+        wirelessInterface: connection.interfaceName,
+        wirelessBand: connection.band,
+      );
+    });
+    final clients = _applyQuarantineState(
+      snapshot.merge(
+        history: history,
+        wireless: wireless,
+        wirelessAvailable: wirelessAvailable,
+      ),
+      firewall,
+    );
+    clients.sort((a, b) {
+      if (a.isBlocked != b.isBlocked) return a.isBlocked ? -1 : 1;
+      if (a.isConnected != b.isConnected) return a.isConnected ? -1 : 1;
+      return a.hostname.toLowerCase().compareTo(b.hostname.toLowerCase());
+    });
+    return clients;
+  }
+
   /// Returns clients for the currently selected router only
   Future<List<Client>> fetchClientsForSelectedRouter() async {
     try {
@@ -13156,115 +13342,11 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       }
       final router = _routerService!.selectedRouter!;
 
-      final staticLeasesFuture = fetchStaticDhcpReservations();
-      final wirelessConnectionsFuture = _fetchWirelessConnectionsForRouter(
-        router: router,
-        sysauth: _authService!.sysauth!,
-        useHttps: router.useHttps,
+      return await _discoverClientsForRouter(
+        router,
+        _authService!.sysauth!,
+        _authService!.useHttps,
       );
-      final activeDeviceRecords = await fetchDeviceRecords();
-      if (activeDeviceRecords.$1.isNotEmpty) {
-        final firewallState = await fetchDeviceFirewallStateForSelectedRouter();
-        final clients = _applyQuarantineState(
-          _applyClientConnectionDetails(
-            _clientsFromDeviceDbRecords(activeDeviceRecords),
-            await wirelessConnectionsFuture,
-          ),
-          firewallState,
-        );
-        return _applyStaticDhcpReservations(
-          clients,
-          await staticLeasesFuture,
-        ).toList();
-      }
-
-      final leasesFuture = _apiService!
-          .call(
-            router.ipAddress,
-            _authService!.sysauth!,
-            router.useHttps,
-            object: 'luci-rpc',
-            method: 'getDHCPLeases',
-            params: {},
-          )
-          .catchError((_) => null);
-      final deviceRecordsFuture = fetchDeviceRecords();
-      final firewallStateFuture = fetchDeviceFirewallStateForSelectedRouter();
-
-      final wirelessConnections = await wirelessConnectionsFuture;
-
-      final callRes = await leasesFuture;
-      final leases = <Map<String, dynamic>>[];
-      if (callRes is List && callRes.length > 1 && callRes[0] == 0) {
-        final data = callRes[1] as Map<String, dynamic>;
-        leases.addAll(
-          (data['dhcp_leases'] as List<dynamic>? ?? [])
-              .cast<Map<String, dynamic>>(),
-        );
-      }
-
-      // Normalize wireless MACs for consistent lookup
-      final normalizedWireless = wirelessConnections.keys.toSet();
-
-      final clientMap = <String, Client>{};
-      for (final l in leases) {
-        final c = Client.fromLease(l);
-        final macNorm = c.macAddress.toUpperCase().replaceAll('-', ':');
-        final isWireless = normalizedWireless.contains(macNorm);
-        clientMap[macNorm] = isWireless
-            ? c.copyWith(
-                connectionType: ConnectionType.wireless,
-                ssid: wirelessConnections[macNorm]?.ssid,
-                wirelessInterface: wirelessConnections[macNorm]?.interfaceName,
-                wirelessBand: wirelessConnections[macNorm]?.band,
-              )
-            : c.copyWith(connectionType: ConnectionType.wired);
-      }
-
-      // Add wireless stations not in DHCP leases (AP-mode fallback)
-      for (final mac in normalizedWireless) {
-        if (!clientMap.containsKey(mac)) {
-          final connection = wirelessConnections[mac];
-          clientMap[mac] = Client.fromWirelessStation(mac).copyWith(
-            ssid: connection?.ssid,
-            wirelessInterface: connection?.interfaceName,
-            wirelessBand: connection?.band,
-          );
-        }
-      }
-
-      final clients = clientMap.values.toList();
-      final deviceRecords = await deviceRecordsFuture;
-      final firewallState = await firewallStateFuture;
-      final markedClients = _applyQuarantineState(
-        _applyStaticDhcpReservations(
-          _applyDeviceDbRecords(clients, deviceRecords),
-          await staticLeasesFuture,
-        ),
-        firewallState,
-      );
-
-      // Sort similar to aggregated
-      markedClients.sort((a, b) {
-        if (a.isBlocked != b.isBlocked) return a.isBlocked ? -1 : 1;
-        int typeOrder(ConnectionType t) {
-          switch (t) {
-            case ConnectionType.wireless:
-              return 0;
-            case ConnectionType.wired:
-              return 1;
-            default:
-              return 2;
-          }
-        }
-
-        final cmpType = typeOrder(
-          a.connectionType,
-        ).compareTo(typeOrder(b.connectionType));
-        if (cmpType != 0) return cmpType;
-        return a.hostname.toLowerCase().compareTo(b.hostname.toLowerCase());
-      });
-      return markedClients;
     } catch (e, stack) {
       Logger.exception('Failed to fetch clients for selected router', e, stack);
       return [];
