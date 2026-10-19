@@ -183,4 +183,102 @@ collect_wireless
     expect(result.exitCode, 0, reason: result.stderr.toString());
     expect(result.stdout.toString().trim(), 'aa:bb:cc:dd:ee:01|||1');
   });
+
+  test(
+    'failed quarantine is retried without remembering or notifying success',
+    () async {
+      final source = File(
+        'openwrt-setup/files/openwalla-devices-collector.sh',
+      ).readAsStringSync();
+      final functions = [
+        'process_new_device',
+        'quarantine_new_device',
+      ].map((name) => shellFunction(source, name)).join('\n');
+      final directory = await Directory.systemTemp.createTemp(
+        'openwalla-quarantine-retry-',
+      );
+      try {
+        final result = await Process.run('sh', [
+          '-c',
+          '''
+STATE_FILE="\$1/known"
+QUARANTINE_ENABLED=1
+engine_fails=1
+is_known_mac() { grep -qx "\$1" "\$STATE_FILE" 2>/dev/null; }
+remember_mac() { printf '%s\\n' "\$1" >>"\$STATE_FILE"; }
+is_enabled_flag() { [ "\$1" = 1 ]; }
+is_ipv4() { return 0; }
+apply_device_access() { [ "\$engine_fails" = 0 ]; }
+sql_escape() { printf '%s' "\$1"; }
+sql_exec() { :; }
+write_quarantine_notification() { echo success >>"\$STATE_FILE.notifications"; }
+log() { :; }
+$functions
+process_new_device aa:bb:cc:dd:ee:ff 192.168.1.5 android
+[ "\$?" = 2 ] || exit 11
+[ ! -s "\$STATE_FILE" ] || exit 12
+[ ! -e "\$STATE_FILE.notifications" ] || exit 13
+engine_fails=0
+process_new_device aa:bb:cc:dd:ee:ff 192.168.1.5 android || exit 14
+grep -qx aa:bb:cc:dd:ee:ff "\$STATE_FILE" || exit 15
+[ "\$(wc -l <"\$STATE_FILE.notifications" | tr -d ' ')" = 1 ] || exit 16
+''',
+          'retry-test',
+          directory.path,
+        ]);
+        expect(
+          result.exitCode,
+          0,
+          reason: '${result.stdout}\n${result.stderr}',
+        );
+      } finally {
+        await directory.delete(recursive: true);
+      }
+    },
+  );
+
+  test(
+    'existing IPv4 quarantine rules upgrade through the shared engine once',
+    () async {
+      final source = File(
+        'openwrt-setup/files/openwalla-devices-collector.sh',
+      ).readAsStringSync();
+      final directory = await Directory.systemTemp.createTemp(
+        'openwalla-quarantine-upgrade-',
+      );
+      try {
+        final function = shellFunction(source, 'upgrade_quarantine_rules')
+            .replaceAll(
+              '/tmp/openwalla/device-access-migrated-v1',
+              '${directory.path}/done',
+            );
+        final result = await Process.run('sh', [
+          '-c',
+          '''
+collect_quarantined() { echo aa:bb:cc:dd:ee:ff; }
+uci() { echo firewall.old=rule; }
+uci_get() {
+  case "\$1" in
+    *.name) echo openwalla_quarantine_phone_lan ;;
+    *.src_mac) echo aa:bb:cc:dd:ee:ff ;;
+    *.family) echo ipv4 ;;
+  esac
+}
+apply_device_access() { printf '%s\\n' "\$*" >>"\$1file"; }
+$function
+upgrade_quarantine_rules || exit 1
+upgrade_quarantine_rules || exit 2
+'''
+              .replaceAll('"\$1file"', '"${directory.path}/calls"'),
+        ]);
+        expect(result.exitCode, 0, reason: result.stderr.toString());
+        expect(
+          await File('${directory.path}/calls').readAsString(),
+          'block quarantine aa:bb:cc:dd:ee:ff\n',
+        );
+      } finally {
+        await directory.delete(recursive: true);
+      }
+    },
+  );
 }

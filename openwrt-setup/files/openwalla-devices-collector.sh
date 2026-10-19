@@ -17,6 +17,7 @@ set -u
 PATH="/usr/sbin:/usr/bin:/sbin:/bin"
 export PATH
 mkdir -p /tmp/openwalla
+[ ! -r /usr/lib/openwalla/device-access.sh ] || . /usr/lib/openwalla/device-access.sh
 
 DEFAULT_DB="/tmp/openwalla/openwalla-devices.sqlite"
 DEFAULT_POLL_SECONDS="60"
@@ -479,50 +480,37 @@ remember_mac() {
 	is_known_mac "$1" || printf '%s\n' "$1" >>"$STATE_FILE"
 }
 
-rule_name_for() {
-	local mac safe
-	mac="$1"
-	safe="$(sanitize_name "${2:-}")"
-	[ -n "$safe" ] && [ "$safe" != "*" ] || safe="$(printf '%s' "$mac" | tr -d ':')"
-	printf '%s%s' "$RULE_PREFIX" "$safe"
-}
-
-rule_exists_by_name() {
-	uci -q show firewall 2>/dev/null | grep -Fq "name='$1'"
-}
-
-add_quarantine_rule() {
-	local name="$1" mac="$2" destination="$3" sid
-	sid="$(uci add firewall rule 2>/dev/null || true)"
-	[ -n "$sid" ] || return 1
-	uci set firewall."$sid".name="$name"
-	uci set firewall."$sid".src="lan"
-	uci set firewall."$sid".dest="$destination"
-	uci set firewall."$sid".src_mac="$mac"
-	uci set firewall."$sid".proto="all"
-	uci set firewall."$sid".target="REJECT"
-	uci set firewall."$sid".family="ipv4"
-	uci set firewall."$sid".enabled="1"
+apply_device_access() {
+	if ! command -v openwalla_device_access >/dev/null 2>&1; then
+		log "device access engine missing; update the Devices Collector component"
+		return 1
+	fi
+	openwalla_device_access "$@"
 }
 
 remove_quarantine_rules_for_mac() {
-	local mac="$1" section name source changed pass
-	changed=0
-	for pass in 1 2 3 4; do
-		for section in $(uci -q show firewall 2>/dev/null | sed -n 's/^firewall\.\([^.=]*\)=rule$/\1/p'); do
+	local mac="$1"
+	{ collect_firewall_macs "$RULE_PREFIX"; collect_firewall_macs owrt_device_block_; } |
+		grep -qx "$mac" || return 1
+	apply_device_access clear all "$mac" || return 2
+}
+
+upgrade_quarantine_rules() {
+	local mac section source family name
+	[ ! -f /tmp/openwalla/device-access-migrated-v1 ] || return 0
+	for mac in $(collect_quarantined); do
+		for section in $(uci -q show firewall | sed -n 's/^firewall\.\([^.=]*\)=rule$/\1/p'); do
 			name="$(uci_get firewall."$section".name)"
+			case "$name" in openwalla_quarantine_*) ;; *) continue ;; esac
 			source="$(uci_get firewall."$section".src_mac | tr '[:upper:]' '[:lower:]')"
-			case "$name" in
-		"${RULE_PREFIX}"*|owrt_device_block_*)
-				if [ "$source" = "$mac" ]; then
-					uci -q delete firewall."$section" >/dev/null 2>&1 || true
-					changed=1
-				fi
-				;;
-			esac
+			[ "$source" = "$mac" ] || continue
+			family="$(uci_get firewall."$section".family)"
+			[ "$family" = ipv4 ] || continue
+			apply_device_access block quarantine "$mac" || return 1
+			break
 		done
 	done
-	[ "$changed" = "1" ]
+	: >/tmp/openwalla/device-access-migrated-v1
 }
 
 write_quarantine_notification() {
@@ -534,29 +522,28 @@ write_quarantine_notification() {
 }
 
 quarantine_new_device() {
-	local mac="$1" ip="$2" host="$3" base lan wan esc_mac esc_ip esc_host
-	base="$(rule_name_for "$mac" "$host")"
-	lan="${base}_lan"
-	wan="${base}_wan"
-	rule_exists_by_name "$lan" || add_quarantine_rule "$lan" "$mac" "lan" || true
-	rule_exists_by_name "$wan" || add_quarantine_rule "$wan" "$mac" "wan" || true
+	local mac="$1" ip="$2" host="$3" esc_mac esc_ip esc_host
+	apply_device_access block quarantine "$mac" || return 1
 	esc_mac="$(sql_escape "$mac")"
 	esc_ip="$(sql_escape "$ip")"
 	esc_host="$(sql_escape "$host")"
 	sql_exec "INSERT INTO devices (mac, ip, hostname, quarantined, last_seen, status) VALUES ('$esc_mac', '$esc_ip', '$esc_host', 1, CAST(strftime('%s','now') AS INTEGER), 'blocked') ON CONFLICT(mac) DO UPDATE SET ip=excluded.ip, hostname=CASE WHEN devices.hostname='' AND excluded.hostname!='' THEN excluded.hostname ELSE devices.hostname END, quarantined=1, last_seen=excluded.last_seen, status='blocked';" || true
 	write_quarantine_notification "New device quarantined mac=$mac ip=$ip host=${host:-unknown}"
 	log "quarantined new IPv4 device mac=$mac ip=$ip host=${host:-unknown}"
+	return 0
 }
 
 process_new_device() {
 	local mac="$1" ip="$2" host="$3"
 	is_known_mac "$mac" && return 1
-	remember_mac "$mac"
 	if is_enabled_flag "$QUARANTINE_ENABLED" && [ -n "$ip" ] && is_ipv4 "$ip"; then
-		quarantine_new_device "$mac" "$ip" "$host"
-		return 0
+		if ! quarantine_new_device "$mac" "$ip" "$host"; then
+			log "quarantine failed for mac=$mac; next scan will retry"
+			return 2
+		fi
 	fi
-	return 1
+	remember_mac "$mac"
+	return 0
 }
 
 mark_device_active() {
@@ -568,11 +555,12 @@ mark_device_active() {
 }
 
 cleanup_excluded_devices() {
-	local mac esc_mac changed
-	changed=0
+	local mac esc_mac result
 	while IFS= read -r mac; do
 		[ -n "$mac" ] || continue
-		if remove_quarantine_rules_for_mac "$mac"; then changed=1; fi
+		remove_quarantine_rules_for_mac "$mac"
+		result=$?
+		[ "$result" != 2 ] || { log "could not release excluded mac=$mac; retrying next scan"; continue; }
 		esc_mac="$(sql_escape "$mac")"
 		sql_exec "DELETE FROM devices WHERE lower(mac)='$esc_mac';" || true
 	done <<EOF
@@ -580,10 +568,6 @@ $(collect_router_macs)
 $(collect_router_device_macs)
 $($SQLITE_BIN "$DB_PATH" "SELECT lower(mac) FROM devices WHERE instr(ip, ':') > 0;" 2>/dev/null || true)
 EOF
-	if [ "$changed" = "1" ]; then
-		uci commit firewall
-		/etc/init.d/firewall reload >/dev/null 2>&1 || true
-	fi
 }
 
 collect_once() {
@@ -597,6 +581,7 @@ collect_once() {
 	collect_candidates >"$candidates"
 	collect_totals >"$totals"
 	cleanup_excluded_devices
+	upgrade_quarantine_rules || log "existing quarantine upgrade failed; retrying next scan"
 
 	fresh_state=0
 	[ -f "$STATE_FILE" ] || fresh_state=1
@@ -605,16 +590,15 @@ collect_once() {
 	while IFS='|' read -r mac ip host active_now; do
 		[ -n "$mac" ] && [ -n "$ip" ] && is_ipv4 "$ip" || continue
 		is_router_ipv4 "$ip" && continue
+		is_router_mac "$mac" && continue
+		is_hidden_mac "$mac" && continue
 		if [ "$fresh_state" = "1" ]; then
 			remember_mac "$mac"
-		elif process_new_device "$mac" "$ip" "$host"; then
-			changed=1
+		else
+			process_new_device "$mac" "$ip" "$host"
+			[ "$?" != 2 ] || changed=1
 		fi
 	done <"$candidates"
-	if [ "$changed" = "1" ]; then
-		uci commit firewall
-		/etc/init.d/firewall reload >/dev/null 2>&1 || /etc/init.d/firewall restart >/dev/null 2>&1 || true
-	fi
 	collect_quarantined >"$quarantined"
 	# Firewall rules are authoritative. Clear cached quarantine flags before
 	# rebuilding them from the rules collected during this pass.
@@ -669,6 +653,7 @@ collect_once() {
 	done
 
 	rm -f "$candidates" "$totals" "$quarantined"
+	[ "$changed" = 0 ]
 }
 
 handle_event() {
@@ -695,28 +680,22 @@ handle_event() {
 		remember_mac "$mac"
 		return 0
 	fi
-	if process_new_device "$mac" "$ip" "$host"; then
-		uci commit firewall
-		/etc/init.d/firewall reload >/dev/null 2>&1 || /etc/init.d/firewall restart >/dev/null 2>&1 || true
-	fi
+	process_new_device "$mac" "$ip" "$host"
 }
 
 hide_device() {
-	local mac esc_mac changed
+	local mac esc_mac result
 	mac="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
 	case "$mac" in
 	[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]) ;;
 	*) return 1 ;;
 	esac
-	changed=0
-	if remove_quarantine_rules_for_mac "$mac"; then changed=1; fi
+	remove_quarantine_rules_for_mac "$mac"
+	result=$?
+	[ "$result" != 2 ] || return 1
 	esc_mac="$(sql_escape "$mac")"
 	sql_exec "INSERT INTO devices (mac, hidden, quarantined, status) VALUES ('$esc_mac', 1, 0, 'offline') ON CONFLICT(mac) DO UPDATE SET hidden=1, quarantined=0, scheduled_block=0, schedule_until='', status='offline';" || return 1
 	remember_mac "$mac"
-	if [ "$changed" = "1" ]; then
-		uci commit firewall
-		/etc/init.d/firewall reload >/dev/null 2>&1 || true
-	fi
 }
 
 run_locked() {

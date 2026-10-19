@@ -137,7 +137,14 @@ check_file() {
 	service="$4"
 
 	# Components that were never selected in Router Setup remain untouched.
-	[ -e "$destination" ] || return 0
+	if [ ! -e "$destination" ]; then
+		case "$source_path" in
+		files/openwalla-device-access.sh)
+			[ -x /usr/bin/openwalla-devices-collector ] || return 0
+			;;
+		*) return 0 ;;
+		esac
+	fi
 	MANAGED=$((MANAGED + 1))
 	temporary="$TMP_DIR/$(basename "$destination").$MANAGED"
 	if ! download "$RAW_BASE/$source_path" "$temporary"; then
@@ -146,14 +153,14 @@ check_file() {
 		return 0
 	fi
 
-	if [ "$(checksum "$temporary")" = "$(checksum "$destination")" ]; then
+	if [ -e "$destination" ] && [ "$(checksum "$temporary")" = "$(checksum "$destination")" ]; then
 		CURRENT=$((CURRENT + 1))
 		return 0
 	fi
 
 	echo "OUTDATED|$destination"
 	[ "$ACTION" = "update" ] || return 0
-	if cp "$temporary" "$destination" && chmod "$mode" "$destination"; then
+	if mkdir -p "$(dirname "$destination")" && cp "$temporary" "$destination" && chmod "$mode" "$destination"; then
 		echo "UPDATED|$destination"
 		UPDATED=$((UPDATED + 1))
 		touch_service "$service"
@@ -185,6 +192,7 @@ files/openwalla-dns-monitor.sh|/usr/bin/openwalla-dns-monitor|0755|openwalla-dns
 files/openwalla-dns-monitor.init|/etc/init.d/openwalla-dns-monitor|0755|openwalla-dns-monitor
 files/openwalla-speedtest-monitor.sh|/usr/bin/openwalla-speedtest-monitor|0755|
 files/openwalla-notifications-db.sh|/usr/bin/openwalla-notifications-db|0755|
+files/openwalla-device-access.sh|/usr/lib/openwalla/device-access.sh|0644|openwalla-devices-collector
 files/openwalla-devices-collector.sh|/usr/bin/openwalla-devices-collector|0755|openwalla-devices-collector
 files/openwalla-devices-collector.init|/etc/init.d/openwalla-devices-collector|0755|openwalla-devices-collector
 files/oui/openwalla-mac-vendors.txt|/usr/share/openwalla/openwalla-mac-vendors.txt|0644|

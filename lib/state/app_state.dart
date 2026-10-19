@@ -28,7 +28,7 @@ import 'package:openwalla/utils/device_firewall_state.dart';
 import 'package:openwalla/utils/geo_blocking.dart';
 import 'package:openwalla/utils/logger.dart';
 import 'package:openwalla/utils/rpc_result.dart';
-import 'package:openwalla/utils/quarantine_release.dart';
+import 'package:openwalla/services/device_access_service.dart';
 import 'package:openwalla/utils/router_setup_commands.dart';
 import 'package:openwalla/utils/router_identity.dart';
 import 'package:openwalla/services/client_discovery_service.dart';
@@ -3740,7 +3740,12 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
       'on',
       'enabled',
     }.contains(enabledValue);
-    const interval = 15;
+    final devices = values?['devices'];
+    final interval =
+        int.tryParse(
+          devices is Map ? devices['poll_seconds']?.toString() ?? '' : '',
+        ) ??
+        60;
     final router = _routerService?.selectedRouter;
     final sysauth = _authService?.sysauth;
     var running = false;
@@ -3780,7 +3785,6 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
         intervalSeconds: intervalSeconds.clamp(10, 3600),
       );
     }
-    const interval = 15;
     final expectedEnabled = enabled ? '1' : '0';
     final router = _routerService?.selectedRouter;
     final sysauth = _authService?.sysauth;
@@ -3794,7 +3798,7 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
       router.useHttps,
       config: 'openwalla',
       section: 'quarantine',
-      values: {'enabled': expectedEnabled, 'interval': interval.toString()},
+      values: {'enabled': expectedEnabled},
     );
     if (!_rpcCallSucceeded(setResult)) {
       throw StateError('Router rejected the quarantine setting');
@@ -3815,7 +3819,7 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
       router.useHttps,
       config: 'openwalla',
       section: 'devices',
-      values: {'poll_seconds': '15', 'enabled': '1'},
+      values: {'enabled': '1'},
     );
     await _apiService!.uciCommit(
       router.ipAddress,
@@ -3842,7 +3846,7 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
   Future<void> runQuarantineDiscovery({BuildContext? context}) async {
     if (_reviewerModeEnabled) return;
     await runRouterSetupCommand(
-      '/usr/bin/openwalla-devices-collector --once 2>/dev/null || true',
+      '/usr/bin/openwalla-devices-collector --once',
       context: context,
     );
     notifyListeners();
@@ -3852,7 +3856,11 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
     Client client, {
     BuildContext? context,
   }) async {
-    await queueClientInternetUnblock(client);
+    await _changeDeviceAccess(
+      client,
+      blocked: false,
+      reason: DeviceBlockReason.quarantine,
+    );
     notifyListeners();
   }
 
@@ -14408,265 +14416,62 @@ uci commit dhcp
     return _commandOutput(await _callOpenwallaParental(args, context: context));
   }
 
-  Future<void> setClientInternetBlocked(Client client, bool blocked) async {
-    if (!blocked) {
-      await queueClientInternetUnblock(client);
-      return;
-    }
-    if (_reviewerModeEnabled) {
-      notifyListeners();
-      return;
-    }
-
-    final router = _routerService?.selectedRouter;
-    final sysauth = _authService?.sysauth;
-    if (router == null || sysauth == null || _apiService == null) {
-      throw StateError('No selected router connection is available');
-    }
-
-    final normalizedMac = _normalizeMacAddress(client.macAddress);
-    if (!RegExp(r'^([0-9A-F]{2}:){5}[0-9A-F]{2}$').hasMatch(normalizedMac)) {
-      throw ArgumentError('A valid device MAC address is required');
-    }
-
-    final firewall = await _apiService!.call(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      object: 'uci',
-      method: 'get',
-      params: {'config': 'firewall'},
-    );
-    final values = _extractUciValues(firewall);
-    if (!_rpcCallSucceeded(firewall)) {
-      throw StateError('Router rejected reading device block rules');
-    }
-    final quarantineSections = _firewallSectionsForMac(
-      values,
-      normalizedMac,
-      prefixes: const [manualDeviceBlockPrefix],
-    );
-
-    if (blocked) {
-      final baseName =
-          '$manualDeviceBlockPrefix${normalizedMac.replaceAll(':', '').toLowerCase()}';
-      final existingNames = quarantineSections
-          .map((entry) => entry.name)
-          .toSet();
-      if (!existingNames.contains('${baseName}_lan')) {
-        await _addClientFirewallRule(
-          router: router,
-          sysauth: sysauth,
-          mac: normalizedMac,
-          name: '${baseName}_lan',
-          destination: 'lan',
-        );
-      }
-      if (!existingNames.contains('${baseName}_wan')) {
-        await _addClientFirewallRule(
-          router: router,
-          sysauth: sysauth,
-          mac: normalizedMac,
-          name: '${baseName}_wan',
-          destination: 'wan',
-        );
-      }
-      if (!existingNames.contains('${baseName}_router')) {
-        await _addClientFirewallRule(
-          router: router,
-          sysauth: sysauth,
-          mac: normalizedMac,
-          name: '${baseName}_router',
-        );
-      }
-      for (final rule in quarantineSections) {
-        final destination = rule.name.endsWith('_router')
-            ? null
-            : rule.name.endsWith('_lan')
-            ? 'lan'
-            : 'wan';
-        await _configureClientFirewallRule(
-          router: router,
-          sysauth: sysauth,
-          section: rule.section,
-          mac: normalizedMac,
-          name: rule.name,
-          destination: destination,
-        );
-      }
-    }
-
-    final commitResult = await _apiService!.uciCommit(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      config: 'firewall',
-    );
-    if (!_rpcCallSucceeded(commitResult)) {
-      throw StateError('Router rejected saving the device block');
-    }
-    await _applyDeviceAccessFirewall(router, sysauth);
-    unawaited(
-      _queueImmediateDeviceBlock(router, sysauth, normalizedMac).catchError((
-        Object error,
-      ) {
-        Logger.warning(
-          'Device block saved; immediate enforcement could not be queued: $error',
-        );
-      }),
-    );
-    // The collector persists the state from these rules; no blocking DB RPC is needed.
-    notifyListeners();
-  }
-
-  Future<void> queueClientInternetUnblock(Client client) async {
-    if (_reviewerModeEnabled) {
-      notifyListeners();
-      return;
-    }
-
-    final router = _routerService?.selectedRouter;
-    final sysauth = _authService?.sysauth;
-    if (router == null || sysauth == null || _apiService == null) {
-      throw StateError('No selected router connection is available');
-    }
-
-    final normalizedMac = _normalizeMacAddress(client.macAddress);
-    if (!RegExp(r'^([0-9A-F]{2}:){5}[0-9A-F]{2}$').hasMatch(normalizedMac)) {
-      throw ArgumentError('A valid device MAC address is required');
-    }
-
-    try {
-      await _queueClientInternetUnblock(
-        router: router,
-        sysauth: sysauth,
-        mac: normalizedMac,
+  Future<void> setClientInternetBlocked(Client client, bool blocked) =>
+      _changeDeviceAccess(
+        client,
+        blocked: blocked,
+        reason: blocked ? DeviceBlockReason.manual : null,
       );
-    } catch (error) {
-      if (!_looksLikeExpiredSession(error) ||
-          !await refreshRouterAuthenticationAfterSetup()) {
-        rethrow;
-      }
-      await _queueClientInternetUnblock(
-        router: router,
-        sysauth: _authService!.sysauth!,
-        mac: normalizedMac,
-      );
-    }
-    notifyListeners();
-  }
 
-  Future<void> _queueClientInternetUnblock({
-    required model.Router router,
-    required String sysauth,
-    required String mac,
+  Future<void> queueClientInternetUnblock(Client client) =>
+      setClientInternetBlocked(client, false);
+
+  Future<void> _changeDeviceAccess(
+    Client client, {
+    required bool blocked,
+    required DeviceBlockReason? reason,
   }) async {
-    await releaseQuarantineRules(
-      mac: mac,
-      call: (object, method, params) => _apiService!.call(
+    if (_reviewerModeEnabled) {
+      notifyListeners();
+      return;
+    }
+    final router = _routerService?.selectedRouter;
+    final token = _authService?.sysauth;
+    if (router == null || token == null || _apiService == null) {
+      throw StateError('No selected router connection is available');
+    }
+    final service = DeviceAccessService(
+      rpc: (args) => _apiService!.call(
         router.ipAddress,
-        sysauth,
+        token,
         router.useHttps,
-        object: object,
-        method: method,
-        params: params,
+        object: 'file',
+        method: 'exec',
+        params: {'command': '/bin/sh', 'params': args},
+        receiveTimeout: const Duration(seconds: 60),
       ),
-      reloadFirewall: () => _reloadDeviceAccessFirewall(router, sysauth),
+      ssh: (script, args) async {
+        final result = await SshService().runCommand(
+          host: routerAclSshHost(router.ipAddress),
+          username: router.username,
+          password: router.password,
+          command: '/bin/sh -s -- ${args.map(_shellQuote).join(' ')}',
+          stdin: script,
+        );
+        if (result.exitCode != 0) {
+          throw StateError(
+            'Router could not update device access: ${result.output}',
+          );
+        }
+        return result.output;
+      },
     );
-    final escapedMac = mac.toLowerCase().replaceAll("'", "''");
-    final dbSql =
-        "UPDATE devices SET quarantined=0, status='online', last_seen=strftime('%s','now') WHERE lower(mac)='$escapedMac';";
-    final releaseScript =
-        '''
-mac=${_shellQuote(mac.toLowerCase())}
-${_sqliteCommand(_devicesDbExpression(), dbSql)} >/dev/null 2>&1 || true
-for socket in /var/run/hostapd/* /var/run/hostapd-*/*; do
-  [ -S "\$socket" ] || continue
-  dir="\${socket%/*}"
-  iface="\${socket##*/}"
-  /usr/sbin/hostapd_cli -p "\$dir" -i "\$iface" deny_acl REMOVE "\$mac" >/dev/null 2>&1 || true
-done
-''';
-    try {
-      await _apiService!.systemExec(
-        router.ipAddress,
-        sysauth,
-        router.useHttps,
-        command: releaseScript,
-      );
-    } catch (error) {
-      Logger.warning(
-        'Quarantine rules released; optional device metadata/Wi-Fi ACL cleanup failed: $error',
-      );
-    }
-  }
-
-  Future<void> _applyDeviceAccessFirewall(
-    model.Router router,
-    String sysauth,
-  ) async {
-    try {
-      final result = await _apiService!.call(
-        router.ipAddress,
-        sysauth,
-        router.useHttps,
-        object: 'uci',
-        method: 'apply',
-        params: const {'rollback': false},
-      );
-      if (_rpcCallSucceeded(result)) return;
-    } catch (error) {
-      Logger.debug('Native device firewall apply unavailable: $error');
-    }
-    await _reloadDeviceAccessFirewall(router, sysauth);
-  }
-
-  Future<void> _queueImmediateDeviceBlock(
-    model.Router router,
-    String sysauth,
-    String mac,
-  ) async {
-    final prefix =
-        '$manualDeviceBlockPrefix${mac.replaceAll(':', '').toLowerCase()}';
-    final script =
-        '''
-sleep 1
-# A release may have happened while this job was waiting.
-uci -q show firewall | grep -F ${_shellQuote(prefix)} >/dev/null || exit 0
-mac=${_shellQuote(mac)}
-if command -v nft >/dev/null 2>&1 && nft list chain inet fw4 forward >/dev/null 2>&1; then
-  nft insert rule inet fw4 forward ether saddr "\$mac" drop
-  nft insert rule inet fw4 input ether saddr "\$mac" drop
-else
-  iptables -I FORWARD -m mac --mac-source "\$mac" -j DROP
-  iptables -I INPUT -m mac --mac-source "\$mac" -j DROP
-fi
-''';
-    final result = await _apiService!.systemExec(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      command: '( $script ) >/dev/null 2>&1 & echo OPENWALLA_BLOCK_QUEUED',
+    await service.change(
+      mac: client.macAddress,
+      blocked: blocked,
+      reason: reason,
     );
-    if (!_rpcCallSucceeded(result)) {
-      throw StateError('Router rejected immediate block enforcement');
-    }
-  }
-
-  Future<void> _reloadDeviceAccessFirewall(
-    model.Router router,
-    String sysauth,
-  ) async {
-    final result = await _apiService!.systemExec(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      command: deviceAccessReloadCommand,
-    );
-    if (!_rpcCallSucceeded(result) ||
-        !_commandOutput(result).contains(deviceAccessApplyQueuedMarker)) {
-      throw StateError('Router could not apply the device access change');
-    }
+    notifyListeners();
   }
 
   Future<void> saveClientDeviceSettings(
@@ -15347,105 +15152,6 @@ fi
       }
     });
     return values;
-  }
-
-  List<({String section, String name})> _firewallSectionsForMac(
-    Map<String, Map<String, dynamic>> values,
-    String mac, {
-    required List<String> prefixes,
-  }) {
-    final matches = <({String section, String name})>[];
-    values.forEach((section, cfg) {
-      if (cfg['.type']?.toString() != 'rule') return;
-      final name = cfg['name']?.toString().trim() ?? '';
-      if (!prefixes.any(name.startsWith)) return;
-      final sourceMacs = {
-        ..._firewallMacValues(cfg['src_mac']),
-        ..._firewallMacValues(cfg['src_mac_address']),
-      };
-      if (sourceMacs.contains(mac)) {
-        matches.add((section: section, name: name));
-      }
-    });
-    return matches;
-  }
-
-  Future<void> _addClientFirewallRule({
-    required model.Router router,
-    required String sysauth,
-    required String mac,
-    required String name,
-    String? destination,
-  }) async {
-    final addResult = await _apiService!.call(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      object: 'uci',
-      method: 'add',
-      params: {
-        'config': 'firewall',
-        'type': 'rule',
-        'values': {
-          'name': name,
-          'src': '*',
-          if (destination != null) 'dest': destination,
-          'src_mac': mac,
-          'proto': 'all',
-          'target': 'DROP',
-          'family': 'any',
-          'enabled': '1',
-        },
-      },
-    );
-    final section = _extractAddedSection(addResult);
-    if (section == null || section.isEmpty) {
-      throw StateError('Unable to create firewall rule section');
-    }
-  }
-
-  Future<void> _configureClientFirewallRule({
-    required model.Router router,
-    required String sysauth,
-    required String section,
-    required String mac,
-    required String name,
-    String? destination,
-  }) async {
-    final result = await _apiService!.uciSet(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      config: 'firewall',
-      section: section,
-      values: {
-        'name': name,
-        'src': '*',
-        if (destination != null) 'dest': destination,
-        'src_mac': mac,
-        'proto': 'all',
-        'target': 'DROP',
-        'family': 'any',
-        'enabled': '1',
-      },
-    );
-    if (!_rpcCallSucceeded(result)) {
-      throw StateError('Router rejected updating device block rule $name');
-    }
-  }
-
-  Set<String> _firewallMacValues(dynamic raw) {
-    final values = raw is Iterable && raw is! String
-        ? raw
-        : raw == null
-        ? const []
-        : raw.toString().split(RegExp(r'\s+'));
-    return values
-        .map((value) => _normalizeMacAddress(value.toString()))
-        .where(
-          (value) => RegExp(r'^([0-9A-F]{2}:){5}[0-9A-F]{2}$').hasMatch(value),
-        )
-        .toSet();
   }
 
   String? _extractAddedSection(dynamic result) {

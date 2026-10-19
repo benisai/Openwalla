@@ -677,7 +677,20 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
       await ref
           .read(appStateProvider)
           .setClientInternetBlocked(client, blocked);
+      final firewall = await ref
+          .read(appStateProvider)
+          .fetchDeviceFirewallStateForSelectedRouter();
       if (!mounted) return;
+      if (firewall.available) {
+        setState(() {
+          _applyCachedClientBlockState(
+            mac,
+            firewall.blockedMacs.contains(mac),
+            quarantined: firewall.quarantinedMacs.contains(mac),
+          );
+          _clientsFuture = Future.value(_visibleClients);
+        });
+      }
       context.showToastSuccess(
         blocked
             ? 'Internet access blocked'
@@ -1310,7 +1323,19 @@ class _DeviceDetailsPageState extends ConsumerState<DeviceDetailsPage> {
     try {
       await widget.onToggleInternetBlock(nextBlocked);
       if (!mounted) return;
+      final firewall = await ref
+          .read(appStateProvider)
+          .fetchDeviceFirewallStateForSelectedRouter();
+      if (!mounted) return;
       setState(() {
+        if (firewall.available) {
+          final mac = widget.client.macAddress.toUpperCase().replaceAll(
+            '-',
+            ':',
+          );
+          _isBlocked = firewall.blockedMacs.contains(mac);
+          _isQuarantined = firewall.quarantinedMacs.contains(mac);
+        }
         _isBlocking = false;
         _hasSavedChanges = true;
       });

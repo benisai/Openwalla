@@ -175,6 +175,7 @@ class _QuarantineScreenState extends ConsumerState<QuarantineScreen> {
         subtitle: client.displayName,
         actionKey: actionKey,
       );
+      await _load();
     } catch (error) {
       if (!mounted) return;
       setState(() {

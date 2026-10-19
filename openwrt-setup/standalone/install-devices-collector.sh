@@ -11,6 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
 log "Installing Openwalla devices collector"
 
 require_file "$FILES_DIR/openwalla-devices-collector.sh"
+require_file "$FILES_DIR/openwalla-device-access.sh"
 require_file "$FILES_DIR/openwalla-devices-collector.init"
 require_file "$FILES_DIR/openwalla-device-quarantine.hotplug"
 require_file "$FILES_DIR/oui/openwalla-mac-vendors.txt"
@@ -21,11 +22,13 @@ require_file "$RPCD_ACL"
 update_package_feeds
 install_first_available_pkg "sqlite-cli" sqlite3-cli sqlite3
 install_pkg_if_available "nlbwmon"
+install_pkg_if_available "conntrack"
 
 ensure_openwalla_config
 ensure_uci_section devices devices
 
 install_file "$FILES_DIR/openwalla-devices-collector.sh" /usr/bin/openwalla-devices-collector 0755
+install_file "$FILES_DIR/openwalla-device-access.sh" /usr/lib/openwalla/device-access.sh 0644
 install_file "$FILES_DIR/openwalla-devices-collector.init" /etc/init.d/openwalla-devices-collector 0755
 install_file "$FILES_DIR/openwalla-device-quarantine.hotplug" /etc/hotplug.d/dhcp/95-openwalla-quarantine 0755
 install_file "$FILES_DIR/openwalla-device-quarantine.hotplug" /etc/hotplug.d/neigh/95-openwalla-quarantine 0755

@@ -37,9 +37,9 @@ Openwalla can install optional router components from **Manage Device > Router S
 
 - **Device Inventory** - Tracks devices by MAC address with hostname, IPv4 address, interface, online state, and traffic totals. `Relies on Openwalla devices collector, SQLite, and nlbwmon.`
 
-- **Pause and Block** - Applies device-specific internet access rules immediately or from a schedule. `Relies on Openwalla internet-blocking helper and firewall4.`
+- **Pause and Block** - Applies device-specific access rules. Manual blocks and quarantine share one verified firewall engine; scheduled pauses use the scheduling helpers. `Relies on the Openwalla device-access engine, OpenWrt firewall, and scheduling helpers. conntrack clears existing device connections when available.`
 
-- **Quarantine** - Detects new devices and places them in quarantine until they are approved. Hidden devices are exempt from detection. `Relies on Openwalla devices collector and quarantine support.`
+- **Quarantine** - Detects new devices through IPv4 discovery and blocks their routed IPv4/IPv6 traffic until approved. Router access remains available for recovery. Hidden devices are exempt, and release preserves independent manual or parental blocks. `Relies on the Openwalla devices collector, shared device-access engine, and OpenWrt firewall.`
 
 - **Parental Controls** - Groups devices and applies recurring access schedules. `Relies on Openwalla parental-control and scheduler helpers.`
 
