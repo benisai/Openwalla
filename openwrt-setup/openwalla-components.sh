@@ -139,7 +139,7 @@ check_file() {
 	# Components that were never selected in Router Setup remain untouched.
 	if [ ! -e "$destination" ]; then
 		case "$source_path" in
-		files/openwalla-device-access.sh)
+		files/openwalla-device-access.sh|files/Openwalla-1min-run.sh|files/openwalla-devices-ping.sh)
 			[ -x /usr/bin/openwalla-devices-collector ] || return 0
 			;;
 		*) return 0 ;;
@@ -197,6 +197,8 @@ files/openwalla-devices-collector.sh|/usr/bin/openwalla-devices-collector|0755|o
 files/openwalla-devices-collector.init|/etc/init.d/openwalla-devices-collector|0755|openwalla-devices-collector
 files/oui/openwalla-mac-vendors.txt|/usr/share/openwalla/openwalla-mac-vendors.txt|0644|
 files/Openwalla-1hr-run.sh|/usr/bin/Openwalla-1hr-run.sh|0755|
+files/Openwalla-1min-run.sh|/usr/bin/Openwalla-1min-run.sh|0755|
+files/openwalla-devices-ping.sh|/usr/bin/openwalla-devices-ping|0755|
 files/openwalla-device-bandwidth-collector.sh|/usr/bin/openwalla-device-bandwidth-collector|0755|openwalla-device-bandwidth-collector
 files/openwalla-device-bandwidth-collector.init|/etc/init.d/openwalla-device-bandwidth-collector|0755|openwalla-device-bandwidth-collector
 files/openwalla-device-traffic-summary.sh|/usr/bin/openwalla-device-traffic-summary|0755|
@@ -230,6 +232,9 @@ if [ "$ACTION" = "update" ] && [ "$FAILED" -eq 0 ]; then
 		/usr/bin/Openwalla-1hr-run.sh run >/dev/null 2>&1 || true
 	fi
 	migrate_speedtest_schedule
+	if [ -x /usr/bin/Openwalla-1min-run.sh ]; then
+		/usr/bin/Openwalla-1min-run.sh install-cron >/dev/null 2>&1 || true
+	fi
 	uci -q get openwalla.core >/dev/null 2>&1 || uci set openwalla.core='core'
 	uci set openwalla.core.component_version="$COMPONENT_VERSION"
 	uci commit openwalla

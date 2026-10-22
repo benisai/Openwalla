@@ -35,7 +35,7 @@ Openwalla can install optional router components from **Manage Device > Router S
 
 ### Devices and Monitoring
 
-- **Device Inventory** - Tracks devices by MAC address with hostname, IPv4 address, interface, online state, and traffic totals. `Relies on Openwalla devices collector, SQLite, and nlbwmon.`
+- **Device Inventory** - Tracks devices by MAC address with hostname, IPv4 address, interface, online state, and traffic totals. A one-minute job pings known clients in batches of five to supplement live discovery; missed replies use the existing offline timeout. `Relies on Openwalla devices collector, SQLite, ping, and nlbwmon.`
 
 - **Pause and Block** - Applies device-specific access rules. Manual blocks and quarantine share one verified firewall engine; scheduled pauses use the scheduling helpers. `Relies on the Openwalla device-access engine, OpenWrt firewall, and scheduling helpers. conntrack clears existing device connections when available.`
 
