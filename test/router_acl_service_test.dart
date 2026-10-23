@@ -18,6 +18,7 @@ class _FakeSshService extends SshService {
     String? stdin,
     int port = 22,
     Duration timeout = const Duration(seconds: 18),
+    Duration? executionTimeout,
     void Function(String chunk)? onOutput,
   }) async {
     this.command = command;

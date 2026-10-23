@@ -81,7 +81,7 @@ class _RouterComponentsScreenState
       final buffer = StringBuffer();
       final output = await ref
           .read(appStateProvider)
-          .runRouterSetupCommandViaSsh(
+          .runRouterInstallerCommandViaSsh(
             buildRouterComponentsCommand('update'),
             onOutput: (chunk) {
               buffer.write(chunk);

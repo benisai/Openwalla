@@ -119,7 +119,9 @@ Openwalla can install optional router components from **Manage Device > Router S
    - **Advanced Install** adds Policy-Based Routing to Basic and Standard.
    - **Everything** installs all bundled router features, including Netify Detailed Flow.
    - **Custom Install** lets you select the exact packages and Openwalla components to install or redeploy.
-7. Tap **Install via SSH** and keep the app open until the success dialog appears. Package installation requires the router to have internet access.
+7. Tap **Install via SSH**. Installation runs independently on the router while the app reads its progress log. Phone sleep or an SSH disconnection does not stop the router job. If the app is closed, repeat the same installation selection to reconnect to its saved job. Package installation requires the router to have internet access.
+
+Installer logs and machine-readable results are stored under `/tmp/openwalla/install/<job-id>/` as `install.log` and `status.json`. Router reboots interrupt installation and clear these temporary records; jobs are not automatically rerun after a reboot. Router Setup also retains its existing timestamped logs under `/root/openwalla/install-logs/`.
 
 > **Login hint:** If Openwalla reports missing RPC permissions or cannot complete the first login, tap **Need help?** on the login page. Choose **Copy RPC ACL via SSH** to copy and apply Openwalla's bundled access-control file. This works without router internet access; enter the SSH password, or leave it blank when a fresh router does not have one yet. Return to the login page and connect again afterward.
 

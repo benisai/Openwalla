@@ -315,3 +315,12 @@ reload_cron() {
 	fi
 	killall -HUP crond 2>/dev/null || true
 }
+
+# Every standalone installer sources this file before changing the router.
+if [ "${1:-}" = --background ]; then
+	shift
+	require_file "$FILES_DIR/openwalla-install-job.sh"
+	installer="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+	sh "$FILES_DIR/openwalla-install-job.sh" launch "standalone-$(date +%s)-$$" sh "$installer" "$@"
+	exit "$?"
+fi

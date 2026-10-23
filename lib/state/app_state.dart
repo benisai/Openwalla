@@ -10,6 +10,7 @@ import 'package:openwalla/services/openwalla_server_settings.dart';
 import 'package:openwalla/services/router_acl_service.dart';
 import 'package:openwalla/services/router_service.dart';
 import 'package:openwalla/services/ssh_service.dart';
+import 'package:openwalla/services/router_install_service.dart';
 import 'package:openwalla/services/throughput_service.dart';
 import 'package:openwalla/models/client.dart';
 import 'package:openwalla/models/ddns_info.dart';
@@ -2898,6 +2899,48 @@ class AppState extends ChangeNotifier {
     return output;
   }
 
+  final Set<String> _monitoredInstallRouters = {};
+
+  Future<String> runRouterInstallerCommandViaSsh(
+    String command, {
+    void Function(String chunk)? onOutput,
+  }) async {
+    if (_reviewerModeEnabled) {
+      return runRouterSetupCommandViaSsh(command, onOutput: onOutput);
+    }
+    final router = _routerService?.selectedRouter;
+    if (router == null ||
+        router.username.trim().isEmpty ||
+        router.password.isEmpty) {
+      throw StateError('Saved router SSH credentials are missing');
+    }
+    if (!_monitoredInstallRouters.add(router.id)) {
+      throw StateError(
+        'An installation is already being monitored for this router.',
+      );
+    }
+    final key = 'pending_install_job:${router.id}';
+    try {
+      return await RouterInstallService(
+        execute: (command, {stdin}) => SshService().runCommand(
+          host: router.ipAddress,
+          username: router.username,
+          password: router.password,
+          command: command,
+          stdin: stdin,
+          timeout: const Duration(seconds: 10),
+          executionTimeout: const Duration(seconds: 10),
+        ),
+        readPending: () => _secureStorageService.readValue(key),
+        writePending: (value) => value == null
+            ? _secureStorageService.deleteValue(key)
+            : _secureStorageService.writeValue(key, value),
+      ).run(command, onOutput: onOutput);
+    } finally {
+      _monitoredInstallRouters.remove(router.id);
+    }
+  }
+
   Future<void> checkRouterAclAfterLogin({bool force = false}) async {
     if (_reviewerModeEnabled || _routerAclCheckInProgress) return;
     final router = _routerService?.selectedRouter;
@@ -3027,7 +3070,7 @@ class AppState extends ChangeNotifier {
       features,
       postInstallCheck: postInstallCheck,
     );
-    return runRouterSetupCommandViaSsh(command, onOutput: onOutput);
+    return runRouterInstallerCommandViaSsh(command, onOutput: onOutput);
   }
 
   Future<bool> hasStatisticsSupport({BuildContext? context}) async {
@@ -4024,7 +4067,7 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
         'elif command -v opkg >/dev/null 2>&1 && opkg --version >/dev/null 2>&1; then '
         'echo "[openwalla-packages] APK unavailable; using OPKG"; $opkgAction; '
         'else echo "No working APK or OPKG package manager was found" >&2; exit 127; fi';
-    return runRouterSetupCommandViaSsh(command, onOutput: onOutput);
+    return runRouterInstallerCommandViaSsh(command, onOutput: onOutput);
   }
 
   Future<void> restartMwan3({BuildContext? context}) async {

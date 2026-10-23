@@ -18,8 +18,36 @@ Run them from the repository root or from this folder on the router:
 sh openwrt-setup/standalone/install-netify.sh
 ```
 
+## Background Installation
+
+The app uses one shared detached-job wrapper for Router Setup, individual
+feature installs, component updates, removals, and package actions. SSH only
+starts the job and polls its status; disconnecting does not stop installation.
+To opt into the same behavior from a router terminal, put `--background` first:
+
+```sh
+sh openwrt-setup/setup-openwrt-router.sh --background --force devices
+sh openwrt-setup/setup-openwrt-router.sh --background uninstall netify
+sh openwrt-setup/standalone/install-netify.sh --background
+```
+
+The command returns `OPENWALLA_JOB|<job-id>` immediately. Read the job's log
+and result on the router:
+
+```sh
+cat /tmp/openwalla/install/<job-id>/status.json
+tail -f /tmp/openwalla/install/<job-id>/install.log
+```
+
+Completion comes from `state` and `exit_code` in `status.json`, not a success
+message in the log. States are `starting`, `running`, `completed`, `failed`,
+and `interrupted`. The wrapper prevents concurrent wrapped jobs. Do not run a
+foreground installer alongside a background job. Existing foreground commands
+remain unchanged. Temporary job files disappear on router reboot, and an
+interrupted installation is never automatically repeated.
+
 For low-space routers, the mobile app downloads only the selected installer
-scripts and `standalone/lib/openwalla-standalone-common.sh` into `/tmp`. The
+scripts and `standalone/lib/openwalla-standalone-common.sh` into `/tmp/openwalla`. The
 shared helper fetches each required file from `openwrt-setup/files/` with
 `wget` or `curl` only when that installer needs it.
 

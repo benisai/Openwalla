@@ -9,6 +9,23 @@ OPENWALLA_INSTALL_LOG_DIR="${OPENWALLA_INSTALL_LOG_DIR:-/root/openwalla/install-
 OPENWALLA_RUNTIME_DIR="${OPENWALLA_RUNTIME_DIR:-/tmp/openwalla}"
 mkdir -p "$OPENWALLA_RUNTIME_DIR"
 
+# Optional CLI detachment uses the same worker bundled with the mobile app.
+if [ "${1:-}" = --background ]; then
+	shift
+	job_helper="$OPENWALLA_RUNTIME_DIR/openwalla-install-job.sh"
+	job_download="$job_helper.download.$$"
+	job_base="${OPENWALLA_RAW_BASE:-https://raw.githubusercontent.com/${OPENWALLA_GITHUB_REPO:-benisai/Openwalla}/${OPENWALLA_GITHUB_REF:-main}/openwrt-setup}"
+	if command -v wget >/dev/null 2>&1; then
+		wget -qO "$job_download" "$job_base/files/openwalla-install-job.sh" || exit 1
+	else
+		curl -fsSL "$job_base/files/openwalla-install-job.sh" -o "$job_download" || exit 1
+	fi
+	chmod 700 "$job_download" && mv "$job_download" "$job_helper" || exit 1
+	setup_script="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+	sh "$job_helper" launch "setup-$(date +%s)-$$" sh "$setup_script" "$@"
+	exit "$?"
+fi
+
 # Re-run once through tee so package-manager and nested installer output is
 # retained on the router as well as streamed to the app's SSH console.
 if [ "${OPENWALLA_INSTALL_LOG_ACTIVE:-0}" != "1" ] && command -v tee >/dev/null 2>&1; then
@@ -190,6 +207,7 @@ Compatibility options:
   --without-pbr       Remove PBR from the selected profile/group
   --dry-run           Show what would run without installing
   --force             Reinstall packages and reapply selected components
+  --background        Run independently of SSH (must be the first argument)
   --help              Show this help
 
 Environment:

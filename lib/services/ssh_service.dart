@@ -49,6 +49,7 @@ class SshService {
     String? stdin,
     int port = 22,
     Duration timeout = const Duration(seconds: 18),
+    Duration? executionTimeout,
     void Function(String chunk)? onOutput,
   }) async {
     final target = _parseTarget(host, port);
@@ -66,7 +67,10 @@ class SshService {
     );
 
     try {
-      final session = await client.execute(command);
+      final sessionFuture = client.execute(command);
+      final session = executionTimeout == null
+          ? await sessionFuture
+          : await sessionFuture.timeout(executionTimeout);
       final output = StringBuffer();
 
       void append(String chunk) {
@@ -85,11 +89,24 @@ class SshService {
 
       if (stdin != null) {
         session.stdin.add(Uint8List.fromList(utf8.encode(stdin)));
-        await session.stdin.close();
+        final inputClosed = session.stdin.close();
+        if (executionTimeout == null) {
+          await inputClosed;
+        } else {
+          await inputClosed.timeout(executionTimeout);
+        }
       }
 
-      await Future.wait([stdoutDone, stderrDone], eagerError: true);
-      await session.done;
+      final completed = Future.wait([
+        stdoutDone,
+        stderrDone,
+        session.done,
+      ], eagerError: true);
+      if (executionTimeout == null) {
+        await completed;
+      } else {
+        await completed.timeout(executionTimeout);
+      }
 
       final exitCode = session.exitCode;
       if (exitCode != null && exitCode != 0) {

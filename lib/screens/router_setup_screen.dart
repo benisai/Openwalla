@@ -116,17 +116,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
       'fetch "\$OPENWALLA_RAW_BASE/setup-openwrt-router.sh" "setup-openwrt-router.sh"',
       'chmod 0755 setup-openwrt-router.sh',
     ].join(' && ');
-    return '$preparation && { '
-        'echo "[openwalla-app] Installer started."; '
-        'sh ./setup-openwrt-router.sh --force $features & OPENWALLA_SETUP_PID=\$!; '
-        'while kill -0 "\$OPENWALLA_SETUP_PID" 2>/dev/null; do '
-        'sleep 15; '
-        'if kill -0 "\$OPENWALLA_SETUP_PID" 2>/dev/null; then '
-        'echo "[openwalla-app] Installation is still running..."; '
-        'fi; '
-        'done; '
-        'wait "\$OPENWALLA_SETUP_PID"; '
-        '}';
+    return '$preparation && sh ./setup-openwrt-router.sh --force $features';
   }
 
   String get _uninstallCommand {
@@ -199,7 +189,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
     try {
       final appState = ref.read(appStateProvider);
       final outputBuffer = StringBuffer();
-      final output = await appState.runRouterSetupCommandViaSsh(
+      final output = await appState.runRouterInstallerCommandViaSsh(
         command,
         onOutput: (chunk) {
           outputBuffer.write(chunk);
@@ -210,11 +200,6 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
           });
         },
       );
-      if (!output.contains('[openwalla-setup] Setup complete.')) {
-        throw StateError(
-          'The SSH command ended before the router confirmed setup completion.',
-        );
-      }
       await _applyEverythingFlowSettings(appState);
       await _enableDashboardCardsForInstalledFeatures();
       if (!mounted) return;
@@ -463,7 +448,7 @@ class _RouterSetupScreenState extends ConsumerState<RouterSetupScreen> {
       final outputBuffer = StringBuffer();
       final output = await ref
           .read(appStateProvider)
-          .runRouterSetupCommandViaSsh(
+          .runRouterInstallerCommandViaSsh(
             command,
             onOutput: (chunk) {
               outputBuffer.write(chunk);
