@@ -11,6 +11,7 @@ import 'package:openwalla/services/router_acl_service.dart';
 import 'package:openwalla/services/router_service.dart';
 import 'package:openwalla/services/ssh_service.dart';
 import 'package:openwalla/services/router_install_service.dart';
+import 'package:openwalla/services/repeater_reconnect_service.dart';
 import 'package:openwalla/services/throughput_service.dart';
 import 'package:openwalla/models/client.dart';
 import 'package:openwalla/models/ddns_info.dart';
@@ -8886,6 +8887,29 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         'owrt_sta_${radioDevice.replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_')}';
     final bssid = network.bssid.trim();
 
+    Future<void> verifyConnection() async {
+      await RepeaterReconnectService(
+        call: (object, method, params) => _apiService!.call(
+          router.ipAddress,
+          _authService?.sysauth ?? sysauth,
+          router.useHttps,
+          object: object,
+          method: method,
+          params: params,
+          context: context?.mounted == true ? context : null,
+          receiveTimeout: const Duration(seconds: 5),
+          sendTimeout: const Duration(seconds: 5),
+        ),
+      ).wait(interface: wwanName, ssid: cleanSsid, bssid: bssid);
+      try {
+        await fetchDashboardData();
+      } catch (error) {
+        Logger.debug(
+          'Dashboard refresh after verified repeater join is pending: $error',
+        );
+      }
+    }
+
     var configuredWithLuci = false;
     try {
       await _connectWirelessWwanWithLuciRpc(
@@ -8902,6 +8926,11 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       );
       configuredWithLuci = true;
     } catch (error, stack) {
+      if (isRepeaterTransportDisconnect(error)) {
+        throw const RepeaterReconnectException(
+          'The router connection was lost before Wi-Fi setup could be confirmed. Reconnect to the router and retry.',
+        );
+      }
       Logger.warning(
         'LuCI repeater setup was unavailable; falling forward to the '
         'Openwalla setup command: $error',
@@ -8909,17 +8938,12 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       Logger.debug('LuCI repeater setup stack: $stack');
     }
     if (configuredWithLuci) {
-      try {
-        await fetchDashboardData();
-      } catch (error) {
-        Logger.debug(
-          'Dashboard refresh is waiting for the repeater reload: $error',
-        );
-      }
+      await verifyConnection();
       return;
     }
 
     final command =
+        'set -e; '
         'RADIO=${_shellQuote(radioDevice)}; '
         'NET=${_shellQuote(wwanName)}; '
         'STA=${_shellQuote(staSection)}; '
@@ -8954,12 +8978,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         'uci set wireless.\$STA.encryption="\$ENC"; '
         'if [ "\$ENC" != "none" ] && [ "\$ENC" != "owe" ]; then uci set wireless.\$STA.key="\$KEY"; fi; '
         'if [ -n "\$BSSID" ]; then uci set wireless.\$STA.bssid="\$BSSID"; fi; '
-        'uci commit wireless; '
-        '(wifi reload >/dev/null 2>&1 || /sbin/wifi reload >/dev/null 2>&1) || { echo "Could not reload Wi-Fi"; exit 1; }; '
-        '/etc/init.d/network reload >/dev/null 2>&1 || { echo "Could not reload the network"; exit 1; }; '
-        '/etc/init.d/firewall reload >/dev/null 2>&1 || true; '
-        'ifup "\$NET" >/dev/null 2>&1 || true; '
-        'echo "OPENWALLA_REPEATER_CONFIGURED \$SSID \$NET"';
+        'uci commit wireless; $kRepeaterBackgroundReloadCommand';
 
     if (router.username.trim().isNotEmpty && router.password.isNotEmpty) {
       try {
@@ -8973,21 +8992,24 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         final sshOutput = sshResult.output.trim();
         if ((sshResult.exitCode == null || sshResult.exitCode == 0) &&
             sshOutput.contains('OPENWALLA_REPEATER_CONFIGURED')) {
-          try {
-            await fetchDashboardData();
-          } catch (error) {
-            Logger.debug(
-              'Dashboard refresh is waiting for the SSH repeater reload: '
-              '$error',
-            );
-          }
+          await verifyConnection();
           return;
         }
         Logger.warning(
           'SSH repeater setup was not confirmed '
           '(exit ${sshResult.exitCode ?? 'unknown'}): $sshOutput',
         );
+        if (sshResult.exitCode == null) {
+          await verifyConnection();
+          return;
+        }
+      } on RepeaterReconnectException {
+        rethrow;
       } catch (error, stack) {
+        if (isRepeaterTransportDisconnect(error)) {
+          await verifyConnection();
+          return;
+        }
         Logger.warning(
           'SSH repeater setup was unavailable; trying the Openwalla RPC '
           'command: $error',
@@ -8996,19 +9018,26 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       }
     }
 
-    final result = await _apiService!.call(
-      router.ipAddress,
-      sysauth,
-      router.useHttps,
-      object: 'file',
-      method: 'exec',
-      params: {
-        'command': '/bin/sh',
-        'params': ['-c', command],
-      },
-      context: context?.mounted == true ? context : null,
-      receiveTimeout: const Duration(seconds: 60),
-    );
+    dynamic result;
+    try {
+      result = await _apiService!.call(
+        router.ipAddress,
+        sysauth,
+        router.useHttps,
+        object: 'file',
+        method: 'exec',
+        params: {
+          'command': '/bin/sh',
+          'params': ['-c', command],
+        },
+        context: context?.mounted == true ? context : null,
+        receiveTimeout: const Duration(seconds: 60),
+      );
+    } catch (error) {
+      if (!isRepeaterTransportDisconnect(error)) rethrow;
+      await verifyConnection();
+      return;
+    }
     if (!_rpcCallSucceeded(result)) {
       final message = _commandOutput(result).trim();
       throw StateError(
@@ -9026,7 +9055,7 @@ done | sort -t "|" -k1,1nr | head -n ''' +
             : output,
       );
     }
-    await fetchDashboardData();
+    await verifyConnection();
   }
 
   Future<void> _connectWirelessWwanWithLuciRpc({
@@ -9221,13 +9250,8 @@ done | sort -t "|" -k1,1nr | head -n ''' +
         applyResult,
         'The router could not apply the repeater configuration.',
       );
-    } on DioException catch (error, stack) {
-      final connectionInterrupted =
-          error.response == null &&
-          (error.type == DioExceptionType.connectionError ||
-              error.type == DioExceptionType.receiveTimeout ||
-              error.type == DioExceptionType.unknown);
-      if (!connectionInterrupted) rethrow;
+    } catch (error, stack) {
+      if (!isRepeaterTransportDisconnect(error)) rethrow;
       Logger.info('Repeater apply interrupted the router connection: $error');
       Logger.debug('Repeater apply connection stack: $stack');
       return;
