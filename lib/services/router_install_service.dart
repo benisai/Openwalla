@@ -86,29 +86,32 @@ class RouterInstallService {
             rootBundle.loadString(
               'openwrt-setup/files/openwalla-install-job.sh',
             ));
-    final encoded = base64Encode(utf8.encode(worker));
-    final bootstrap =
+    final delimiter = 'OPENWALLA_WORKER_$id';
+    if (worker.split('\n').contains(delimiter)) {
+      throw const RouterInstallException(
+        'Invalid installer wrapper delimiter.',
+      );
+    }
+    final upload =
         '''
 umask 077
 mkdir -p /tmp/openwalla || exit 1
-base64 -d > '$workerPath.$id' <<'OPENWALLA_WORKER'
-$encoded
-OPENWALLA_WORKER
+cat > '$workerPath.$id' <<'$delimiter' || exit 1
+$worker
+$delimiter
+[ -s '$workerPath.$id' ] || exit 1
 chmod 700 '$workerPath.$id' && mv '$workerPath.$id' '$workerPath' || exit 1
-sh '$workerPath' start '$id'
 ''';
+    final bootstrap = "$upload\nsh '$workerPath' start '$id'";
     onOutput?.call(
       'Installation job: $id\nRouter log: /tmp/openwalla/install/$id/install.log\n',
     );
     var submitted = pending != null;
+    var workerUploaded = false;
     var failures = 0;
     var offset = 0;
     var reconnecting = false;
     final output = StringBuffer();
-    final decoder = const Utf8Decoder(
-      allowMalformed: true,
-    ).startChunkedConversion(StringConversionSink.fromStringSink(output));
-    var decoderClosed = false;
     var emittedLength = 0;
     void emit() {
       final text = output.toString();
@@ -118,86 +121,84 @@ sh '$workerPath' start '$id'
       }
     }
 
-    try {
-      while (true) {
-        try {
-          if (!submitted) {
-            final start = await _request(bootstrap, stdin: '$command\n');
-            if (start.exitCode != 0 ||
-                !start.output.contains('OPENWALLA_JOB|$id')) {
-              await writePending(null);
-              throw RouterInstallException(
-                'Could not start installation: ${start.output}',
-              );
-            }
-            submitted = true;
-          }
-          final response = await _request(
-            "if [ -f '$workerPath' ]; then sh '$workerPath' status '$id' $offset; else exit 4; fi",
-          );
-          if (response.exitCode == 4) {
+    while (true) {
+      try {
+        if (!submitted) {
+          final start = await _request(bootstrap, stdin: '$command\n');
+          if (start.exitCode != 0 ||
+              !start.output.contains('OPENWALLA_JOB|$id')) {
             await writePending(null);
-            throw const RouterInstallException(
-              'Installation job is missing. The router may have restarted; review the router before retrying.',
-            );
-          }
-          if (response.exitCode != 0) {
-            throw StateError(response.output);
-          }
-          final newline = response.output.indexOf('\n');
-          if (newline < 0) throw const FormatException('Missing job status');
-          final status =
-              jsonDecode(response.output.substring(0, newline))
-                  as Map<String, dynamic>;
-          if (status['id'] != id) {
-            throw const FormatException('Wrong install job');
-          }
-          final bytes = base64Decode(
-            response.output.substring(newline + 1).trim(),
-          );
-          decoder.add(bytes);
-          offset += bytes.length;
-          emit();
-          failures = 0;
-          reconnecting = false;
-          final state = status['state'];
-          if (state != 'starting' && state != 'running') {
-            // Drain remaining output before returning the terminal result.
-            if (bytes.isNotEmpty) continue;
-            decoder.close();
-            decoderClosed = true;
-            emit();
-            await writePending(null);
-            if (state == 'completed' && status['exit_code'] == 0) {
-              return output.toString().trimRight();
-            }
             throw RouterInstallException(
-              'Router installation $state (exit code ${status['exit_code']}).\n\n$output',
+              'Could not start installation: ${start.output}',
             );
           }
-        } on RouterInstallException {
-          rethrow;
-        } catch (_) {
-          failures++;
-          // A request may have reached the router even when its reply was lost.
-          // Retry start with the SAME ID; the router treats that as a resume.
-          if (!reconnecting) {
-            onOutput?.call(
-              '\nConnection lost. The router job is independent; reconnecting...\n',
-            );
-            reconnecting = true;
-          }
-          if (failures >= retryLimit) {
-            throw const RouterInstallException(
-              'Unable to monitor the router. Installation may still be running. Reopen this installation with the same selection to resume its log; do not manually start another installer.',
-            );
-          }
+          submitted = true;
+          workerUploaded = true;
         }
-        await Future<void>.delayed(pollInterval);
+        if (!workerUploaded) {
+          // Upgrade the reader even when resuming a job from an older app.
+          // Each running job has its own private worker copy.
+          final updated = await _request(upload);
+          if (updated.exitCode != 0) throw StateError(updated.output);
+          workerUploaded = true;
+        }
+        final response = await _request(
+          "if [ -f '$workerPath' ]; then sh '$workerPath' status-lines '$id' $offset; else exit 4; fi",
+        );
+        if (response.exitCode == 4) {
+          await writePending(null);
+          throw const RouterInstallException(
+            'Installation job is missing. The router may have restarted; review the router before retrying.',
+          );
+        }
+        if (response.exitCode != 0) {
+          throw StateError(response.output);
+        }
+        final newline = response.output.indexOf('\n');
+        if (newline < 0) throw const FormatException('Missing job status');
+        final status =
+            jsonDecode(response.output.substring(0, newline))
+                as Map<String, dynamic>;
+        if (status['id'] != id) {
+          throw const FormatException('Wrong install job');
+        }
+        final chunk = response.output.substring(newline + 1);
+        output.write(chunk);
+        offset += '\n'.allMatches(chunk).length;
+        emit();
+        failures = 0;
+        reconnecting = false;
+        final state = status['state'];
+        if (state != 'starting' && state != 'running') {
+          // Drain remaining output before returning the terminal result.
+          if (chunk.isNotEmpty) continue;
+          await writePending(null);
+          if (state == 'completed' && status['exit_code'] == 0) {
+            return output.toString().trimRight();
+          }
+          throw RouterInstallException(
+            'Router installation $state (exit code ${status['exit_code']}).\n\n$output',
+          );
+        }
+      } on RouterInstallException {
+        rethrow;
+      } catch (_) {
+        failures++;
+        // A request may have reached the router even when its reply was lost.
+        // Retry start with the SAME ID; the router treats that as a resume.
+        if (!reconnecting) {
+          onOutput?.call(
+            '\nConnection lost. The router job is independent; reconnecting...\n',
+          );
+          reconnecting = true;
+        }
+        if (failures >= retryLimit) {
+          throw const RouterInstallException(
+            'Unable to monitor the router. Installation may still be running. Reopen this installation with the same selection to resume its log; do not manually start another installer.',
+          );
+        }
       }
-    } finally {
-      // Closing the monitor never sends a signal to the router worker.
-      if (!decoderClosed) decoder.close();
+      await Future<void>.delayed(pollInterval);
     }
   }
 }

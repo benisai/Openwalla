@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Shared detached execution for setup, standalone installers and package jobs.
-# start reads a shell script from stdin; status returns JSON then base64 log bytes.
+# start reads a shell script from stdin; status returns JSON then complete log lines.
 set -u
 umask 077
 
@@ -143,14 +143,23 @@ launch)
 	;;
 start) start_job ;;
 worker) run_worker ;;
-status)
+status|status-lines)
 	offset="${3:-0}"
 	case "$offset" in ''|*[!0-9]*) exit 2 ;; esac
 	[ -f "$JOB/status.json" ] || { echo 'Install job not found; the router may have restarted.' >&2; exit 4; }
 	reconcile
 	cat "$JOB/status.json"
-	tail -c "+$((offset + 1))" "$JOB/install.log" 2>/dev/null | head -c 65536 | base64 | tr -d '\n'
-	printf '\n'
+	# Only send newline-terminated records, so a partial write is retried on
+	# the next poll rather than duplicated or cut through a UTF-8 character.
+	tail -n "+$((offset + 1))" "$JOB/install.log" 2>/dev/null | (
+		count=0
+		while IFS= read -r line; do
+			printf '%s\n' "$line"
+			count=$((count + 1))
+			[ "$count" -lt 200 ] || break
+		done
+		exit 0
+	)
 	;;
-*) echo 'Usage: openwalla-install-job.sh start|status|launch JOB_ID [byte-offset|command args...]' >&2; exit 2 ;;
+*) echo 'Usage: openwalla-install-job.sh start|status|launch JOB_ID [line-offset|command args...]' >&2; exit 2 ;;
 esac

@@ -21,15 +21,11 @@ void main() {
     retryLimit: retries,
   );
 
-  SshCommandResult response(
-    String state, {
-    int? exitCode,
-    List<int> bytes = const [],
-  }) {
+  SshCommandResult response(String state, {int? exitCode, String log = ''}) {
     final id = (jsonDecode(pending!) as Map)['id'];
     return SshCommandResult(
       output:
-          '${jsonEncode({'id': id, 'state': state, 'exit_code': exitCode})}\n${base64Encode(bytes)}\n',
+          '${jsonEncode({'id': id, 'state': state, 'exit_code': exitCode})}\n$log',
       exitCode: 0,
     );
   }
@@ -41,7 +37,7 @@ void main() {
   });
 
   test(
-    'starts once and drains logs using byte offsets before completing',
+    'starts once and drains logs using line offsets before completing',
     () async {
       execute = (command, {stdin}) async {
         commands.add(command);
@@ -53,11 +49,7 @@ void main() {
           );
         }
         return command.contains(" 0;")
-            ? response(
-                'completed',
-                exitCode: 0,
-                bytes: utf8.encode('installed\n'),
-              )
+            ? response('completed', exitCode: 0, log: 'installed\n')
             : response('completed', exitCode: 0);
       };
       final chunks = <String>[];
@@ -66,7 +58,9 @@ void main() {
         'installed',
       );
       expect(bodies.whereType<String>().single, 'sh installer.sh\n');
-      expect(commands.last, contains(' 10;'));
+      expect(commands.last, contains(' 1;'));
+      expect(commands.first, isNot(contains('base64')));
+      expect(commands.first, contains("<<'OPENWALLA_WORKER_"));
       expect(chunks.join(), contains('installed'));
       expect(pending, isNull);
     },
@@ -107,19 +101,21 @@ void main() {
     },
   );
 
-  test('UTF-8 characters split between log polls remain intact', () async {
+  test('Unicode and whitespace in complete log lines remain intact', () async {
     pending = jsonEncode({'id': 'saved-job', 'command': 'installer'});
     var calls = 0;
-    final bytes = utf8.encode('caf\u00e9');
     execute = (command, {stdin}) async {
+      if (!command.contains('status-lines')) {
+        return const SshCommandResult(output: '', exitCode: 0);
+      }
       calls++;
       return switch (calls) {
-        1 => response('running', bytes: bytes.sublist(0, 4)),
-        2 => response('completed', exitCode: 0, bytes: bytes.sublist(4)),
+        1 => response('running', log: '  caf\u00e9\n\n'),
+        2 => response('completed', exitCode: 0, log: '  installed\n'),
         _ => response('completed', exitCode: 0),
       };
     };
-    expect(await service().run('installer'), 'caf\u00e9');
+    expect(await service().run('installer'), '  caf\u00e9\n\n  installed');
   });
 
   test(
@@ -155,7 +151,7 @@ void main() {
         return response('completed', exitCode: 0);
       };
       await service().run('installer');
-      expect(calls, 2);
+      expect(calls, 3);
       expect(pending, isNull);
     },
   );
@@ -192,6 +188,9 @@ void main() {
       pending = jsonEncode({'id': 'saved-job', 'command': 'installer'});
       execute = (command, {stdin}) async {
         expect(stdin, isNull);
+        if (!command.contains('status-lines')) {
+          return const SshCommandResult(output: '', exitCode: 0);
+        }
         return const SshCommandResult(output: 'missing', exitCode: 4);
       };
       await expectLater(

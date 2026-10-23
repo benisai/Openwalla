@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:openwalla/services/router_install_service.dart';
+import 'package:openwalla/services/ssh_service.dart';
 
 void main() {
   late Directory root;
@@ -46,8 +48,8 @@ void main() {
 
   Future<String> log(String id) async {
     final result = await invoke(['status', id, '0']);
-    final lines = result.stdout.toString().split('\n');
-    return utf8.decode(base64Decode(lines[1]));
+    final text = result.stdout.toString();
+    return text.substring(text.indexOf('\n') + 1);
   }
 
   setUp(() async {
@@ -172,23 +174,106 @@ void main() {
     expect((await invoke(['status', 'missing', '0'])).exitCode, 4);
   });
 
-  test('log polling supports byte offsets and bounds each response', () async {
+  test('log polling supports line offsets and bounds each response', () async {
     await start(
       'large',
-      'awk \'BEGIN {for(i=0;i<70000;i++) printf "x"; print ""}\'\n',
+      'awk \'BEGIN {for(i=0;i<250;i++) print "line " i}\'\n',
     );
     await finish('large');
     final first = await log('large');
-    expect(utf8.encode(first).length, 65536);
-    final result = await invoke(['status', 'large', '65536']);
-    final next = utf8.decode(
-      base64Decode(result.stdout.toString().split('\n')[1]),
-    );
+    expect('\n'.allMatches(first).length, 200);
+    final result = await invoke(['status-lines', 'large', '200']);
+    final text = result.stdout.toString();
+    final next = text.substring(text.indexOf('\n') + 1);
     final full = await File(
       '${root.path}/jobs/large/install.log',
     ).readAsString();
     expect('$first$next', full);
   });
+
+  test('partial log lines wait until their newline is written', () async {
+    await start('partial', 'echo ready\nsleep 0.4\n');
+    final file = File('${root.path}/jobs/partial/install.log');
+    for (var i = 0; i < 100; i++) {
+      if ((await file.readAsString()).contains('ready\n')) break;
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    await file.writeAsString('  caf\u00e9', mode: FileMode.append);
+    final first = await log('partial');
+    expect(first, isNot(contains('caf')));
+    await file.writeAsString('\n', mode: FileMode.append);
+    final result = await invoke([
+      'status-lines',
+      'partial',
+      '${'\n'.allMatches(first).length}',
+    ]);
+    expect(result.stdout.toString(), contains('  caf\u00e9\n'));
+    await finish('partial');
+  });
+
+  test(
+    'actual app bootstrap and polling work when base64 is unavailable',
+    () async {
+      final bin = await Directory('${root.path}/bin').create();
+      final missing = await File('${bin.path}/base64').writeAsString('''
+#!/bin/sh
+echo called >>"\$BASE64_CALLED"
+echo 'ash: base64: not found' >&2
+exit 127
+''');
+      await Process.run('chmod', ['755', missing.path]);
+      String? pending;
+      final monitor = RouterInstallService(
+        readPending: () async => pending,
+        writePending: (value) async {
+          pending = value;
+        },
+        loadWorker: () => File(helper).readAsString(),
+        pollInterval: const Duration(milliseconds: 10),
+        retryLimit: 2,
+        execute: (command, {stdin}) async {
+          final process = await Process.start(
+            'sh',
+            [
+              '-c',
+              command.replaceAll('/tmp/openwalla', '${root.path}/runtime'),
+            ],
+            environment: {
+              ...env,
+              'PATH': '${bin.path}:${Platform.environment['PATH']}',
+              'BASE64_CALLED': '${root.path}/base64-called',
+            },
+          );
+          final out = process.stdout.transform(utf8.decoder).join();
+          final err = process.stderr.transform(utf8.decoder).join();
+          if (stdin != null) process.stdin.write(stdin);
+          await process.stdin.close();
+          final code = await process.exitCode;
+          return SshCommandResult(
+            output: '${await out}${await err}',
+            exitCode: code,
+          );
+        },
+      );
+      final result = await monitor.run('echo fresh-router-installed');
+      expect(result, contains('fresh-router-installed'));
+      await start('resume-old-reader', 'echo existing-install-completed\n');
+      await finish('resume-old-reader');
+      await File(
+        '${root.path}/runtime/openwalla-install-job.sh',
+      ).writeAsString('#!/bin/sh\nbase64 missing\nexit 127\n');
+      pending = jsonEncode({
+        'id': 'resume-old-reader',
+        'command': 'existing-install',
+      });
+      expect(
+        await monitor.run('existing-install'),
+        contains('existing-install-completed'),
+      );
+      expect(File('${root.path}/base64-called').existsSync(), isFalse);
+      expect(pending, isNull);
+    },
+  );
 
   test('all standalone installers inherit opt-in background support', () async {
     final standalone = await Directory(

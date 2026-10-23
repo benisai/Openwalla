@@ -23,6 +23,7 @@ sh openwrt-setup/standalone/install-netify.sh
 The app uses one shared detached-job wrapper for Router Setup, individual
 feature installs, component updates, removals, and package actions. SSH only
 starts the job and polls its status; disconnecting does not stop installation.
+Wrapper upload and log polling do not require `base64` or an extra encoding package.
 To opt into the same behavior from a router terminal, put `--background` first:
 
 ```sh
