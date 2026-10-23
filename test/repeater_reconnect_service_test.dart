@@ -231,6 +231,43 @@ void main() {
   });
 
   test(
+    'default reconnect budget is two 15-second windows, 30 seconds total',
+    () {
+      final service = RepeaterReconnectService(
+        call: (object, method, params) async => null,
+      );
+      expect(service.timeout, const Duration(seconds: 15));
+      expect(service.reconnectWindows, 2);
+      expect(
+        service.timeout * service.reconnectWindows,
+        const Duration(seconds: 30),
+      );
+    },
+  );
+
+  test(
+    'verification gets one more window after the first one times out',
+    () async {
+      var probes = 0;
+      final service = RepeaterReconnectService(
+        timeout: const Duration(milliseconds: 100),
+        settleDelay: Duration.zero,
+        pollInterval: Duration.zero,
+        call: (object, method, params) async {
+          if (object.startsWith('network.interface.')) {
+            probes++;
+            if (probes == 1) return Completer<dynamic>().future;
+            return uplink;
+          }
+          return association;
+        },
+      );
+      await service.wait(interface: 'wwan', ssid: 'upstream');
+      expect(probes, 2);
+    },
+  );
+
+  test(
     'SSH reload returns acknowledgement before touching the radio',
     () async {
       final root = await Directory.systemTemp.createTemp(

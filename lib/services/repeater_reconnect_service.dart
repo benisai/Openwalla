@@ -45,7 +45,8 @@ class RepeaterReconnectException implements Exception {
 class RepeaterReconnectService {
   RepeaterReconnectService({
     required this.call,
-    this.timeout = const Duration(seconds: 90),
+    this.timeout = const Duration(seconds: 15),
+    this.reconnectWindows = 2,
     this.pollInterval = const Duration(seconds: 2),
     this.maxAttempts = 45,
     this.settleDelay = const Duration(seconds: 3),
@@ -58,6 +59,7 @@ class RepeaterReconnectService {
   )
   call;
   final Duration timeout;
+  final int reconnectWindows;
   final Duration pollInterval;
   final int maxAttempts;
   final Duration settleDelay;
@@ -97,29 +99,34 @@ class RepeaterReconnectService {
     _routerReached = false;
     final clock = Stopwatch()..start();
     await Future<void>.delayed(settleDelay);
-    for (
-      var attempt = 0;
-      attempt < maxAttempts && clock.elapsed < timeout;
-      attempt++
-    ) {
-      final remaining = timeout - clock.elapsed;
-      try {
-        if (await _connected(interface, ssid, bssid).timeout(
-          remaining < const Duration(seconds: 8)
-              ? remaining
-              : const Duration(seconds: 8),
-        )) {
-          return;
+    var attempt = 0;
+    for (var window = 0; window < reconnectWindows; window++) {
+      // One clock includes settling and polling: two windows never exceed 30s.
+      final deadline = timeout * (window + 1);
+      while (attempt < maxAttempts && clock.elapsed < deadline) {
+        attempt++;
+        final remaining = deadline - clock.elapsed;
+        try {
+          if (await _connected(interface, ssid, bssid).timeout(
+            remaining < const Duration(seconds: 8)
+                ? remaining
+                : const Duration(seconds: 8),
+          )) {
+            return;
+          }
+        } catch (error) {
+          if (!isRepeaterTransportDisconnect(error)) {
+            throw const RepeaterReconnectException(
+              'Wi-Fi setup was sent, but the router could not verify the repeater status. Reconnect to the router and check its status before retrying.',
+            );
+          }
         }
-      } catch (error) {
-        if (!isRepeaterTransportDisconnect(error)) {
-          throw const RepeaterReconnectException(
-            'Wi-Fi setup was sent, but the router could not verify the repeater status. Reconnect to the router and check its status before retrying.',
+        final pause = deadline - clock.elapsed;
+        if (attempt < maxAttempts && pause > Duration.zero) {
+          await Future<void>.delayed(
+            pollInterval < pause ? pollInterval : pause,
           );
         }
-      }
-      if (attempt + 1 < maxAttempts && clock.elapsed + pollInterval < timeout) {
-        await Future<void>.delayed(pollInterval);
       }
     }
     throw RepeaterReconnectException(
