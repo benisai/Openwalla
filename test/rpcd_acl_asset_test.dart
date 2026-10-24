@@ -17,6 +17,10 @@ void main() {
 
       expect(file['/bin/sh'], contains('exec'));
       expect(openwalla['read'], isA<Map<String, dynamic>>());
+      final read = openwalla['read'] as Map<String, dynamic>;
+      expect(read['uci'], contains('system'));
+      expect((read['ubus'] as Map)['luci'], contains('getTimezones'));
+      expect((write['ubus'] as Map)['uci'], contains('apply'));
     },
   );
 }

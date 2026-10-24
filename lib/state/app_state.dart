@@ -13,6 +13,7 @@ import 'package:openwalla/services/ssh_service.dart';
 import 'package:openwalla/services/router_install_service.dart';
 import 'package:openwalla/services/repeater_reconnect_service.dart';
 import 'package:openwalla/services/repeater_removal_service.dart';
+import 'package:openwalla/services/router_system_settings_service.dart';
 import 'package:openwalla/services/throughput_service.dart';
 import 'package:openwalla/models/client.dart';
 import 'package:openwalla/models/ddns_info.dart';
@@ -9271,6 +9272,52 @@ done | sort -t "|" -k1,1nr | head -n ''' +
     } catch (error) {
       Logger.debug('Optional $wwanName interface start failed: $error');
     }
+  }
+
+  RouterSystemSettingsService _routerSystemSettings() {
+    final router = _routerService?.selectedRouter;
+    final sysauth = _authService?.sysauth;
+    final api = _apiService;
+    if (router == null || sysauth == null || api == null) {
+      throw StateError('No selected router connection is available');
+    }
+    return RouterSystemSettingsService(
+      call: (object, method, params) => api.call(
+        router.ipAddress,
+        sysauth,
+        router.useHttps,
+        object: object,
+        method: method,
+        params: params,
+      ),
+    );
+  }
+
+  Future<RouterSystemSettings> fetchRouterSystemSettings() =>
+      _routerSystemSettings().load();
+
+  Future<Map<String, String>> fetchRouterTimezones() =>
+      _routerSystemSettings().timezones();
+
+  Future<void> changeRouterHostname(String hostname) async {
+    await _routerSystemSettings().saveHostname(hostname);
+    try {
+      await _routerService?.updateSelectedRouterHostname(hostname.trim());
+    } catch (error) {
+      Logger.debug('Hostname saved; profile refresh unavailable: $error');
+    }
+    if (_dashboardData?['boardInfo'] is Map) {
+      _dashboardData!['boardInfo'] = {
+        ..._dashboardData!['boardInfo'] as Map,
+        'hostname': hostname.trim(),
+      };
+    }
+    notifyListeners();
+  }
+
+  Future<void> changeRouterTimezone(String zoneName) async {
+    await _routerSystemSettings().saveTimezone(zoneName);
+    notifyListeners();
   }
 
   Future<void> removeRepeaterConnection(

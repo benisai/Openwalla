@@ -1961,7 +1961,7 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
         _WirelessActionButton(
           label: 'Edit Wi-Fi',
           icon: Icons.tune_rounded,
-          color: const Color(0xFFE85D8E),
+          color: const Color(0xFF64B5F6),
           onPressed: isUpdating ? null : () => _showEditWirelessSheet(section),
         ),
       _WirelessActionButton(

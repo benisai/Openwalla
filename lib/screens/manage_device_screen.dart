@@ -6,6 +6,7 @@ import 'package:openwalla/screens/package_manager_screen.dart';
 import 'package:openwalla/screens/reset_router_screen.dart';
 import 'package:openwalla/screens/router_password_screen.dart';
 import 'package:openwalla/screens/router_setup_screen.dart';
+import 'package:openwalla/screens/router_system_settings_screen.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
 
 class ManageDeviceScreen extends StatelessWidget {
@@ -38,6 +39,23 @@ class ManageDeviceScreen extends StatelessWidget {
                 title: 'Router Password',
                 subtitle: 'Set or change the OpenWrt root password',
                 onTap: () => _open(context, const RouterPasswordScreen()),
+              ),
+              _DeviceManagementTile(
+                icon: Icons.drive_file_rename_outline_rounded,
+                color: colors.primary,
+                title: 'Change Hostname',
+                subtitle: 'Change the router hostname',
+                onTap: () => _open(context, const RouterSystemSettingsScreen()),
+              ),
+              _DeviceManagementTile(
+                icon: Icons.public_rounded,
+                color: colors.primary,
+                title: 'Timezone',
+                subtitle: 'Set the router timezone',
+                onTap: () => _open(
+                  context,
+                  const RouterSystemSettingsScreen(timezone: true),
+                ),
               ),
               _DeviceManagementTile(
                 icon: Icons.lan_rounded,
