@@ -3,6 +3,44 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:openwalla/screens/network_performance_screen.dart';
 
 void main() {
+  for (final entry in {
+    59.99: const Color(0xFF86EFAC),
+    60.0: const Color(0xFF168A48),
+    150.0: const Color(0xFF168A48),
+    199.99: const Color(0xFF168A48),
+    200.0: const Color(0xFFEAB308),
+    250.0: const Color(0xFFEAB308),
+  }.entries) {
+    test('200 ms threshold colors ${entry.key} ms proportionally', () {
+      expect(
+        NetworkPerformanceScreen.pingStatusColor(
+          hasSamples: true,
+          latencyMs: entry.key,
+          emptyColor: Colors.grey,
+          thresholdMs: 200,
+        ),
+        entry.value,
+      );
+    });
+  }
+
+  test('lower thresholds scale down and invalid thresholds use defaults', () {
+    expect(
+      NetworkPerformanceScreen.pingLatencyColor(15, thresholdMs: 50),
+      const Color(0xFF168A48),
+    );
+    expect(
+      NetworkPerformanceScreen.pingLatencyColor(50, thresholdMs: 50),
+      const Color(0xFFEAB308),
+    );
+    for (final threshold in [0, -1]) {
+      expect(
+        NetworkPerformanceScreen.pingLatencyColor(100, thresholdMs: threshold),
+        const Color(0xFFEAB308),
+      );
+    }
+  });
+
   test('missing ping data is gray, rather than failed red', () {
     expect(
       NetworkPerformanceScreen.pingStatusColor(

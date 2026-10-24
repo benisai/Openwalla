@@ -502,11 +502,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     });
   }
 
-  Color _pingBucketColor(_PingHourBucket bucket) {
+  Color _pingBucketColor(_PingHourBucket bucket, int thresholdMs) {
     return NetworkPerformanceScreen.pingStatusColor(
       hasSamples: bucket.hasSamples,
       latencyMs: bucket.hasOnlyFailures ? null : bucket.averageLatencyMs,
       emptyColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+      thresholdMs: thresholdMs,
     );
   }
 
@@ -616,7 +617,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                     height: 12,
                     margin: EdgeInsets.only(right: isLast ? 0 : 2),
                     decoration: BoxDecoration(
-                      color: _pingBucketColor(bucket),
+                      color: _pingBucketColor(
+                        bucket,
+                        appState.dashboardData?['pingThresholdMs'] as int? ??
+                            NetworkMonitorSettings.defaultThresholdMs,
+                      ),
                       borderRadius: BorderRadius.horizontal(
                         left: index == 0
                             ? const Radius.circular(6)

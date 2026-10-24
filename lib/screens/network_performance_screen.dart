@@ -75,11 +75,16 @@ class NetworkPerformanceScreen extends ConsumerStatefulWidget {
     });
   }
 
-  static Color _bucketColor(_PingHourBucket bucket, Color emptyColor) {
+  static Color _bucketColor(
+    _PingHourBucket bucket,
+    Color emptyColor,
+    int thresholdMs,
+  ) {
     return pingStatusColor(
       hasSamples: bucket.hasSamples,
       latencyMs: bucket.hasOnlyFailures ? null : bucket.averageLatencyMs,
       emptyColor: emptyColor,
+      thresholdMs: thresholdMs,
     );
   }
 
@@ -87,15 +92,22 @@ class NetworkPerformanceScreen extends ConsumerStatefulWidget {
     required bool hasSamples,
     required double? latencyMs,
     required Color emptyColor,
+    int thresholdMs = NetworkMonitorSettings.defaultThresholdMs,
   }) {
     if (!hasSamples) return emptyColor.withValues(alpha: 0.76);
     if (latencyMs == null) return const Color(0xFFFF424B);
-    return pingLatencyColor(latencyMs);
+    return pingLatencyColor(latencyMs, thresholdMs: thresholdMs);
   }
 
-  static Color pingLatencyColor(double latencyMs) {
-    if (latencyMs >= 100) return _yellow;
-    if (latencyMs >= 30) return const Color(0xFF168A48);
+  static Color pingLatencyColor(
+    double latencyMs, {
+    int thresholdMs = NetworkMonitorSettings.defaultThresholdMs,
+  }) {
+    final threshold = thresholdMs > 0
+        ? thresholdMs
+        : NetworkMonitorSettings.defaultThresholdMs;
+    if (latencyMs >= threshold) return _yellow;
+    if (latencyMs >= threshold * 0.3) return const Color(0xFF168A48);
     return const Color(0xFF86EFAC);
   }
 
@@ -112,6 +124,7 @@ class _NetworkPerformanceScreenState
   Future<bool>? _supportFuture;
   bool _isInstallingSupport = false;
   bool _isSpeedtestRunning = false;
+  int _pingThresholdMs = NetworkMonitorSettings.defaultThresholdMs;
 
   @override
   void initState() {
@@ -132,10 +145,12 @@ class _NetworkPerformanceScreenState
         includeArchived: true,
         context: mounted ? context : null,
       ),
+      appState.fetchNetworkMonitorSettings(context: mounted ? context : null),
     ]);
     if (!mounted) return;
     setState(() {
       _freshSamples = results[0] as List<PingMonitorSample>;
+      _pingThresholdMs = (results[3] as NetworkMonitorSettings).thresholdMs;
       _speedtestSamples = results[1] as List<SpeedtestMonitorSample>;
       _recentNotifications = (results[2] as List<OpenwallaNotification>)
           .where((event) => event.isNetworkPerformanceEvent)
@@ -188,14 +203,20 @@ class _NetworkPerformanceScreenState
                   }
                   return Column(
                     children: [
-                      _NetworkTimelineCard(samples: samples),
+                      _NetworkTimelineCard(
+                        samples: samples,
+                        thresholdMs: _pingThresholdMs,
+                      ),
                       const SizedBox(height: 14),
                       _RecentEventsCard(
                         notifications: _recentNotifications ?? const [],
                         onViewAll: _openRecentEvents,
                       ),
                       const SizedBox(height: 14),
-                      _PingTestCard(samples: samples),
+                      _PingTestCard(
+                        samples: samples,
+                        thresholdMs: _pingThresholdMs,
+                      ),
                       const SizedBox(height: 14),
                       _SpeedTestCard(
                         samples: _speedtestSamples ?? const [],
@@ -279,12 +300,13 @@ class _NetworkPerformanceScreenState
     }
   }
 
-  void _openPerformanceSettings() {
-    Navigator.of(context).push(
+  Future<void> _openPerformanceSettings() async {
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => const NetworkPerformanceSettingsScreen(),
       ),
     );
+    if (mounted) await _refreshSamples();
   }
 
   void _openRecentEvents() {
@@ -463,8 +485,12 @@ class _SectionTitle extends StatelessWidget {
 
 class _NetworkTimelineCard extends StatelessWidget {
   final List<PingMonitorSample> samples;
+  final int thresholdMs;
 
-  const _NetworkTimelineCard({required this.samples});
+  const _NetworkTimelineCard({
+    required this.samples,
+    required this.thresholdMs,
+  });
 
   String _formatHour(DateTime time) {
     final hour = time.hour % 12 == 0 ? 12 : time.hour % 12;
@@ -557,6 +583,7 @@ class _NetworkTimelineCard extends StatelessWidget {
                       color: NetworkPerformanceScreen._bucketColor(
                         bucket,
                         colorScheme.surfaceContainerHighest,
+                        thresholdMs,
                       ),
                       borderRadius: BorderRadius.horizontal(
                         left: index == 0
@@ -765,8 +792,9 @@ class _RecentEventsCard extends StatelessWidget {
 
 class _PingTestCard extends StatelessWidget {
   final List<PingMonitorSample> samples;
+  final int thresholdMs;
 
-  const _PingTestCard({required this.samples});
+  const _PingTestCard({required this.samples, required this.thresholdMs});
 
   String _formatTime(DateTime time) {
     final hour = time.hour % 12 == 0 ? 12 : time.hour % 12;
@@ -829,6 +857,7 @@ class _PingTestCard extends StatelessWidget {
         hasSamples: sample != null,
         latencyMs: sample?.isOk == true ? sample!.latencyMs : null,
         emptyColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+        thresholdMs: thresholdMs,
       );
     }).toList();
     final readableLabels = labels.asMap().entries.map((entry) {

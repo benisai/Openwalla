@@ -72,6 +72,7 @@ enum OpenwallaThemeAccent {
 }
 
 class NetworkMonitorSettings {
+  static const defaultThresholdMs = 100;
   final String target;
   final int thresholdMs;
 
@@ -4778,6 +4779,7 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
           'wireguard': <String, dynamic>{}, // Empty for reviewer mode
           'conntrack': {'count': 142, 'max': 1000},
           'pingSamples': await fetchPingMonitorSamples(),
+          'pingThresholdMs': NetworkMonitorSettings.defaultThresholdMs,
           'flowProvider': flowSummary.provider,
           'flowSummary': flowSummary,
           'netifyFlowCount': flowSummary.count,
@@ -4887,6 +4889,7 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
 
       final conntrackFuture = _fetchConntrackData(ip, useHttps);
       final pingSamplesFuture = fetchPingMonitorSamples();
+      final pingSettingsFuture = fetchNetworkMonitorSettings();
       final selectedFlowProvider =
           _dashboardPreferences.flowMode == DashboardFlowMode.simple
           ? OpenwallaFlowProvider.conntrack
@@ -4995,11 +4998,13 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
         rulesCountFuture,
         associatedMacsFuture,
         deviceRecordsFuture,
+        pingSettingsFuture,
       ]);
       final wirelessRaw = optionalResults[0];
       final uciWirelessRaw = optionalResults[1];
       final conntrackData = optionalResults[2] as Map<String, int>;
       final pingSamples = optionalResults[3] as List<PingMonitorSample>;
+      final pingSettings = optionalResults[9] as NetworkMonitorSettings;
       final flowSummary = optionalResults[4] as OpenwallaFlowSummary;
       final notificationCount = optionalResults[5] as int;
       final rulesCount = optionalResults[6] as int;
@@ -5127,6 +5132,7 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
         'wireguard': wireguardData,
         'conntrack': conntrackData,
         'pingSamples': pingSamples,
+        'pingThresholdMs': pingSettings.thresholdMs,
         'flowProvider': flowSummary.provider,
         'flowSummary': flowSummary,
         'netifyFlowCount': flowSummary.count,
@@ -10207,7 +10213,7 @@ done | sort -nr | head -n ''' +
   }) async {
     const defaults = NetworkMonitorSettings(
       target: '1.1.1.1',
-      thresholdMs: 100,
+      thresholdMs: NetworkMonitorSettings.defaultThresholdMs,
     );
     if (_reviewerModeEnabled) return defaults;
 
@@ -10226,7 +10232,9 @@ done | sort -nr | head -n ''' +
         final threshold = int.tryParse(ping['threshold']?.toString() ?? '');
         return NetworkMonitorSettings(
           target: target?.isNotEmpty == true ? target! : defaults.target,
-          thresholdMs: threshold ?? defaults.thresholdMs,
+          thresholdMs: threshold != null && threshold > 0
+              ? threshold
+              : defaults.thresholdMs,
         );
       }
     } catch (e, stack) {
@@ -10274,6 +10282,10 @@ done | sort -nr | head -n ''' +
       throw StateError('The router did not commit the Ping Test settings.');
     }
     await _runOptionalInitAction('openwalla-network-monitor', 'restart');
+    if (_dashboardData != null) {
+      _dashboardData!['pingThresholdMs'] = settings.thresholdMs;
+    }
+    notifyListeners();
   }
 
   Future<DnsMonitorSettings> fetchDnsMonitorSettings({

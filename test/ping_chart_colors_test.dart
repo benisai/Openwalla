@@ -7,7 +7,14 @@ import 'package:openwalla/state/app_state.dart';
 
 class _PingState extends ChangeNotifier implements AppState {
   final List<PingMonitorSample> samples;
-  _PingState(this.samples);
+  final int thresholdMs;
+  _PingState(this.samples, this.thresholdMs);
+
+  @override
+  Future<NetworkMonitorSettings> fetchNetworkMonitorSettings({
+    BuildContext? context,
+  }) async =>
+      NetworkMonitorSettings(target: '1.1.1.1', thresholdMs: thresholdMs);
 
   @override
   Map<String, dynamic> get dashboardData => {'pingSamples': samples};
@@ -40,60 +47,70 @@ class _PingState extends ChangeNotifier implements AppState {
 }
 
 void main() {
-  testWidgets('Ping Test renders latency colors, red failures, and gray gaps', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(600, 1400));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    final now = DateTime.now();
-    final slot = DateTime(
-      now.year,
-      now.month,
-      now.day,
-      now.hour,
-      now.minute ~/ 5 * 5,
+  for (final threshold in [100, 200]) {
+    testWidgets(
+      'Ping Test uses $threshold ms router threshold for rendered bars',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(600, 1400));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final now = DateTime.now();
+        final slot = DateTime(
+          now.year,
+          now.month,
+          now.day,
+          now.hour,
+          now.minute ~/ 5 * 5,
+        );
+        final samples = [12.0, 65.0, 150.0, null].asMap().entries.map((entry) {
+          return PingMonitorSample(
+            timestamp: slot.subtract(Duration(minutes: entry.key * 5)),
+            target: '1.1.1.1',
+            status: entry.value == null ? 'ERROR' : 'OK',
+            latencyMs: entry.value,
+            message: '',
+          );
+        }).toList();
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              appStateProvider.overrideWith(
+                (_) => _PingState(samples, threshold),
+              ),
+            ],
+            child: MaterialApp(home: const NetworkPerformanceScreen()),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final chart = find.byKey(const ValueKey('ping-test-chart'));
+        expect(chart, findsOneWidget);
+        final panel = tester.widget(chart);
+        // Check the ping panel at phone width independently of other page panels.
+        await tester.binding.setSurfaceSize(const Size(390, 800));
+        await tester.pumpWidget(MaterialApp(home: Scaffold(body: panel)));
+        await tester.pumpAndSettle();
+        final bars = find.descendant(
+          of: chart,
+          matching: find.byType(Container),
+        );
+        final colors = tester
+            .widgetList<Container>(bars)
+            .where((container) => container.constraints?.maxWidth == 10)
+            .map((container) => (container.decoration as BoxDecoration).color)
+            .toList();
+        expect(colors.length, 12);
+        expect(colors.sublist(8), [
+          const Color(0xFFFF424B),
+          threshold == 100 ? const Color(0xFFEAB308) : const Color(0xFF168A48),
+          const Color(0xFF168A48),
+          const Color(0xFF86EFAC),
+        ]);
+        final context = tester.element(chart);
+        final gray = Theme.of(
+          context,
+        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.76);
+        expect(colors.take(8), everyElement(gray));
+        expect(tester.takeException(), isNull);
+      },
     );
-    final samples = [12.0, 65.0, 150.0, null].asMap().entries.map((entry) {
-      return PingMonitorSample(
-        timestamp: slot.subtract(Duration(minutes: entry.key * 5)),
-        target: '1.1.1.1',
-        status: entry.value == null ? 'ERROR' : 'OK',
-        latencyMs: entry.value,
-        message: '',
-      );
-    }).toList();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [appStateProvider.overrideWith((_) => _PingState(samples))],
-        child: MaterialApp(home: const NetworkPerformanceScreen()),
-      ),
-    );
-    await tester.pumpAndSettle();
-    final chart = find.byKey(const ValueKey('ping-test-chart'));
-    expect(chart, findsOneWidget);
-    final panel = tester.widget(chart);
-    // Check the ping panel at phone width independently of other page panels.
-    await tester.binding.setSurfaceSize(const Size(390, 800));
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: panel)));
-    await tester.pumpAndSettle();
-    final bars = find.descendant(of: chart, matching: find.byType(Container));
-    final colors = tester
-        .widgetList<Container>(bars)
-        .where((container) => container.constraints?.maxWidth == 10)
-        .map((container) => (container.decoration as BoxDecoration).color)
-        .toList();
-    expect(colors.length, 12);
-    expect(colors.sublist(8), [
-      const Color(0xFFFF424B),
-      const Color(0xFFEAB308),
-      const Color(0xFF168A48),
-      const Color(0xFF86EFAC),
-    ]);
-    final context = tester.element(chart);
-    final gray = Theme.of(
-      context,
-    ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.76);
-    expect(colors.take(8), everyElement(gray));
-    expect(tester.takeException(), isNull);
-  });
+  }
 }
