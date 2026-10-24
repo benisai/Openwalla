@@ -1,3 +1,9 @@
+Map<String, dynamic> boardInfoWithHostname(Map boardInfo, String hostname) =>
+    <String, dynamic>{
+      ...Map<String, dynamic>.from(boardInfo),
+      'hostname': hostname.trim(),
+    };
+
 class RouterSystemSettings {
   final String section;
   final String hostname;

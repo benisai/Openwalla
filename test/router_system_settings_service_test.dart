@@ -2,6 +2,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:openwalla/services/router_system_settings_service.dart';
 
 void main() {
+  test('hostname cache update preserves dashboard runtime map type', () {
+    final original = <dynamic, dynamic>{
+      'hostname': 'OpenWrt',
+      'model': 'Test router',
+      'release': <String, dynamic>{'version': '25.12'},
+    };
+    final dynamic updated = boardInfoWithHostname(original, ' travel-router ');
+    final board = updated as Map<String, dynamic>;
+    expect(board['hostname'], 'travel-router');
+    expect(board['model'], 'Test router');
+    expect(board['release'], original['release']);
+    expect(original['hostname'], 'OpenWrt');
+  });
+
   Map<String, dynamic> values = {};
   List<String> methods = [];
   List<Map<String, dynamic>> writes = [];

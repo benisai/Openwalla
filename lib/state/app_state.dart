@@ -9307,10 +9307,10 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       Logger.debug('Hostname saved; profile refresh unavailable: $error');
     }
     if (_dashboardData?['boardInfo'] is Map) {
-      _dashboardData!['boardInfo'] = {
-        ..._dashboardData!['boardInfo'] as Map,
-        'hostname': hostname.trim(),
-      };
+      _dashboardData!['boardInfo'] = boardInfoWithHostname(
+        _dashboardData!['boardInfo'] as Map,
+        hostname,
+      );
     }
     notifyListeners();
   }
