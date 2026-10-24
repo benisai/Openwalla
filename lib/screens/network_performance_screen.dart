@@ -76,9 +76,21 @@ class NetworkPerformanceScreen extends ConsumerStatefulWidget {
   }
 
   static Color _bucketColor(_PingHourBucket bucket, Color emptyColor) {
-    if (!bucket.hasSamples) return emptyColor.withValues(alpha: 0.76);
-    if (bucket.hasOnlyFailures) return const Color(0xFFFF424B);
-    return pingLatencyColor(bucket.averageLatencyMs ?? 0);
+    return pingStatusColor(
+      hasSamples: bucket.hasSamples,
+      latencyMs: bucket.hasOnlyFailures ? null : bucket.averageLatencyMs,
+      emptyColor: emptyColor,
+    );
+  }
+
+  static Color pingStatusColor({
+    required bool hasSamples,
+    required double? latencyMs,
+    required Color emptyColor,
+  }) {
+    if (!hasSamples) return emptyColor.withValues(alpha: 0.76);
+    if (latencyMs == null) return const Color(0xFFFF424B);
+    return pingLatencyColor(latencyMs);
   }
 
   static Color pingLatencyColor(double latencyMs) {
@@ -788,6 +800,7 @@ class _PingTestCard extends StatelessWidget {
     }).toList();
     final labels = slots.map(_formatTime).toList();
     final validLatencies = slotSamples
+        .where((sample) => sample?.isOk == true)
         .map((sample) => sample?.latencyMs)
         .whereType<double>()
         .toList();
@@ -805,14 +818,19 @@ class _PingTestCard extends StatelessWidget {
         : validLatencies.reduce((a, b) => a > b ? a : b);
     final bars = slotSamples
         .map(
-          (sample) => sample?.latencyMs == null
+          (sample) => sample?.isOk != true
               ? 0.16
               : (sample!.latencyMs! / maxLatency).clamp(0.04, 1.0),
         )
         .toList();
-    final hasData = slotSamples
-        .map((sample) => sample?.latencyMs != null)
-        .toList();
+    final hasData = slotSamples.map((sample) => sample != null).toList();
+    final barColors = slotSamples.map((sample) {
+      return NetworkPerformanceScreen.pingStatusColor(
+        hasSamples: sample != null,
+        latencyMs: sample?.isOk == true ? sample!.latencyMs : null,
+        emptyColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+      );
+    }).toList();
     final readableLabels = labels.asMap().entries.map((entry) {
       final index = entry.key;
       if (index == 0 || index == labels.length ~/ 2) return entry.value;
@@ -831,10 +849,12 @@ class _PingTestCard extends StatelessWidget {
 
     return _ChartPanel(
       title: 'Ping Test',
+      key: const ValueKey('ping-test-chart'),
       value: NetworkPerformanceScreen.formatLatency(averageLatency),
       label: 'Last 5 avg',
       bars: bars,
       hasData: hasData,
+      barColors: barColors,
       color: NetworkPerformanceScreen._green,
       secondaryColor: NetworkPerformanceScreen._yellow,
       labels: readableLabels,
@@ -1150,6 +1170,7 @@ class _ChartPanel extends StatelessWidget {
   final List<double> bars;
   final List<double> secondaryBars;
   final List<bool> hasData;
+  final List<Color> barColors;
   final Color color;
   final Color secondaryColor;
   final List<String> labels;
@@ -1160,12 +1181,14 @@ class _ChartPanel extends StatelessWidget {
   final Widget? trailing;
 
   const _ChartPanel({
+    super.key,
     required this.title,
     required this.value,
     required this.label,
     required this.bars,
     this.secondaryBars = const [],
     required this.hasData,
+    this.barColors = const [],
     required this.color,
     required this.secondaryColor,
     required this.labels,
@@ -1269,7 +1292,9 @@ class _ChartPanel extends StatelessWidget {
                         children: [
                           _ChartBar(
                             height: height,
-                            color: !hasSample
+                            color: index < barColors.length
+                                ? barColors[index]
+                                : !hasSample
                                 ? colorScheme.onSurfaceVariant.withValues(
                                     alpha: 0.28,
                                   )

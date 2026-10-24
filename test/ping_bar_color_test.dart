@@ -3,6 +3,41 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:openwalla/screens/network_performance_screen.dart';
 
 void main() {
+  test('missing ping data is gray, rather than failed red', () {
+    expect(
+      NetworkPerformanceScreen.pingStatusColor(
+        hasSamples: false,
+        latencyMs: null,
+        emptyColor: Colors.grey,
+      ),
+      Colors.grey.withValues(alpha: 0.76),
+    );
+  });
+
+  test('failed ping is red', () {
+    expect(
+      NetworkPerformanceScreen.pingStatusColor(
+        hasSamples: true,
+        latencyMs: null,
+        emptyColor: Colors.grey,
+      ),
+      const Color(0xFFFF424B),
+    );
+  });
+
+  test('all ping surfaces use the same latency palette', () {
+    for (final latency in [0.0, 29.99, 30.0, 99.99, 100.0, 250.0]) {
+      expect(
+        NetworkPerformanceScreen.pingStatusColor(
+          hasSamples: true,
+          latencyMs: latency,
+          emptyColor: Colors.grey,
+        ),
+        NetworkPerformanceScreen.pingLatencyColor(latency),
+      );
+    }
+  });
+
   for (final latency in [0.0, 12.0, 29.99]) {
     test('$latency ms uses excellent light green', () {
       expect(

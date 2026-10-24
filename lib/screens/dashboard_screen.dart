@@ -503,15 +503,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   }
 
   Color _pingBucketColor(_PingHourBucket bucket) {
-    if (!bucket.hasSamples) {
-      return Theme.of(
-        context,
-      ).colorScheme.onSurfaceVariant.withValues(alpha: 0.28);
-    }
-    if (bucket.hasOnlyFailures) return Theme.of(context).colorScheme.error;
-    final latency = bucket.averageLatencyMs ?? 0;
-    if (latency >= 100) return const Color(0xFFEAB308);
-    return _openwallaGreen;
+    return NetworkPerformanceScreen.pingStatusColor(
+      hasSamples: bucket.hasSamples,
+      latencyMs: bucket.hasOnlyFailures ? null : bucket.averageLatencyMs,
+      emptyColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+    );
   }
 
   String _pingBucketTooltip(
