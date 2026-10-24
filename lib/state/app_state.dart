@@ -12,6 +12,7 @@ import 'package:openwalla/services/router_service.dart';
 import 'package:openwalla/services/ssh_service.dart';
 import 'package:openwalla/services/router_install_service.dart';
 import 'package:openwalla/services/repeater_reconnect_service.dart';
+import 'package:openwalla/services/repeater_removal_service.dart';
 import 'package:openwalla/services/throughput_service.dart';
 import 'package:openwalla/models/client.dart';
 import 'package:openwalla/models/ddns_info.dart';
@@ -9270,6 +9271,36 @@ done | sort -t "|" -k1,1nr | head -n ''' +
     } catch (error) {
       Logger.debug('Optional $wwanName interface start failed: $error');
     }
+  }
+
+  Future<void> removeRepeaterConnection(
+    String section, {
+    BuildContext? context,
+  }) async {
+    final router = _routerService?.selectedRouter;
+    final sysauth = _authService?.sysauth;
+    final api = _apiService;
+    if (router == null || sysauth == null || api == null) {
+      throw StateError('No selected router connection is available');
+    }
+    await RepeaterRemovalService(
+      call: (object, method, params) => api.call(
+        router.ipAddress,
+        sysauth,
+        router.useHttps,
+        object: object,
+        method: method,
+        params: params,
+        context: context?.mounted == true ? context : null,
+        receiveTimeout: const Duration(seconds: 30),
+      ),
+    ).remove(section);
+    try {
+      await fetchDashboardData();
+    } catch (error) {
+      Logger.debug('Repeater removed; dashboard refresh unavailable: $error');
+    }
+    notifyListeners();
   }
 
   Future<void> saveWirelessNetworkConfig(

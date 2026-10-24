@@ -171,6 +171,48 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
     }
   }
 
+  Future<void> _removeRepeater(String section, String ssid) async {
+    if (_updatingWirelessInterfaces.contains(section)) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Remove repeater?'),
+        content: Text(
+          'Remove the saved connection to "$ssid"? This disconnects the '
+          'repeater and may briefly interrupt Wi-Fi. Your local Wi-Fi '
+          'networks will not be deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _updatingWirelessInterfaces.add(section));
+    try {
+      await ref.read(appStateProvider).removeRepeaterConnection(section);
+      if (!mounted) return;
+      context.showToastSuccess('Repeater removed');
+    } catch (error) {
+      if (!mounted) return;
+      context.showToastError(
+        'Could not remove repeater',
+        subtitle: error.toString().replaceFirst('Bad state: ', ''),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _updatingWirelessInterfaces.remove(section));
+      }
+    }
+  }
+
   // Unified key generator for all interfaces
   String _interfaceKey({String? name, String? ssid, String? deviceName}) {
     if (ssid != null && ssid.trim().isNotEmpty) {
@@ -1920,7 +1962,7 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
           label: 'Edit Wi-Fi',
           icon: Icons.tune_rounded,
           color: const Color(0xFFE85D8E),
-          onPressed: () => _showEditWirelessSheet(section),
+          onPressed: isUpdating ? null : () => _showEditWirelessSheet(section),
         ),
       _WirelessActionButton(
         label: 'Info',
@@ -1993,7 +2035,27 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
                 ],
               ),
               const SizedBox(height: 8),
-              statusAction,
+              Row(
+                children: [
+                  Expanded(child: statusAction),
+                  if (isSta && section.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _WirelessActionButton(
+                        label: 'Remove',
+                        icon: Icons.delete_outline_rounded,
+                        color: Theme.of(context).colorScheme.error,
+                        onPressed: isUpdating
+                            ? null
+                            : () => _removeRepeater(
+                                section,
+                                iface['ssid']?.toString() ?? 'this network',
+                              ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ],
           ),
         ),
