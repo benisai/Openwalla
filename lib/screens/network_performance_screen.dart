@@ -78,9 +78,13 @@ class NetworkPerformanceScreen extends ConsumerStatefulWidget {
   static Color _bucketColor(_PingHourBucket bucket, Color emptyColor) {
     if (!bucket.hasSamples) return emptyColor.withValues(alpha: 0.76);
     if (bucket.hasOnlyFailures) return const Color(0xFFFF424B);
-    final latency = bucket.averageLatencyMs ?? 0;
-    if (latency >= 100) return _yellow;
-    return _green;
+    return pingLatencyColor(bucket.averageLatencyMs ?? 0);
+  }
+
+  static Color pingLatencyColor(double latencyMs) {
+    if (latencyMs >= 100) return _yellow;
+    if (latencyMs >= 30) return const Color(0xFF168A48);
+    return const Color(0xFF86EFAC);
   }
 
   @override
