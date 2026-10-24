@@ -5467,19 +5467,7 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
       return const [];
     }
 
-    final processCommand =
-        r'''
-for d in /proc/[0-9]*; do
-  pid="${d##*/}"
-  [ -r "$d/status" ] || continue
-  rss="$(awk '/^VmRSS:/ {print $2; exit}' "$d/status" 2>/dev/null)"
-  vsz="$(awk '/^VmSize:/ {print $2; exit}' "$d/status" 2>/dev/null)"
-  name="$(awk -F"[[:space:]]+" '/^Name:/ {print $2; exit}' "$d/status" 2>/dev/null)"
-  cmd="$(tr "\000" " " < "$d/cmdline" 2>/dev/null | sed 's/[[:space:]]\{1,\}$//')"
-  [ -n "$cmd" ] || cmd="[$name]"
-  printf "%s|%s|%s|%s|%s\n" "${rss:-0}" "${vsz:-0}" "$pid" "${name:-unknown}" "$cmd"
-done | sort -t "|" -k1,1nr | head -n ''' +
-        safeLimit.toString();
+    final processCommand = buildProcessMemoryCommand(safeLimit);
 
     try {
       final result = await _apiService!.call(
@@ -5500,6 +5488,22 @@ done | sort -t "|" -k1,1nr | head -n ''' +
       Logger.debug('Optional process memory stack: $stack');
       return const [];
     }
+  }
+
+  static String buildProcessMemoryCommand(int limit) {
+    // RSS is the leading integer, so basic BusyBox sort needs no field options.
+    return r'''
+for d in /proc/[0-9]*; do
+  pid="${d##*/}"
+  [ -r "$d/status" ] || continue
+  rss="$(awk '/^VmRSS:/ {print $2; exit}' "$d/status" 2>/dev/null)"
+  vsz="$(awk '/^VmSize:/ {print $2; exit}' "$d/status" 2>/dev/null)"
+  name="$(awk -F"[[:space:]]+" '/^Name:/ {print $2; exit}' "$d/status" 2>/dev/null)"
+  cmd="$(tr "\000" " " < "$d/cmdline" 2>/dev/null | sed 's/[[:space:]]\{1,\}$//')"
+  [ -n "$cmd" ] || cmd="[$name]"
+  printf "%s|%s|%s|%s|%s\n" "${rss:-0}" "${vsz:-0}" "$pid" "${name:-unknown}" "$cmd"
+done | sort -nr | head -n ''' +
+        limit.clamp(1, 25).toString();
   }
 
   List<ProcessMemoryUsage> _parseProcessMemoryUsage(String output) {
