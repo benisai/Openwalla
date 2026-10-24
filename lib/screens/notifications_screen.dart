@@ -145,7 +145,8 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Delete all notifications?'),
         content: const Text(
-          'This will remove all active and archived notifications.',
+          'This will remove non-network notifications, including archived ones. '
+          'Network Performance event history will be kept.',
         ),
         actions: [
           TextButton(
@@ -160,8 +161,16 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    await ref.read(appStateProvider).deleteAllNotifications(context: context);
-    await _loadNotifications();
+    try {
+      await ref.read(appStateProvider).deleteAllNotifications(context: context);
+      await _loadNotifications();
+    } catch (error) {
+      if (!mounted) return;
+      context.showToastError(
+        'Could not delete notifications',
+        subtitle: error.toString().replaceFirst('Bad state: ', ''),
+      );
+    }
   }
 
   Future<void> _handleMenuAction(_NotificationMenuAction action) async {
