@@ -2,6 +2,42 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:openwalla/models/dashboard_preferences.dart';
 
 void main() {
+  for (final count in [3, 6, 9]) {
+    test('$count shortcut icons persist through copy and JSON', () {
+      final updated = DashboardPreferences().copyWith(
+        shortcutPanelVisibleCount: count,
+      );
+      expect(
+        DashboardPreferences.fromJson(
+          updated.toJson(),
+        ).shortcutPanelVisibleCount,
+        count,
+      );
+      expect(
+        DashboardPreferences.fromJson({
+          'shortcutPanelVisibleCount': '$count',
+        }).shortcutPanelVisibleCount,
+        count,
+      );
+      expect(
+        updated.copyWith(showWifiShortcut: false).shortcutPanelVisibleCount,
+        count,
+      );
+    });
+  }
+
+  test('missing or unsupported shortcut counts keep six-icon default', () {
+    for (final value in [null, 0, 4, 12, 'invalid']) {
+      expect(
+        DashboardPreferences.fromJson({
+          'shortcutPanelVisibleCount': value,
+        }).shortcutPanelVisibleCount,
+        6,
+      );
+    }
+    expect(DashboardPreferences.fromJson({}).shortcutPanelVisibleCount, 6);
+  });
+
   test('Tunnel is hidden by default and in older saved preferences', () {
     expect(DashboardPreferences().showTunnelPage, isFalse);
     expect(DashboardPreferences.fromJson({}).showTunnelPage, isFalse);

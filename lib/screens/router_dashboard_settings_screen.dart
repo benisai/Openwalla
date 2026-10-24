@@ -671,7 +671,7 @@ class _RouterDashboardSettingsScreenState
             children: [
               RadioListTile<int>(
                 title: Text(
-                  'Compact',
+                  '3 icons',
                   style: LuciTextStyles.detailValue(
                     context,
                   ).copyWith(fontWeight: FontWeight.w600),
@@ -703,7 +703,7 @@ class _RouterDashboardSettingsScreenState
               ),
               RadioListTile<int>(
                 title: Text(
-                  'Standard',
+                  '6 icons',
                   style: LuciTextStyles.detailValue(
                     context,
                   ).copyWith(fontWeight: FontWeight.w600),
@@ -720,6 +720,34 @@ class _RouterDashboardSettingsScreenState
                       : Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
                 value: 6,
+                groupValue: _preferences.shortcutPanelVisibleCount,
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() {
+                    _preferences = _preferences.copyWith(
+                      shortcutPanelVisibleCount: value,
+                    );
+                  });
+                  _onPreferenceChanged();
+                },
+                activeColor: Theme.of(context).colorScheme.primary,
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+              RadioListTile<int>(
+                title: Text(
+                  '9 icons',
+                  style: LuciTextStyles.detailValue(
+                    context,
+                  ).copyWith(fontWeight: FontWeight.w600),
+                ),
+                secondary: Icon(
+                  Icons.apps_rounded,
+                  size: 22,
+                  color: _preferences.shortcutPanelVisibleCount == 9
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                value: 9,
                 groupValue: _preferences.shortcutPanelVisibleCount,
                 onChanged: (value) {
                   if (value == null) return;

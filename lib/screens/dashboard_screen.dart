@@ -1408,10 +1408,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     return LayoutBuilder(
       builder: (context, constraints) {
         const spacing = 6.0;
-        final perPage = visibleCount == 3 ? 3 : 6;
+        final perPage = const {3, 6, 9}.contains(visibleCount)
+            ? visibleCount
+            : 6;
         final pageCount = (shortcuts.length / perPage).ceil().clamp(1, 99);
         final currentPage = _shortcutPanelPage.clamp(0, pageCount - 1);
-        final height = perPage == 3 ? 98.0 : 202.0;
+        const rowHeight = 98.0;
+        const rowSpacing = 8.0;
+        final rows = perPage ~/ 3;
+        final height = rows * rowHeight + (rows - 1) * rowSpacing;
 
         return Column(
           children: [
@@ -1434,8 +1439,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                     crossAxisCount: 3,
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    childAspectRatio: 1.08,
-                    mainAxisSpacing: 8,
+                    mainAxisExtent: rowHeight,
+                    mainAxisSpacing: rowSpacing,
                     crossAxisSpacing: spacing,
                     children: [
                       ...pageShortcuts.map(

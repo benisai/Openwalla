@@ -283,7 +283,7 @@ class DashboardPreferences {
 
   static int _parseShortcutPanelVisibleCount(dynamic value) {
     final parsed = value is int ? value : int.tryParse(value?.toString() ?? '');
-    return parsed == 3 ? 3 : 6;
+    return const {3, 6, 9}.contains(parsed) ? parsed! : 6;
   }
 
   static int _parseLiveThroughputRefreshSeconds(dynamic value) {
