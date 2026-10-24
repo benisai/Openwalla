@@ -1,5 +1,9 @@
 # Preserve Network Events During Delete All
 
+Superseded: preservation logic was reverted at the user's request. Delete All
+was removed from the notifications menu instead. See
+`2026-10-23-remove-notifications-delete-all.md`.
+
 ## Request and Source
 
 Network Performance Recent Events fetches notifications, including archived

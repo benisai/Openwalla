@@ -555,38 +555,12 @@ class OpenwallaNotification {
     return 'system';
   }
 
-  static const networkPerformanceCategories = {
+  bool get isNetworkPerformanceEvent => const {
     'network_health',
     'interface',
     'dns',
     'speedtest',
-  };
-
-  bool get isNetworkPerformanceEvent =>
-      networkPerformanceCategories.contains(effectiveCategory);
-
-  static String deleteNonNetworkNotificationsSql({required bool hasCategory}) {
-    final categories = networkPerformanceCategories
-        .map((c) => "'$c'")
-        .join(',');
-    const categoryValue =
-        "trim(COALESCE(category, ''), "
-        "char(9)||char(10)||char(11)||char(12)||char(13)||' ')";
-    // Match effectiveCategory precedence, including older uncategorized rows.
-    final effectiveCategory =
-        '''CASE
-      ${hasCategory ? "WHEN $categoryValue <> '' THEN lower($categoryValue)" : ''}
-      WHEN instr(lower(COALESCE(app, '')), 'ping') > 0
-        OR instr(lower(COALESCE(app, '')), 'network-monitor') > 0
-        THEN 'network_health'
-      WHEN instr(lower(COALESCE(app, '')), 'interface') > 0
-        OR instr(lower(COALESCE(msg, '')), 'ethernet') > 0
-        THEN 'interface'
-      ELSE 'system' END''';
-    return 'UPDATE notifications SET "delete" = 1 '
-        'WHERE "delete" = 0 AND ($effectiveCategory) NOT IN ($categories); '
-        "SELECT 'OPENWALLA_NOTIFICATIONS_DELETED';";
-  }
+  }.contains(effectiveCategory);
 }
 
 class OpenwrtFirewallRule {
@@ -9828,34 +9802,11 @@ done | sort -nr | head -n ''' +
   Future<void> deleteAllNotifications({BuildContext? context}) async {
     if (_reviewerModeEnabled) return;
 
-    final schema = await _sqliteQueryOutput(
+    await _sqliteQueryOutput(
       dbExpression: _notificationsDbExpression(),
-      sql: 'PRAGMA table_info(notifications);',
+      sql: 'UPDATE notifications SET "delete" = 1 WHERE "delete" = 0;',
       context: context,
     );
-    final columns = schema
-        .split('\n')
-        .map((line) => line.split('|'))
-        .where((parts) => parts.length > 1)
-        .map((parts) => parts[1])
-        .toSet();
-    if (!columns.contains('delete') ||
-        !columns.contains('app') ||
-        !columns.contains('msg')) {
-      throw StateError(
-        'Could not verify the notification database. Nothing was deleted.',
-      );
-    }
-    final output = await _sqliteQueryOutput(
-      dbExpression: _notificationsDbExpression(),
-      sql: OpenwallaNotification.deleteNonNetworkNotificationsSql(
-        hasCategory: columns.contains('category'),
-      ),
-      context: context?.mounted == true ? context : null,
-    );
-    if (!output.contains('OPENWALLA_NOTIFICATIONS_DELETED')) {
-      throw StateError('The router did not confirm notification deletion.');
-    }
     await refreshNotificationCount();
   }
 

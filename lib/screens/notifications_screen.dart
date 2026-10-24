@@ -6,7 +6,7 @@ import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
 import 'package:openwalla/widgets/luci_toast.dart';
 
-enum _NotificationMenuAction { archiveAll, deleteAll }
+enum _NotificationMenuAction { archiveAll }
 
 enum _NotificationFilter { all, critical, warning, resolved }
 
@@ -139,46 +139,10 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     await _loadNotifications();
   }
 
-  Future<void> _deleteAll() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete all notifications?'),
-        content: const Text(
-          'This will remove non-network notifications, including archived ones. '
-          'Network Performance event history will be kept.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete All'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    try {
-      await ref.read(appStateProvider).deleteAllNotifications(context: context);
-      await _loadNotifications();
-    } catch (error) {
-      if (!mounted) return;
-      context.showToastError(
-        'Could not delete notifications',
-        subtitle: error.toString().replaceFirst('Bad state: ', ''),
-      );
-    }
-  }
-
   Future<void> _handleMenuAction(_NotificationMenuAction action) async {
     switch (action) {
       case _NotificationMenuAction.archiveAll:
         await _archiveAll();
-      case _NotificationMenuAction.deleteAll:
-        await _deleteAll();
     }
   }
 
@@ -282,10 +246,6 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                 PopupMenuItem(
                   value: _NotificationMenuAction.archiveAll,
                   child: Text('Archive All'),
-                ),
-                PopupMenuItem(
-                  value: _NotificationMenuAction.deleteAll,
-                  child: Text('Delete All'),
                 ),
               ],
             ),
