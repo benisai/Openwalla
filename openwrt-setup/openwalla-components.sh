@@ -139,6 +139,9 @@ check_file() {
 	# Components that were never selected in Router Setup remain untouched.
 	if [ ! -e "$destination" ]; then
 		case "$source_path" in
+		files/Openwalla-5min-run.sh)
+			[ -x /usr/bin/openwalla-netify-collector ] || return 0
+			;;
 		files/openwalla-device-access.sh|files/Openwalla-1min-run.sh|files/openwalla-devices-ping.sh)
 			[ -x /usr/bin/openwalla-devices-collector ] || return 0
 			;;
@@ -198,6 +201,7 @@ files/openwalla-devices-collector.init|/etc/init.d/openwalla-devices-collector|0
 files/oui/openwalla-mac-vendors.txt|/usr/share/openwalla/openwalla-mac-vendors.txt|0644|
 files/Openwalla-1hr-run.sh|/usr/bin/Openwalla-1hr-run.sh|0755|
 files/Openwalla-1min-run.sh|/usr/bin/Openwalla-1min-run.sh|0755|
+files/Openwalla-5min-run.sh|/usr/bin/Openwalla-5min-run.sh|0755|
 files/openwalla-devices-ping.sh|/usr/bin/openwalla-devices-ping|0755|
 files/openwalla-device-bandwidth-collector.sh|/usr/bin/openwalla-device-bandwidth-collector|0755|openwalla-device-bandwidth-collector
 files/openwalla-device-bandwidth-collector.init|/etc/init.d/openwalla-device-bandwidth-collector|0755|openwalla-device-bandwidth-collector
@@ -226,6 +230,9 @@ if [ "$ACTION" = "update" ] && [ "$FAILED" -eq 0 ]; then
 	done
 	if [ -x /usr/bin/openwalla-netify-collector ]; then
 		/usr/bin/openwalla-netify-collector --install-prune-cron >/dev/null 2>&1 || true
+	fi
+	if [ -x /usr/bin/Openwalla-5min-run.sh ]; then
+		/usr/bin/Openwalla-5min-run.sh install-cron >/dev/null 2>&1 || true
 	fi
 	if [ -x /usr/bin/Openwalla-1hr-run.sh ]; then
 		/usr/bin/Openwalla-1hr-run.sh install-cron >/dev/null 2>&1 || true

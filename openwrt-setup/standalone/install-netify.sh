@@ -12,6 +12,7 @@ log "Installing Openwalla Netify support"
 
 require_file "$FILES_DIR/openwalla-netify-collector.sh"
 require_file "$FILES_DIR/openwalla-netify-collector.init"
+require_file "$FILES_DIR/Openwalla-5min-run.sh"
 require_file "$FILES_DIR/openwalla.config"
 require_file "$RPCD_ACL"
 
@@ -27,6 +28,7 @@ ensure_uci_section features ui
 
 install_file "$FILES_DIR/openwalla-netify-collector.sh" /usr/bin/openwalla-netify-collector 0755
 install_file "$FILES_DIR/openwalla-netify-collector.init" /etc/init.d/openwalla-netify-collector 0755
+install_file "$FILES_DIR/Openwalla-5min-run.sh" /usr/bin/Openwalla-5min-run.sh 0755
 install_rpcd_acl
 
 set_uci openwalla.features.netify "1"
@@ -67,6 +69,7 @@ fi
 
 /usr/bin/openwalla-netify-collector --init-db || true
 /usr/bin/openwalla-netify-collector --install-prune-cron || true
+/usr/bin/Openwalla-5min-run.sh install-cron || true
 
 if ! have_cmd nc; then
 	log "WARNING: nc command not found; netify collector will not ingest flows."
