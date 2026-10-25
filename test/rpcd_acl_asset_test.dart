@@ -20,6 +20,7 @@ void main() {
       final read = openwalla['read'] as Map<String, dynamic>;
       expect(read['uci'], contains('system'));
       expect((read['ubus'] as Map)['luci'], contains('getTimezones'));
+      expect((read['ubus'] as Map)['luci-rpc'], contains('getBoardJSON'));
       expect((write['ubus'] as Map)['uci'], contains('apply'));
     },
   );

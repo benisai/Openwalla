@@ -36,7 +36,7 @@
 				"luci": ["getTimezones"],
 				"file": ["read"],
 				"system": ["info", "board"],
-				"luci-rpc": ["getDHCPLeases", "getNetworkDevices", "getWirelessDevices"],
+				"luci-rpc": ["getDHCPLeases", "getNetworkDevices", "getWirelessDevices", "getBoardJSON"],
 				"service": ["list"]
 			},
 			"uci": ["openwalla", "banip", "sqm", "qos", "wireless", "dhcp", "network", "adblock", "pbr", "system"]

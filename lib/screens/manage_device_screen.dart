@@ -7,6 +7,7 @@ import 'package:openwalla/screens/reset_router_screen.dart';
 import 'package:openwalla/screens/router_password_screen.dart';
 import 'package:openwalla/screens/router_setup_screen.dart';
 import 'package:openwalla/screens/router_system_settings_screen.dart';
+import 'package:openwalla/screens/vlans_screen.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
 
 class ManageDeviceScreen extends StatelessWidget {
@@ -64,6 +65,13 @@ class ManageDeviceScreen extends StatelessWidget {
                 subtitle: 'Change the router address and DHCP pool',
                 onTap: () =>
                     showNetworkInterfaceEditor(context, interfaceName: 'lan'),
+              ),
+              _DeviceManagementTile(
+                icon: Icons.account_tree_outlined,
+                color: colors.primary,
+                title: 'VLANs',
+                subtitle: 'VLANs, port membership, and bridge topology',
+                onTap: () => _open(context, const VlansScreen()),
               ),
               _DeviceManagementTile(
                 icon: Icons.inventory_2_rounded,

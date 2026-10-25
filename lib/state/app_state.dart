@@ -14,6 +14,7 @@ import 'package:openwalla/services/router_install_service.dart';
 import 'package:openwalla/services/repeater_reconnect_service.dart';
 import 'package:openwalla/services/repeater_removal_service.dart';
 import 'package:openwalla/services/router_system_settings_service.dart';
+import 'package:openwalla/services/vlan_discovery_service.dart';
 import 'package:openwalla/services/throughput_service.dart';
 import 'package:openwalla/models/client.dart';
 import 'package:openwalla/models/ddns_info.dart';
@@ -9282,6 +9283,25 @@ done | sort -nr | head -n ''' +
     } catch (error) {
       Logger.debug('Optional $wwanName interface start failed: $error');
     }
+  }
+
+  Future<VlanTopology> fetchVlanTopology() async {
+    final router = _routerService?.selectedRouter;
+    final sysauth = _authService?.sysauth;
+    final api = _apiService;
+    if (router == null || sysauth == null || api == null) {
+      throw StateError('No selected router connection is available');
+    }
+    return VlanDiscoveryService(
+      call: (object, method, params) => api.call(
+        router.ipAddress,
+        sysauth,
+        router.useHttps,
+        object: object,
+        method: method,
+        params: params,
+      ),
+    ).load();
   }
 
   RouterSystemSettingsService _routerSystemSettings() {
