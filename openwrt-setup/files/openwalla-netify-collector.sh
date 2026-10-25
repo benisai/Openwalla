@@ -33,6 +33,7 @@ FLOW_STATS_ENABLED="0"
 FLOW_STATS_POLL_SECONDS="5"
 FLOW_STATS_BUCKET_SECONDS="300"
 FLOW_STATS_RETENTION_SECONDS="2592000"
+FLOW_STATS_WARM="1"
 SQLITE_BIN=""
 JSHN_AVAILABLE="0"
 ROUTER_LAN_IPV4S=""
@@ -439,8 +440,12 @@ flow_stats_init_db() {
 		flow_key TEXT PRIMARY KEY,
 		rx_bytes INTEGER NOT NULL,
 		tx_bytes INTEGER NOT NULL,
+		tcp_state TEXT NOT NULL DEFAULT '',
 		updated_at INTEGER NOT NULL
 	);"
+	if [ "$("$SQLITE_BIN" "$FLOW_STATS_DB" "SELECT COUNT(*) FROM pragma_table_info('flow_stats_state') WHERE name='tcp_state';")" = "0" ]; then
+		stats_sql_exec "ALTER TABLE flow_stats_state ADD COLUMN tcp_state TEXT NOT NULL DEFAULT '';" || return 1
+	fi
 	stats_sql_exec "CREATE TABLE IF NOT EXISTS flow_stats_5m (
 		bucket_start INTEGER NOT NULL,
 		mac TEXT NOT NULL,
@@ -464,12 +469,18 @@ flow_stats_init_db() {
 	stats_sql_exec "CREATE INDEX IF NOT EXISTS idx_flow_stats_totals_mac ON flow_stats_totals(mac);"
 }
 
-flow_stats_conntrack_snapshot() {
+flow_stats_read_conntrack() {
 	if [ -r /proc/net/nf_conntrack ]; then
 		cat /proc/net/nf_conntrack
 	elif command -v conntrack >/dev/null 2>&1; then
 		conntrack -L -o extended 2>/dev/null
-	fi | awk -v router_ips="$ROUTER_LAN_IPV4S" '
+	else
+		return 1
+	fi
+}
+
+flow_stats_conntrack_snapshot() {
+	awk -v router_ips="$ROUTER_LAN_IPV4S" '
 	function private4(ip, a) {
 		split(ip, a, ".")
 		return a[1] == 10 || (a[1] == 172 && a[2] >= 16 && a[2] <= 31) || (a[1] == 192 && a[2] == 168)
@@ -481,9 +492,10 @@ flow_stats_conntrack_snapshot() {
 		return 0
 	}
 	{
-		proto=""; src1=""; dst1=""; sp1=""; dp1=""; b1=""; src2=""; dst2=""; b2=""
+		proto=""; src1=""; dst1=""; sp1=""; dp1=""; b1=""; src2=""; dst2=""; b2=""; tcpstate=""
 		for (i=1; i<=NF; i++) {
 			if (proto == "" && ($i == "tcp" || $i == "udp")) proto=$i
+			if ($i ~ /^(SYN_SENT|SYN_RECV|ESTABLISHED|FIN_WAIT|CLOSE_WAIT|LAST_ACK|TIME_WAIT|CLOSE)$/) tcpstate=$i
 			if ($i ~ /^src=/) { if (src1 == "") src1=substr($i,5); else if (src2 == "") src2=substr($i,5) }
 			else if ($i ~ /^dst=/) { if (dst1 == "") dst1=substr($i,5); else if (dst2 == "") dst2=substr($i,5) }
 			else if ($i ~ /^sport=/) { if (sp1 == "") sp1=substr($i,7) }
@@ -493,7 +505,7 @@ flow_stats_conntrack_snapshot() {
 		if (proto == "" || !ipv4(src1) || !ipv4(dst1) || !private4(src1) || private4(dst1)) next
 		if (sp1 == "" || dp1 == "" || b1 == "" || b2 == "") next
 		if (sp1 == 80 && router4(src1)) next
-		print proto "|" src1 "|" dst1 "|" sp1 "|" dp1 "\t" src1 "\t" dst1 "\t" b2 "\t" b1
+		print proto "|" src1 "|" dst1 "|" sp1 "|" dp1 "\t" src1 "\t" dst1 "\t" b2 "\t" b1 "\t" tcpstate
 	}'
 }
 
@@ -512,18 +524,23 @@ flow_stats_collect_once() {
 	bucket=$((now - (now % FLOW_STATS_BUCKET_SECONDS)))
 	cutoff=$((now - FLOW_STATS_RETENTION_SECONDS))
 
-	flow_stats_conntrack_snapshot >"$dir/current"
+	flow_stats_read_conntrack >"$dir/conntrack" || { rm -rf "$dir"; return 1; }
+	flow_stats_conntrack_snapshot <"$dir/conntrack" >"$dir/current" || { rm -rf "$dir"; return 1; }
 	flow_stats_write_neighbors >"$dir/neighbors"
 	"$SQLITE_BIN" -separator "$(printf '\t')" -cmd ".timeout 3000" "$FLOW_STATS_DB" \
-		"SELECT flow_key,rx_bytes,tx_bytes FROM flow_stats_state;" >"$dir/state"
+		"SELECT flow_key,rx_bytes,tx_bytes,tcp_state FROM flow_stats_state;" >"$dir/state" || { rm -rf "$dir"; return 1; }
 	"$SQLITE_BIN" -separator "$(printf '\t')" -cmd ".timeout 3000" "$FLOW_STATS_DB" \
-		"SELECT flow_key,application,destination FROM flow_stats_labels WHERE updated_at >= $((now - 600));" >"$dir/labels"
+		"SELECT flow_key,application,destination FROM flow_stats_labels WHERE updated_at >= $((now - 600));" >"$dir/labels" || { rm -rf "$dir"; return 1; }
 
-	awk -F '\t' -v now="$now" -v bucket="$bucket" \
+	# Lifecycle approach inspired by trafficchart-agg (GPL-2.0-or-later),
+	# m0g13r/luci-app-traffic-chart commit 127c82c. Startup is a baseline;
+	# new flows count their first observed bytes. Reused tuples lose old labels.
+	awk -F '\t' -v now="$now" -v bucket="$bucket" -v warm="$FLOW_STATS_WARM" \
 		-v state_file="$dir/state" -v labels_file="$dir/labels" -v neighbors_file="$dir/neighbors" '
 	function q(s) { gsub(/\047/, "\047\047", s); return "\047" s "\047" }
+	function closing(s) { return s ~ /^(FIN_WAIT|CLOSE_WAIT|LAST_ACK|TIME_WAIT|CLOSE)$/ }
 	BEGIN {
-		while ((getline < state_file) > 0) { state_rx[$1]=$2+0; state_tx[$1]=$3+0 }
+		while ((getline < state_file) > 0) { state_rx[$1]=$2+0; state_tx[$1]=$3+0; state_tcp[$1]=$4 }
 		close(state_file)
 		while ((getline < labels_file) > 0) { label_app[$1]=$2; label_dst[$1]=$3 }
 		close(labels_file)
@@ -532,12 +549,25 @@ flow_stats_collect_once() {
 		print "BEGIN IMMEDIATE;"
 	}
 	{
-		key=$1; ip=$2; remote=$3; rx=$4+0; tx=$5+0
-		drx=(key in state_rx) ? rx-state_rx[key] : 0
-		dtx=(key in state_tx) ? tx-state_tx[key] : 0
-		if (drx < 0) drx=0
-		if (dtx < 0) dtx=0
-		print "INSERT INTO flow_stats_state(flow_key,rx_bytes,tx_bytes,updated_at) VALUES(" q(key) "," rx "," tx "," now ") ON CONFLICT(flow_key) DO UPDATE SET rx_bytes=excluded.rx_bytes,tx_bytes=excluded.tx_bytes,updated_at=excluded.updated_at;"
+		key=$1; ip=$2; remote=$3; rx=$4+0; tx=$5+0; tcp=$6; reset=0
+		if (warm) { drx=0; dtx=0 }
+		else if (key in state_rx) {
+			drx=rx-state_rx[key]; dtx=tx-state_tx[key]
+			reused=closing(state_tcp[key]) && tcp != "" && !closing(tcp)
+			if (reused || drx < 0 || dtx < 0) {
+				if (reused || rx+tx <= 1073741824) { drx=rx; dtx=tx; reset=1 }
+				else { if (drx < 0) drx=0; if (dtx < 0) dtx=0 }
+			}
+		} else {
+			# A newly observed huge flow may have been missed, not newly born.
+			drx=(rx+tx <= 1073741824) ? rx : 0
+			dtx=(rx+tx <= 1073741824) ? tx : 0
+		}
+		if (reset) {
+			delete label_app[key]; delete label_dst[key]
+			print "DELETE FROM flow_stats_labels WHERE flow_key=" q(key) ";"
+		}
+		print "INSERT INTO flow_stats_state(flow_key,rx_bytes,tx_bytes,tcp_state,updated_at) VALUES(" q(key) "," rx "," tx "," q(tcp) "," now ") ON CONFLICT(flow_key) DO UPDATE SET rx_bytes=excluded.rx_bytes,tx_bytes=excluded.tx_bytes,tcp_state=excluded.tcp_state,updated_at=excluded.updated_at;"
 		if (drx == 0 && dtx == 0) next
 		mac=(ip in ip_mac) ? ip_mac[ip] : ip
 		app=(key in label_app && label_app[key] != "") ? label_app[key] : "Unknown"
@@ -550,13 +580,15 @@ flow_stats_collect_once() {
 		print "COMMIT;"
 	}' "$dir/current" >"$dir/update.sql"
 
-	"$SQLITE_BIN" -cmd ".timeout 3000" "$FLOW_STATS_DB" <"$dir/update.sql"
+	"$SQLITE_BIN" -bail -cmd ".timeout 3000" "$FLOW_STATS_DB" <"$dir/update.sql" || { rm -rf "$dir"; return 1; }
+	FLOW_STATS_WARM="0"
 	stats_sql_exec "DELETE FROM flow_stats_5m WHERE bucket_start < $cutoff; DELETE FROM flow_stats_labels WHERE updated_at < $((now - 3600));"
 	rm -rf "$dir"
 }
 
 flow_stats_loop() {
-	flow_stats_init_db
+	flow_stats_init_db || return 1
+	FLOW_STATS_WARM="1"
 	while true; do
 		flow_stats_collect_once || true
 		sleep "$FLOW_STATS_POLL_SECONDS" &
