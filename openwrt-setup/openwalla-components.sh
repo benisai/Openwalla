@@ -140,7 +140,8 @@ check_file() {
 	if [ ! -e "$destination" ]; then
 		case "$source_path" in
 		files/Openwalla-5min-run.sh)
-			[ -x /usr/bin/openwalla-netify-collector ] || return 0
+			[ -x /usr/bin/openwalla-devices-collector ] || \
+				[ -x /usr/bin/openwalla-netify-collector ] || return 0
 			;;
 		files/openwalla-device-access.sh|files/Openwalla-1min-run.sh|files/openwalla-devices-ping.sh)
 			[ -x /usr/bin/openwalla-devices-collector ] || return 0

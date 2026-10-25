@@ -17,6 +17,7 @@ require_file "$FILES_DIR/openwalla-device-quarantine.hotplug"
 require_file "$FILES_DIR/oui/openwalla-mac-vendors.txt"
 require_file "$FILES_DIR/Openwalla-1hr-run.sh"
 require_file "$FILES_DIR/Openwalla-1min-run.sh"
+require_file "$FILES_DIR/Openwalla-5min-run.sh"
 require_file "$FILES_DIR/openwalla-devices-ping.sh"
 require_file "$FILES_DIR/openwalla.config"
 require_file "$RPCD_ACL"
@@ -37,6 +38,7 @@ install_file "$FILES_DIR/openwalla-device-quarantine.hotplug" /etc/hotplug.d/nei
 install_file "$FILES_DIR/oui/openwalla-mac-vendors.txt" /usr/share/openwalla/openwalla-mac-vendors.txt 0644
 install_file "$FILES_DIR/Openwalla-1hr-run.sh" /usr/bin/Openwalla-1hr-run.sh 0755
 install_file "$FILES_DIR/Openwalla-1min-run.sh" /usr/bin/Openwalla-1min-run.sh 0755
+install_file "$FILES_DIR/Openwalla-5min-run.sh" /usr/bin/Openwalla-5min-run.sh 0755
 install_file "$FILES_DIR/openwalla-devices-ping.sh" /usr/bin/openwalla-devices-ping 0755
 install_rpcd_acl
 
@@ -50,6 +52,7 @@ uci commit openwalla
 /usr/bin/openwalla-devices-collector --once || true
 /usr/bin/Openwalla-1hr-run.sh install-cron || true
 /usr/bin/Openwalla-1min-run.sh install-cron || true
+/usr/bin/Openwalla-5min-run.sh install-cron || true
 /usr/bin/Openwalla-1hr-run.sh run || true
 
 if ! have_cmd sqlite3 && ! have_cmd sqlite3-cli; then

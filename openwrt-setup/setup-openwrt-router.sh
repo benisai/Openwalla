@@ -626,8 +626,6 @@ uninstall_feature() {
 		;;
 	netify)
 		stop_disable_service openwalla-netify-collector
-		remove_cron_marker "OPENWALLA_5MIN_RUN"
-		rm -f /usr/bin/Openwalla-5min-run.sh
 		remove_cron_marker "OPENWALLA_NETIFY_PRUNE"
 		rm -f /usr/bin/openwalla-netify-collector /etc/init.d/openwalla-netify-collector
 		clear_openwalla_section collector

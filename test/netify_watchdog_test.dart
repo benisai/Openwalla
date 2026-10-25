@@ -166,6 +166,64 @@ exit 0
     },
   );
 
+  test('missing Netify skips successfully without querying services', () async {
+    await File('${root.path}/init/netifyd').delete();
+    await File('${root.path}/proc/meminfo').delete();
+    env['UBUS_FAIL'] = '1';
+    final result = await run();
+    expect(result.exitCode, 0);
+    expect(result.stdout, contains('Netify is not installed; skipping'));
+    expect(await actions(), isEmpty);
+    expect(
+      await Directory('${root.path}/run/openwalla-5min-run.lock').exists(),
+      isFalse,
+    );
+  });
+
+  test('runner deploys alongside existing maintenance runners', () {
+    for (final installer in [
+      'install-devices-collector.sh',
+      'install-quarantine.sh',
+    ]) {
+      final source = File(
+        'openwrt-setup/standalone/$installer',
+      ).readAsStringSync();
+      for (final interval in ['1min', '5min', '1hr']) {
+        expect(
+          source,
+          contains('require_file "\$FILES_DIR/Openwalla-$interval-run.sh"'),
+        );
+        expect(
+          source,
+          contains(
+            'install_file "\$FILES_DIR/Openwalla-$interval-run.sh" /usr/bin/Openwalla-$interval-run.sh 0755',
+          ),
+        );
+        expect(
+          source,
+          contains('/usr/bin/Openwalla-$interval-run.sh install-cron'),
+        );
+      }
+    }
+    final updater = File(
+      'openwrt-setup/openwalla-components.sh',
+    ).readAsStringSync();
+    expect(
+      updater,
+      contains(
+        'files/Openwalla-5min-run.sh)\n\t\t\t[ -x /usr/bin/openwalla-devices-collector ] || \\\n\t\t\t\t[ -x /usr/bin/openwalla-netify-collector ] || return 0',
+      ),
+    );
+    final uninstall = File(
+      'openwrt-setup/setup-openwrt-router.sh',
+    ).readAsStringSync();
+    expect(
+      uninstall,
+      isNot(contains('remove_cron_marker "OPENWALLA_5MIN_RUN"')),
+    );
+    expect(uninstall, isNot(contains('rm -f /usr/bin/Openwalla-5min-run.sh')));
+  });
+
   test(
     'cron installation is idempotent and preserves unrelated entries',
     () async {

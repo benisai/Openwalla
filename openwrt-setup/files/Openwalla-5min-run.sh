@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Five-minute Netify/collector health and resident-memory watchdog.
+# Shared five-minute maintenance runner for optional Openwalla tasks.
 set -u
 
 RUNTIME_DIR="${OPENWALLA_RUNTIME_DIR:-/tmp/openwalla}"
@@ -36,7 +36,10 @@ service_memory() {
 
 check_netify() {
 	local enabled mode limit total netify_pids collector_pids netify_kb collector_kb local_collector
-	[ -x "$INIT_DIR/netifyd" ] || return 0
+	[ -x "$INIT_DIR/netifyd" ] || {
+		echo '[openwalla-5min] Netify is not installed; skipping Netify maintenance.'
+		return 0
+	}
 	"$INIT_DIR/netifyd" enabled >/dev/null 2>&1 || return 0
 	enabled="$(uci -q get openwalla.collector.enabled 2>/dev/null || echo 0)"
 	mode="$(uci -q get openwalla.collector.mode 2>/dev/null || echo local)"
