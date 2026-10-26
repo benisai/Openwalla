@@ -2142,7 +2142,9 @@ class AppState extends ChangeNotifier {
   DateTime? _snapshotSavedAt;
   final Map<String, DateTime> _staleSnapshotSections = {};
   bool get showingSavedData =>
-      _offlineViewing || _staleSnapshotSections.isNotEmpty;
+      _offlineViewing ||
+      (_authService?.isAuthenticated == true &&
+          _staleSnapshotSections.isNotEmpty);
   DateTime? get staleSectionSavedAt => _staleSnapshotSections.values.isEmpty
       ? null
       : _staleSnapshotSections.values.reduce((a, b) => a.isBefore(b) ? a : b);
@@ -2198,10 +2200,12 @@ class AppState extends ChangeNotifier {
         if (entry is Map &&
             entry['data'] is T &&
             selectedRouter?.id == router.id) {
-          _staleSnapshotSections[section] = DateTime.parse(
-            entry['savedAt'] as String,
-          );
-          notifyListeners();
+          if (_authService?.isAuthenticated == true) {
+            _staleSnapshotSections[section] = DateTime.parse(
+              entry['savedAt'] as String,
+            );
+            notifyListeners();
+          }
           return entry['data'] as T;
         }
         rethrow;

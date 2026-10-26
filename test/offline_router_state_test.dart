@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/material.dart' hide Router;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -53,6 +54,7 @@ class _Auth implements IAuthService {
 class _Api implements IApiService {
   int calls = 0;
   Object? response;
+  Future<Object?>? pendingResponse;
   @override
   Future<dynamic> call(
     String ipAddress,
@@ -66,6 +68,7 @@ class _Api implements IApiService {
     Duration? sendTimeout,
   }) async {
     calls++;
+    if (pendingResponse != null) return pendingResponse;
     if (response != null) return response;
     throw StateError('Router unreachable');
   }
@@ -370,6 +373,53 @@ void main() {
     expect((connect.dy - offline.dy).abs(), lessThan(5));
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  test(
+    'failed read completing after logout does not restore the banner',
+    () async {
+      auth.token = 'live-token';
+      final pending = Completer<Object?>();
+      api.pendingResponse = pending.future;
+      final read = state.fetchPingMonitorSamples();
+      await Future<void>.delayed(Duration.zero);
+      expect(api.calls, 1);
+      await state.logout();
+      pending.complete([
+        0,
+        {'code': 1, 'stderr': 'router disconnected'},
+      ]);
+      expect((await read).single.latencyMs, 22);
+      expect(state.showingSavedData, isFalse);
+      expect(state.offlineViewing, isFalse);
+    },
+  );
+
+  testWidgets('app-level banner has an overlay and disappears on logout', (
+    tester,
+  ) async {
+      await tester.runAsync(() => state.openOfflineSnapshot());
+      providerOwnsState = true;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [appStateProvider.overrideWith((ref) => state)],
+        child: const LuCIApp(),
+      ),
+    );
+    await tester.pump();
+    expect(find.byType(OfflineSnapshotBanner), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    final tooltip = tester.state<TooltipState>(find.byType(Tooltip).first);
+    tooltip.ensureTooltipVisible();
+    await tester.pump();
+    expect(find.text('Reconnect to router'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await state.logout();
+    await tester.pump();
+    expect(find.byType(OfflineSnapshotBanner), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 3));
   });
 
   testWidgets('offline banner fits mobile and desktop and offers reconnect', (

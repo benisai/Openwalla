@@ -139,19 +139,21 @@ class LuCIApp extends ConsumerWidget {
       builder: (context, child) => RouterAclPromptHost(
         appState: appState,
         navigatorKey: rootNavigatorKey,
-        child: Column(
-          children: [
-            if (appState.showingSavedData)
-              OfflineSnapshotBanner(
-                offline: appState.offlineViewing,
-                savedAt: appState.offlineViewing
-                    ? appState.snapshotSavedAt
-                    : appState.staleSectionSavedAt,
-                reconnecting: appState.isLoading,
-                onReconnect: () => appState.retryDashboardConnection(),
-              ),
-            Expanded(child: child ?? const SizedBox.shrink()),
-          ],
+        child: Overlay.wrap(
+          child: Column(
+            children: [
+              if (appState.showingSavedData)
+                OfflineSnapshotBanner(
+                  offline: appState.offlineViewing,
+                  savedAt: appState.offlineViewing
+                      ? appState.snapshotSavedAt
+                      : appState.staleSectionSavedAt,
+                  reconnecting: appState.isLoading,
+                  onReconnect: () => appState.retryDashboardConnection(),
+                ),
+              Expanded(child: child ?? const SizedBox.shrink()),
+            ],
+          ),
         ),
       ),
       routes: {
