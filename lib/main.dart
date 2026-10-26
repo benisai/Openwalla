@@ -9,7 +9,6 @@ import 'package:openwalla/screens/settings_screen.dart';
 import 'package:openwalla/screens/splash_screen.dart';
 import 'package:openwalla/screens/welcome_setup_screen.dart';
 import 'package:openwalla/widgets/router_acl_prompt_host.dart';
-import 'package:openwalla/widgets/offline_snapshot_banner.dart';
 
 void main() {
   runApp(ProviderScope(child: const LuCIApp()));
@@ -139,22 +138,7 @@ class LuCIApp extends ConsumerWidget {
       builder: (context, child) => RouterAclPromptHost(
         appState: appState,
         navigatorKey: rootNavigatorKey,
-        child: Overlay.wrap(
-          child: Column(
-            children: [
-              if (appState.showingSavedData)
-                OfflineSnapshotBanner(
-                  offline: appState.offlineViewing,
-                  savedAt: appState.offlineViewing
-                      ? appState.snapshotSavedAt
-                      : appState.staleSectionSavedAt,
-                  reconnecting: appState.isLoading,
-                  onReconnect: () => appState.retryDashboardConnection(),
-                ),
-              Expanded(child: child ?? const SizedBox.shrink()),
-            ],
-          ),
-        ),
+        child: child ?? const SizedBox.shrink(),
       ),
       routes: {
         '/splash': (context) => const SplashScreen(),

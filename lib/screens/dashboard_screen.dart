@@ -7,6 +7,7 @@ import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/main.dart';
 import 'package:openwalla/models/system_resource_metrics.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
+import 'package:openwalla/widgets/offline_snapshot_banner.dart';
 import 'package:openwalla/widgets/luci_animation_system.dart';
 import 'package:openwalla/models/dashboard_preferences.dart';
 import 'package:openwalla/screens/adblock_screen.dart';
@@ -1587,7 +1588,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     final headerText = (hostname != null && hostname.isNotEmpty)
         ? hostname
         : (selected?.ipAddress ?? 'Loading...');
-    return Scaffold(
+    final dashboard = Scaffold(
       appBar: LuciAppBar(
         centerTitle: true,
         leading: Transform.translate(
@@ -1872,6 +1873,24 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
         ],
       ),
       body: Stack(children: [_buildBody(appState)]),
+    );
+    if (!appState.showingSavedData) return dashboard;
+    return SafeArea(
+      bottom: false,
+      child: Column(
+        children: [
+          OfflineSnapshotBanner(
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+            offline: appState.offlineViewing,
+            savedAt: appState.offlineViewing
+                ? appState.snapshotSavedAt
+                : appState.staleSectionSavedAt,
+            reconnecting: appState.isLoading,
+            onReconnect: () => appState.retryDashboardConnection(),
+          ),
+          Expanded(child: dashboard),
+        ],
+      ),
     );
   }
 

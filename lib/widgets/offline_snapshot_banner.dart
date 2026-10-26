@@ -7,18 +7,20 @@ class OfflineSnapshotBanner extends StatelessWidget {
     required this.reconnecting,
     required this.onReconnect,
     this.offline = true,
+    this.backgroundColor,
   });
   final DateTime? savedAt;
   final bool reconnecting;
   final VoidCallback onReconnect;
   final bool offline;
+  final Color? backgroundColor;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final time = savedAt?.toLocal().toString().split('.').first;
     return Material(
-      color: colors.surfaceContainerHigh,
+      color: backgroundColor ?? colors.surfaceContainerHigh,
       child: SafeArea(
         bottom: false,
         child: Padding(

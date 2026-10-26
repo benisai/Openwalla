@@ -9,6 +9,7 @@ import 'package:openwalla/main.dart';
 import 'package:openwalla/models/client.dart';
 import 'package:openwalla/models/router.dart';
 import 'package:openwalla/screens/login_screen.dart';
+import 'package:openwalla/screens/dashboard_screen.dart';
 import 'package:openwalla/services/api_service.dart';
 import 'package:openwalla/services/interfaces/api_service_interface.dart';
 import 'package:openwalla/services/interfaces/auth_service_interface.dart';
@@ -395,32 +396,55 @@ void main() {
     },
   );
 
-  testWidgets('app-level banner has an overlay and disappears on logout', (
-    tester,
-  ) async {
+  testWidgets(
+    'dashboard banner sits above router selector and disappears on logout',
+    (tester) async {
       await tester.runAsync(() => state.openOfflineSnapshot());
       providerOwnsState = true;
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [appStateProvider.overrideWith((ref) => state)],
-        child: const LuCIApp(),
-      ),
-    );
-    await tester.pump();
-    expect(find.byType(OfflineSnapshotBanner), findsOneWidget);
-    expect(tester.takeException(), isNull);
-    final tooltip = tester.state<TooltipState>(find.byType(Tooltip).first);
-    tooltip.ensureTooltipVisible();
-    await tester.pump();
-    expect(find.text('Reconnect to router'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-    await state.logout();
-    await tester.pump();
-    expect(find.byType(OfflineSnapshotBanner), findsNothing);
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump(const Duration(seconds: 3));
-  });
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [appStateProvider.overrideWith((ref) => state)],
+          child: const LuCIApp(),
+        ),
+      );
+      await tester.pump();
+      expect(find.byType(OfflineSnapshotBanner), findsNothing);
+      unawaited(
+        rootNavigatorKey.currentState!.pushReplacement(
+          MaterialPageRoute<void>(
+            builder: (context) => const DashboardScreen(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(OfflineSnapshotBanner), findsOneWidget);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      for (final size in [const Size(360, 860), const Size(1280, 900)]) {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        await tester.pump();
+        expect(
+          tester.getBottomLeft(find.byType(OfflineSnapshotBanner)).dy,
+          lessThanOrEqualTo(tester.getTopLeft(find.text('Router A')).dy),
+        );
+        expect(tester.takeException(), isNull);
+      }
+      expect(tester.takeException(), isNull);
+      final tooltip = tester.state<TooltipState>(find.byType(Tooltip).first);
+      tooltip.ensureTooltipVisible();
+      await tester.pump();
+      expect(find.text('Reconnect to router'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await state.logout();
+      await tester.pump();
+      expect(find.byType(OfflineSnapshotBanner), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 3));
+    },
+  );
 
   testWidgets('offline banner fits mobile and desktop and offers reconnect', (
     tester,
