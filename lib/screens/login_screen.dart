@@ -598,6 +598,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                               children: [
                                 Column(
                                   children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Image.asset(
+                                        'assets/branding/openwalla-mark.png',
+                                        key: const ValueKey(
+                                          'login-openwalla-logo',
+                                        ),
+                                        width: 96,
+                                        height: 96,
+                                        fit: BoxFit.contain,
+                                        semanticLabel: 'Openwalla logo',
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
                                     Text(
                                       'Openwalla',
                                       style: textTheme.headlineLarge?.copyWith(

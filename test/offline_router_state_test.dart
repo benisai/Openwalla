@@ -399,6 +399,22 @@ void main() {
     });
     await tester.pump(const Duration(seconds: 3));
     await tester.pump();
+    final logo = find.byKey(const ValueKey('login-openwalla-logo'));
+    for (final size in [const Size(360, 860), const Size(1280, 900)]) {
+      tester.view.physicalSize = size;
+      await tester.pump();
+      expect(logo, findsOneWidget);
+      expect(tester.getSize(logo), const Size(96, 96));
+      expect(
+        tester.getBottomLeft(logo).dy,
+        lessThan(tester.getTopLeft(find.text('Openwalla')).dy),
+      );
+      expect(
+        (tester.widget<Image>(logo).image as AssetImage).assetName,
+        'assets/branding/openwalla-mark.png',
+      );
+      expect(tester.takeException(), isNull);
+    }
     expect(find.text('Connect'), findsOneWidget);
     expect(find.text('Offline'), findsOneWidget);
     final connect = tester.getCenter(find.text('Connect'));
