@@ -102,8 +102,8 @@ void main() {
         expect(colors.length, 12);
         expect(colors.sublist(8), [
           const Color(0xFFFF424B),
-          threshold == 100 ? const Color(0xFFEAB308) : const Color(0xFF86EFAC),
-          const Color(0xFF86EFAC),
+          threshold == 100 ? const Color(0xFFEAB308) : const Color(0xFF20CF70),
+          const Color(0xFF20CF70),
           const Color(0xFF168A48),
         ]);
         final context = tester.element(chart);
