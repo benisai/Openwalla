@@ -125,7 +125,7 @@ void main() {
       orderedEquals(List.generate(18, (i) => i * 250)),
     );
     await bottom(tester);
-    expect(find.text('End of flows'), findsOneWidget);
+    expect(find.textContaining('Loaded 4250 of 4250 flows'), findsOneWidget);
     expect(state.requests.length, 18);
     expect(tester.takeException(), isNull);
   });
@@ -146,7 +146,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(state.requests.last.offset, 2000);
     await bottom(tester);
-    expect(find.text('End of flows'), findsOneWidget);
+    expect(find.textContaining('Loaded 2200 of 2200 flows'), findsOneWidget);
   });
 
   testWidgets('ignores an old page when a filter replaces the list', (

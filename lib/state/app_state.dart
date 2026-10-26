@@ -6088,10 +6088,14 @@ done | sort -nr | head -n ''' +
     required String dbExpression,
     required String sql,
     BuildContext? context,
+    bool requireSuccess = false,
   }) async {
     final router = _routerService?.selectedRouter;
     final sysauth = _authService?.sysauth;
-    if (router == null || sysauth == null || _apiService == null) return '';
+    if (router == null || sysauth == null || _apiService == null) {
+      if (requireSuccess) throw StateError('Router is not connected');
+      return '';
+    }
 
     final result = await _apiService!.call(
       router.ipAddress,
@@ -6105,7 +6109,9 @@ done | sort -nr | head -n ''' +
       },
       context: context,
     );
-    return _commandOutput(result);
+    return requireSuccess
+        ? _snapshotCommandOutput(result)
+        : _commandOutput(result);
   }
 
   Future<String> _sqliteQueryOutputForRouter({
@@ -10256,15 +10262,29 @@ done | sort -nr | head -n ''' +
 
     final safeLimit = limit.clamp(1, 250).toInt();
     final safeOffset = offset < 0 ? 0 : offset;
-    return await _fetchNetifyRawFlows(
-      limit: safeLimit,
-      offset: safeOffset,
-      protocolFilter: protocolFilter,
-      deviceMac: deviceMac,
-      searchQuery: searchQuery,
-      hoursBack: hoursBack,
-      context: context,
-    );
+    Future<List<NetifyFlow>> readPage(int pageLimit, int pageOffset) async {
+      try {
+        return await _fetchNetifyRawFlows(
+          limit: pageLimit,
+          offset: pageOffset,
+          protocolFilter: protocolFilter,
+          deviceMac: deviceMac,
+          searchQuery: searchQuery,
+          hoursBack: hoursBack,
+          context: context,
+        );
+      } on FormatException {
+        if (pageLimit <= 1) rethrow;
+        // rpcd output limits vary; retry incomplete pages with smaller payloads.
+        final half = pageLimit ~/ 2;
+        final first = await readPage(half, pageOffset);
+        if (first.length < half) return first;
+        final second = await readPage(pageLimit - half, pageOffset + half);
+        return [...first, ...second];
+      }
+    }
+
+    return readPage(safeLimit, safeOffset);
   }
 
   Future<List<NetifyFlow>> fetchConnectionFlows({
@@ -10437,40 +10457,49 @@ done | sort -nr | head -n ''' +
           query: query,
         );
         final items = data is Map ? data['items'] : null;
-        if (items is! List) return const [];
-        return items
-            .map((item) => NetifyFlow.fromJsonLine(jsonEncode(item)))
-            .whereType<NetifyFlow>()
-            .toList();
+        if (items is! List) throw StateError('Invalid flow server response');
+        return items.map((item) {
+          final flow = NetifyFlow.fromJsonLine(jsonEncode(item));
+          if (flow == null) {
+            throw const FormatException('Unreadable Netify flow');
+          }
+          return flow;
+        }).toList();
       }
     } catch (e, stack) {
       Logger.warning('Openwalla Server flow fetch failed: $e');
       Logger.debug('Openwalla Server flow fetch stack: $stack');
-      return const [];
+      rethrow;
     }
 
     final router = _routerService?.selectedRouter;
     final sysauth = _authService?.sysauth;
     if (router == null || sysauth == null || _apiService == null) {
-      return const [];
+      throw StateError('Router is not connected');
     }
 
     try {
+      const endMarker = '__OPENWALLA_FLOW_PAGE_END__';
       final output = await _sqliteQueryOutput(
         dbExpression: _netifyDbExpression(),
         sql:
-            'SELECT json FROM flow_raw ${_netifyRawWhereClause(protocolFilter, deviceMac: deviceMac, searchQuery: searchQuery, hoursBack: hoursBack)} ORDER BY id DESC LIMIT $limit OFFSET $offset;',
+            'SELECT json FROM flow_raw ${_netifyRawWhereClause(protocolFilter, deviceMac: deviceMac, searchQuery: searchQuery, hoursBack: hoursBack)} ORDER BY id DESC LIMIT $limit OFFSET $offset; SELECT \'$endMarker\';',
         context: context?.mounted == true ? context : null,
+        requireSuccess: true,
       );
-      return output
-          .split('\n')
-          .map((line) => NetifyFlow.fromJsonLine(line.trim()))
-          .whereType<NetifyFlow>()
-          .toList();
+      final lines = output.trimRight().split('\n');
+      if (lines.last.trim() != endMarker) {
+        throw const FormatException('Incomplete Netify flow page');
+      }
+      return lines.take(lines.length - 1).map((line) {
+        final flow = NetifyFlow.fromJsonLine(line.trim());
+        if (flow == null) throw const FormatException('Unreadable Netify flow');
+        return flow;
+      }).toList();
     } catch (e, stack) {
       Logger.warning('Optional Netify raw flows fetch failed: $e');
       Logger.debug('Optional Netify raw flows stack: $stack');
-      return const [];
+      rethrow;
     }
   }
 

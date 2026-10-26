@@ -881,11 +881,12 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
         child: Center(child: CircularProgressIndicator()),
       );
     }
-    if (!_isLoading && _flows.isNotEmpty && !_hasMoreFlows) {
+    if (!_isLoading && _flows.isNotEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 18),
         child: Text(
-          'End of flows',
+          'Loaded ${_flows.length} of $_flowCount flows'
+          '${_hasMoreFlows ? '' : ' • End of flows'}',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
             color: colorScheme.onSurfaceVariant,
