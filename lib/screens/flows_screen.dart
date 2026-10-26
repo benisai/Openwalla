@@ -156,12 +156,13 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
   static const Color _cyan = Color(0xFF18AEEA);
   static const Color _red = Color(0xFFFF4D4F);
   static const int _pageSize = 250;
-  static const int _maxLoadedFlows = 2000;
+  static const int _batchSize = 2000;
 
   bool _isLoading = true;
   bool _isLoadingMore = false;
   bool _hasMoreFlows = true;
   bool _netifyMissing = false;
+  bool _loadMoreFailed = false;
   String? _error;
   String? _selectedProtocolFilter;
   _FlowTimeRange _selectedTimeRange = _FlowTimeRange.twentyFourHours;
@@ -197,6 +198,7 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
     if (!_scrollController.hasClients ||
         _isLoading ||
         _isLoadingMore ||
+        _loadMoreFailed ||
         !_hasMoreFlows) {
       return;
     }
@@ -215,6 +217,7 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
       _isLoadingMore = false;
       _hasMoreFlows = true;
       _netifyMissing = false;
+      _loadMoreFailed = false;
       _error = null;
     });
 
@@ -224,7 +227,7 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
         context: mounted ? context : null,
       );
       if (!hasNetify) {
-        if (!mounted) return;
+        if (!mounted || generation != _loadGeneration) return;
         setState(() {
           _flowCount = 0;
           _flows = const [];
@@ -264,12 +267,12 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _flowCount = summary.count;
-        _hasMoreFlows =
-            _flows.length < summary.count && _flows.length < _maxLoadedFlows;
       });
-      unawaited(_loadFlowBatches(generation));
+      unawaited(
+        _loadMoreFlows(generation: generation, targetCount: _batchSize),
+      );
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _error = 'Unable to load flow data.';
         _isLoading = false;
@@ -277,16 +280,7 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
     }
   }
 
-  Future<void> _loadFlowBatches(int generation) async {
-    while (mounted &&
-        generation == _loadGeneration &&
-        _hasMoreFlows &&
-        _flows.length < _maxLoadedFlows) {
-      await _loadMoreFlows(generation: generation);
-    }
-  }
-
-  Future<void> _loadMoreFlows({int? generation}) async {
+  Future<void> _loadMoreFlows({int? generation, int? targetCount}) async {
     if (!mounted || _isLoading || _isLoadingMore || !_hasMoreFlows) {
       return;
     }
@@ -294,36 +288,38 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
     final activeGeneration = generation ?? _loadGeneration;
     if (activeGeneration != _loadGeneration) return;
 
-    setState(() => _isLoadingMore = true);
+    final target = targetCount ?? _flows.length + _batchSize;
+    setState(() {
+      _isLoadingMore = true;
+      _loadMoreFailed = false;
+    });
 
     try {
       final appState = ref.read(appStateProvider);
-      final requestLimit = (_maxLoadedFlows - _flows.length).clamp(
-        1,
-        _pageSize,
-      );
-      final flows = await appState.fetchNetifyFlows(
-        limit: requestLimit,
-        offset: _flows.length,
-        protocolFilter: _selectedProtocolFilter,
-        hoursBack: _selectedTimeRange.hours,
-        deviceMac: widget.deviceMac,
-        searchQuery: _searchController.text,
-      );
+      // Keep router responses small while filling one scroll-triggered batch.
+      while (_hasMoreFlows && _flows.length < target) {
+        final requestLimit = (target - _flows.length).clamp(1, _pageSize);
+        final flows = await appState.fetchNetifyFlows(
+          limit: requestLimit,
+          offset: _flows.length,
+          protocolFilter: _selectedProtocolFilter,
+          hoursBack: _selectedTimeRange.hours,
+          deviceMac: widget.deviceMac,
+          searchQuery: _searchController.text,
+        );
+        if (!mounted || activeGeneration != _loadGeneration) return;
+        final items = _mapFlowItems(flows, _cachedHostnames);
+        setState(() {
+          _flows = [..._flows, ...items];
+          _hasMoreFlows = flows.length == requestLimit;
+        });
+      }
       if (!mounted || activeGeneration != _loadGeneration) return;
-      final items = _mapFlowItems(flows, _cachedHostnames);
-      setState(() {
-        _flows = [..._flows, ...items];
-        _hasMoreFlows =
-            flows.length == requestLimit &&
-            _flows.length < _flowCount &&
-            _flows.length < _maxLoadedFlows;
-        _isLoadingMore = false;
-      });
+      setState(() => _isLoadingMore = false);
     } catch (_) {
       if (!mounted || activeGeneration != _loadGeneration) return;
       setState(() {
-        _hasMoreFlows = false;
+        _loadMoreFailed = true;
         _isLoadingMore = false;
       });
     }
@@ -870,6 +866,15 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
 
   Widget _buildFlowFooter(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    if (_loadMoreFailed) {
+      return Center(
+        child: TextButton.icon(
+          onPressed: _loadMoreFlows,
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('Retry loading flows'),
+        ),
+      );
+    }
     if (_isLoadingMore) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 18),
@@ -880,9 +885,7 @@ class _FlowsScreenState extends ConsumerState<FlowsScreen> {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 18),
         child: Text(
-          _flowCount > _maxLoadedFlows
-              ? 'Showing latest $_maxLoadedFlows flows'
-              : 'End of flows',
+          'End of flows',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
             color: colorScheme.onSurfaceVariant,
