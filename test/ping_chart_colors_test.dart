@@ -104,7 +104,7 @@ void main() {
           const Color(0xFFFF424B),
           threshold == 100 ? const Color(0xFFEAB308) : const Color(0xFF20CF70),
           const Color(0xFF20CF70),
-          const Color(0xFF168A48),
+          const Color(0xFF86EFAC),
         ]);
         final context = tester.element(chart);
         final gray = Theme.of(

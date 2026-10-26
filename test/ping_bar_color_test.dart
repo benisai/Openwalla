@@ -4,7 +4,7 @@ import 'package:openwalla/screens/network_performance_screen.dart';
 
 void main() {
   for (final entry in {
-    59.99: const Color(0xFF168A48),
+    59.99: const Color(0xFF86EFAC),
     60.0: const Color(0xFF20CF70),
     150.0: const Color(0xFF20CF70),
     199.99: const Color(0xFF20CF70),
@@ -77,10 +77,10 @@ void main() {
   });
 
   for (final latency in [0.0, 12.0, 29.99]) {
-    test('$latency ms uses excellent dark green', () {
+    test('$latency ms uses excellent lime green', () {
       expect(
         NetworkPerformanceScreen.pingLatencyColor(latency),
-        const Color(0xFF168A48),
+        const Color(0xFF86EFAC),
       );
     });
   }
