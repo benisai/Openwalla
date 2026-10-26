@@ -438,18 +438,80 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _titleRow(
-            '$interfaceName Usage',
-            trailing: Text(
-              _usageSubtitle(_usageRange),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurfaceVariant.withValues(alpha: 0.78),
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0,
+          Row(
+            key: const ValueKey('interface-usage-header'),
+            children: [
+              Expanded(
+                flex: 4,
+                child: Text(
+                  '$interfaceName Usage',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0,
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 3,
+                child: FutureBuilder<List<VnstatUsageSample>>(
+                  future: _usageFuture(_usageRange, interfaceName),
+                  builder: (context, snapshot) {
+                    final samples = _usageSamplesForRange(
+                      _usageRange,
+                      snapshot.data ?? const [],
+                    );
+                    final total = samples.fold<int>(
+                      0,
+                      (sum, sample) =>
+                          sum + sample.downloadBytes + sample.uploadBytes,
+                    );
+                    return Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          snapshot.connectionState == ConnectionState.done &&
+                                  snapshot.hasData
+                              ? 'Total ${_formatUsageTotal(total)}'
+                              : 'Total —',
+                          key: const ValueKey('interface-usage-total'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0,
+                              ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 4,
+                child: Text(
+                  _usageSubtitle(_usageRange),
+                  textAlign: TextAlign.right,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurfaceVariant.withValues(alpha: 0.78),
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           _usageRangePager(interfaceName),
@@ -805,6 +867,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
         SizedBox(
           height: 252,
           child: PageView.builder(
+            key: const ValueKey('interface-usage-pager'),
             controller: _usageRangeController,
             physics: const BouncingScrollPhysics(),
             onPageChanged: (index) {
@@ -949,14 +1012,6 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     required _StatsUsageRange range,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
-    final totalDownload = samples.fold<int>(
-      0,
-      (sum, sample) => sum + sample.downloadBytes,
-    );
-    final totalUpload = samples.fold<int>(
-      0,
-      (sum, sample) => sum + sample.uploadBytes,
-    );
     final maxValue = samples
         .map((sample) => sample.downloadBytes + sample.uploadBytes)
         .fold<int>(0, max);
@@ -1152,18 +1207,6 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                   ),
                   if (!hasAnyData)
                     Text('No usage data yet', style: _mutedTextStyle()),
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    child: Text(
-                      'Total ${_formatUsageTotal(totalDownload + totalUpload)}',
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0,
-                      ),
-                    ),
-                  ),
                 ],
               );
             },
