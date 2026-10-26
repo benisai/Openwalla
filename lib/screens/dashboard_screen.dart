@@ -848,12 +848,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(
-                              Icons.trending_up,
-                              size: 48,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withValues(alpha: 0.7),
+                            Flexible(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Icon(
+                                  Icons.trending_up,
+                                  size: 48,
+                                  color: Theme.of(context).colorScheme.onSurface
+                                      .withValues(alpha: 0.7),
+                                ),
+                              ),
                             ),
                             const SizedBox(height: 8),
                             Text(

@@ -6,6 +6,8 @@
 - Preserve the saved timestamp, read-only label, reconnect control, and status-bar
   safe-area handling. The banner now uses the route's normal Navigator overlay.
 - Remove the extra global overlay wrapper. No cache or router behavior changes.
+- Allow the Live Traffic placeholder icon to shrink in constrained space, avoiding
+  a small vertical overflow exposed by the mobile viewport check.
 - App version: 1.0.545+447. No APK built.
 
 ## Verification
