@@ -25,6 +25,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   _NotificationFilter _filter = _NotificationFilter.all;
   final TextEditingController _searchController = TextEditingController();
   bool _openingDevice = false;
+  final Set<int> _archivingIds = {};
 
   @override
   void initState() {
@@ -55,10 +56,26 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   }
 
   Future<void> _archiveOne(OpenwallaNotification notification) async {
-    await ref
-        .read(appStateProvider)
-        .archiveNotification(notification.id, context: context);
-    await _loadNotifications();
+    if (_archivingIds.contains(notification.id)) return;
+    setState(() => _archivingIds.add(notification.id));
+    try {
+      await ref
+          .read(appStateProvider)
+          .archiveNotification(notification.id, context: context);
+      if (!mounted) return;
+      setState(() {
+        _notifications = _notifications
+            .where((item) => item.id != notification.id)
+            .toList();
+      });
+    } catch (_) {
+      if (!mounted) return;
+      context.showToastError('Could not archive notification');
+    } finally {
+      if (mounted) {
+        setState(() => _archivingIds.remove(notification.id));
+      }
+    }
   }
 
   Future<void> _openDevice(OpenwallaNotification notification) async {
@@ -333,13 +350,16 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                       ...List.generate(filtered.length, (index) {
                         final notification = filtered[index];
                         return Padding(
+                          key: ValueKey('notification-${notification.id}'),
                           padding: EdgeInsets.only(
                             bottom: index == filtered.length - 1 ? 0 : 10,
                           ),
                           child: _NotificationCard(
                             notification: notification,
                             timestamp: _formatTimestamp(notification.timestamp),
-                            onArchive: () => _archiveOne(notification),
+                            onArchive: _archivingIds.contains(notification.id)
+                                ? null
+                                : () => _archiveOne(notification),
                             onTap: notification.deviceMacAddress == null
                                 ? null
                                 : () => _openDevice(notification),
@@ -357,7 +377,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
 class _NotificationCard extends StatelessWidget {
   final OpenwallaNotification notification;
   final String timestamp;
-  final VoidCallback onArchive;
+  final VoidCallback? onArchive;
   final VoidCallback? onTap;
 
   const _NotificationCard({
