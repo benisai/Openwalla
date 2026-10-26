@@ -50,6 +50,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     );
   }
 
+  Future<void> _openOffline() async {
+    final appState = ref.read(appStateProvider);
+    if (!await appState.openOfflineSnapshot()) {
+      if (mounted) context.showToastError('No saved data for this router');
+      return;
+    }
+    if (mounted) unawaited(Navigator.of(context).pushReplacementNamed('/'));
+  }
+
   @override
   void initState() {
     super.initState();
@@ -280,6 +289,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       ),
     );
     if (router != null && mounted) {
+      await ref.read(appStateProvider).selectSavedRouterForLogin(router.id);
+      if (!mounted) return;
       setState(() => _prefillRouter(router));
     }
   }
@@ -1027,53 +1038,109 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                               },
                                               child: SizedBox(
                                                 width: double.infinity,
-                                                child: ElevatedButton(
-                                                  onPressed: appState.isLoading
-                                                      ? null
-                                                      : _connect,
-                                                  style: ElevatedButton.styleFrom(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          vertical: 18,
-                                                        ),
-                                                    textStyle: const TextStyle(
-                                                      fontSize: 18,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                    ),
-                                                    shape: RoundedRectangleBorder(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            14,
-                                                          ),
-                                                    ),
-                                                    elevation: 4,
-                                                    backgroundColor:
-                                                        colorScheme.primary,
-                                                    foregroundColor:
-                                                        colorScheme.onPrimary,
-                                                  ),
-                                                  child: appState.isLoading
-                                                      ? const SizedBox(
-                                                          height: 26,
-                                                          width: 26,
-                                                          child:
-                                                              CircularProgressIndicator(
-                                                                strokeWidth: 3,
-                                                                color: Colors
-                                                                    .white,
+                                                child: Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: ElevatedButton(
+                                                        onPressed:
+                                                            appState.isLoading
+                                                            ? null
+                                                            : _connect,
+                                                        style: ElevatedButton.styleFrom(
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 8,
+                                                                vertical: 18,
                                                               ),
-                                                        )
-                                                      : Row(
-                                                          mainAxisAlignment:
-                                                              MainAxisAlignment
-                                                                  .center,
-                                                          children: const [
-                                                            Icon(Icons.login),
-                                                            SizedBox(width: 12),
-                                                            Text('Connect'),
-                                                          ],
+                                                          textStyle:
+                                                              const TextStyle(
+                                                                fontSize: 14,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .bold,
+                                                              ),
+                                                          shape: RoundedRectangleBorder(
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  14,
+                                                                ),
+                                                          ),
+                                                          elevation: 4,
+                                                          backgroundColor:
+                                                              colorScheme
+                                                                  .primary,
+                                                          foregroundColor:
+                                                              colorScheme
+                                                                  .onPrimary,
                                                         ),
+                                                        child:
+                                                            appState.isLoading
+                                                            ? const SizedBox(
+                                                                height: 26,
+                                                                width: 26,
+                                                                child: CircularProgressIndicator(
+                                                                  strokeWidth:
+                                                                      3,
+                                                                  color: Colors
+                                                                      .white,
+                                                                ),
+                                                              )
+                                                            : Row(
+                                                                mainAxisAlignment:
+                                                                    MainAxisAlignment
+                                                                        .center,
+                                                                children: const [
+                                                                  Icon(
+                                                                    Icons.login,
+                                                                    size: 18,
+                                                                  ),
+                                                                  SizedBox(
+                                                                    width: 6,
+                                                                  ),
+                                                                  Text(
+                                                                    'Connect',
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                      ),
+                                                    ),
+                                                    if (appState.errorMessage !=
+                                                            null &&
+                                                        appState
+                                                            .hasOfflineSnapshot) ...[
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                        child: OutlinedButton.icon(
+                                                          onPressed:
+                                                              appState.isLoading
+                                                              ? null
+                                                              : _openOffline,
+                                                          icon: const Icon(
+                                                            Icons
+                                                                .cloud_off_outlined,
+                                                            size: 18,
+                                                          ),
+                                                          label: const Text(
+                                                            'Offline',
+                                                          ),
+                                                          style: OutlinedButton.styleFrom(
+                                                            textStyle:
+                                                                const TextStyle(
+                                                                  fontSize: 14,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold,
+                                                                ),
+                                                            padding:
+                                                                const EdgeInsets.symmetric(
+                                                                  horizontal: 8,
+                                                                  vertical: 18,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ],
                                                 ),
                                               ),
                                             ),

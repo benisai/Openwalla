@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
+import 'router_access_guard.dart';
 
 class SshCommandResult {
   final String output;
@@ -19,6 +20,7 @@ class SshService {
     int port = 22,
     Duration timeout = const Duration(seconds: 18),
   }) async {
+    RouterAccessGuard.requireLiveConnection();
     final target = _parseTarget(host, port);
     final socket = await SSHSocket.connect(
       target.host,
@@ -52,6 +54,7 @@ class SshService {
     Duration? executionTimeout,
     void Function(String chunk)? onOutput,
   }) async {
+    RouterAccessGuard.requireLiveConnection();
     final target = _parseTarget(host, port);
     SSHClient? client;
 

@@ -1,6 +1,6 @@
 # Openwalla Privacy Policy
 
-Last updated: October 12, 2026
+Last updated: October 25, 2026
 
 Openwalla is an open-source mobile application for managing OpenWrt routers. This policy explains what information the app handles, where it is stored, and the choices available to you.
 
@@ -16,6 +16,7 @@ Openwalla is an open-source mobile application for managing OpenWrt routers. Thi
 
 - Openwalla reads router status, interfaces, connected devices, traffic information, logs, and configuration data to provide the features you request.
 - This information normally travels directly between your device and your OpenWrt router.
+- The app keeps per-router JSON snapshots of recently fetched dashboard, device, network, Wi-Fi, and network-performance display data in its private local storage for offline viewing. Snapshots exclude credential fields such as Wi-Fi passwords and session tokens; the cached display data is not separately encrypted.
 - Some optional Openwalla components store monitoring data on your router, including SQLite databases created by the router helper scripts.
 
 ### Optional self-hosted Openwalla Server
@@ -49,7 +50,7 @@ Openwalla uses this information only to:
 
 ## 4. Data Retention and Deletion
 
-- Removing a router profile deletes that profile's locally stored app credentials and settings.
+- Removing a router profile deletes that profile's locally stored app credentials, settings, and offline snapshot.
 - Openwalla does not create an Openwalla cloud account, so there is no developer-hosted account to delete.
 - Uninstalling Openwalla removes app data according to the mobile operating system's normal behavior.
 - Data stored by router helper components remains on the router until you remove it or uninstall those components.

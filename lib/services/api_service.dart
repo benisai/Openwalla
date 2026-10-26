@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:openwalla/services/interfaces/api_service_interface.dart';
 import '../utils/http_client_manager.dart';
 import '../utils/logger.dart';
+import 'router_access_guard.dart';
 
 class LoginResult {
   final String? token;
@@ -319,6 +320,7 @@ class RealApiService implements IApiService {
     Duration? receiveTimeout,
     Duration? sendTimeout,
   }) async {
+    RouterAccessGuard.checkRpc(object, method);
     final url = _buildUrl(ipAddress, useHttps, '/cgi-bin/luci/admin/ubus');
     final client = _createHttpClient(useHttps, ipAddress, context: context);
 

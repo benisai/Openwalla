@@ -174,7 +174,9 @@ class _NetworkPerformanceScreenState
           IconButton(
             tooltip: 'Performance settings',
             icon: const Icon(Icons.settings_rounded),
-            onPressed: _openPerformanceSettings,
+            onPressed: appState.offlineViewing
+                ? null
+                : _openPerformanceSettings,
           ),
         ],
       ),
@@ -318,6 +320,10 @@ class _NetworkPerformanceScreenState
   }
 
   Future<void> _runSpeedtest() async {
+    if (ref.read(appStateProvider).offlineViewing) {
+      context.showToastError('Reconnect to run a speed test');
+      return;
+    }
     if (_isSpeedtestRunning) return;
     setState(() => _isSpeedtestRunning = true);
     var waitDialogOpen = true;

@@ -1876,7 +1876,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   }
 
   Widget _buildBody(AppState appState) {
-    if (appState.dashboardError != null) {
+    if (appState.dashboardError != null && appState.dashboardData == null) {
       return LuciErrorDisplay(
         title: 'Connection Failed',
         message:

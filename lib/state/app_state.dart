@@ -37,6 +37,8 @@ import 'package:openwalla/services/device_access_service.dart';
 import 'package:openwalla/utils/router_setup_commands.dart';
 import 'package:openwalla/utils/router_identity.dart';
 import 'package:openwalla/services/client_discovery_service.dart';
+import 'package:openwalla/services/router_snapshot_cache.dart';
+import 'package:openwalla/services/router_access_guard.dart';
 
 typedef _WirelessConnection = ({
   String band,
@@ -2027,6 +2029,9 @@ class AppState extends ChangeNotifier {
   }
 
   Future<String?> fetchRouterPublicIp({bool forceRefresh = false}) async {
+    if (_offlineViewing) {
+      return await readSnapshotSection('public-ip') as String?;
+    }
     if (_reviewerModeEnabled) return '203.0.113.10';
     final router = _routerService?.selectedRouter;
     final sysauth = _authService?.sysauth;
@@ -2073,6 +2078,7 @@ class AppState extends ChangeNotifier {
       _cachedPublicIp = candidate;
       _cachedPublicIpRouterId = router.id;
       _cachedPublicIpAt = now;
+      await _saveSnapshotSection(router, 'public-ip', candidate);
       return candidate;
     } catch (error, stack) {
       Logger.debug('Optional public IP lookup failed: $error');
@@ -2129,6 +2135,194 @@ class AppState extends ChangeNotifier {
   final HttpClientManager _httpClientManager = HttpClientManager();
   final RouterAclService _routerAclService = RouterAclService();
   List<Client> _clients = const [];
+  late final RouterSnapshotCache _snapshotCache;
+  bool _offlineViewing = false;
+  bool _hasOfflineSnapshot = false;
+  String? _dashboardRouterId;
+  DateTime? _snapshotSavedAt;
+  final Map<String, DateTime> _staleSnapshotSections = {};
+  bool get showingSavedData =>
+      _offlineViewing || _staleSnapshotSections.isNotEmpty;
+  DateTime? get staleSectionSavedAt => _staleSnapshotSections.values.isEmpty
+      ? null
+      : _staleSnapshotSections.values.reduce((a, b) => a.isBefore(b) ? a : b);
+  bool get offlineViewing => _offlineViewing;
+  bool get hasOfflineSnapshot => _hasOfflineSnapshot;
+  DateTime? get snapshotSavedAt => _snapshotSavedAt;
+
+  Future<Object?> readSnapshotSection(String section) async {
+    final router = selectedRouter;
+    if (router == null || _reviewerModeEnabled) return null;
+    final snapshot = await _snapshotCache.load(router.id, router.fingerprint);
+    return (snapshot?['sections'] as Map?)?[section]?['data'];
+  }
+
+  Future<bool> _saveSnapshotSection(
+    model.Router router,
+    String section,
+    Object? data,
+  ) async {
+    if (_reviewerModeEnabled ||
+        !routers.any(
+          (r) => r.id == router.id && r.fingerprint == router.fingerprint,
+        )) {
+      return false;
+    }
+    try {
+      await _snapshotCache.save(router.id, router.fingerprint, section, data);
+      return true;
+    } catch (e) {
+      Logger.warning('Could not save optional router snapshot: $e');
+      return false;
+    }
+  }
+
+  Future<T> _cachedRead<T>(String section, Future<T> Function() live) async {
+    final router = selectedRouter;
+    if (router == null || _reviewerModeEnabled) return live();
+    if (!_offlineViewing) {
+      try {
+        final result = await live();
+        if (result is List && rpcUbusStatusCode(result) != 0) {
+          throw StateError('Router read failed');
+        }
+        await _saveSnapshotSection(router, section, result);
+        if (_staleSnapshotSections.remove(section) != null) notifyListeners();
+        return result;
+      } catch (_) {
+        final snapshot = await _snapshotCache.load(
+          router.id,
+          router.fingerprint,
+        );
+        final entry = (snapshot?['sections'] as Map?)?[section];
+        if (entry is Map &&
+            entry['data'] is T &&
+            selectedRouter?.id == router.id) {
+          _staleSnapshotSections[section] = DateTime.parse(
+            entry['savedAt'] as String,
+          );
+          notifyListeners();
+          return entry['data'] as T;
+        }
+        rethrow;
+      }
+    }
+    final snapshot = await _snapshotCache.load(router.id, router.fingerprint);
+    final entry = (snapshot?['sections'] as Map?)?[section];
+    if (entry is Map && entry['data'] is T) return entry['data'] as T;
+    throw StateError('No saved data for this panel');
+  }
+
+  Future<bool> _restoreDashboardSnapshot(model.Router router) async {
+    final snapshot = await _snapshotCache.load(router.id, router.fingerprint);
+    if (selectedRouter?.id != router.id) return false;
+    final entry = (snapshot?['sections'] as Map?)?['dashboard'];
+    _hasOfflineSnapshot = entry is Map && entry['data'] is Map;
+    if (!_hasOfflineSnapshot) return false;
+    try {
+      final data = Map<String, dynamic>.from(entry['data'] as Map);
+      data['flowProvider'] = OpenwallaFlowProvider.values.firstWhere(
+        (v) => v.name == data['flowProvider'],
+        orElse: () => OpenwallaFlowProvider.none,
+      );
+      data['pingSamples'] = (data['pingSamples'] as List? ?? [])
+          .map((line) => PingMonitorSample.fromLine(line as String))
+          .whereType<PingMonitorSample>()
+          .toList();
+      final clientsEntry = (snapshot?['sections'] as Map?)?['devices'];
+      final savedClients =
+          (clientsEntry is Map ? clientsEntry['data'] : null) as List?;
+      _clients = (savedClients ?? [])
+          .map(
+            (c) => RouterSnapshotCache.decodeClient(
+              Map<String, dynamic>.from(c as Map),
+            ),
+          )
+          .toList();
+      _dashboardData = data;
+      _dashboardRouterId = router.id;
+      _snapshotSavedAt = DateTime.tryParse(entry['savedAt']?.toString() ?? '');
+      return true;
+    } catch (e) {
+      _hasOfflineSnapshot = false;
+      Logger.warning('Ignoring incompatible router snapshot: $e');
+      return false;
+    }
+  }
+
+  Future<bool> openOfflineSnapshot() async {
+    final router = selectedRouter;
+    if (router == null ||
+        _isLoading ||
+        !await _restoreDashboardSnapshot(router)) {
+      return false;
+    }
+    _cancelThroughputTimer();
+    await _authService?.logout();
+    _offlineViewing = true;
+    RouterAccessGuard.offline = true;
+    _dashboardError = null;
+    _isDashboardLoading = false;
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> selectSavedRouterForLogin(String id) async {
+    if (!routers.any((router) => router.id == id)) return;
+    final router = await _routerService?.setSelectedRouter(id);
+    if (router == null) return;
+    _cancelThroughputTimer();
+    _dashboardData = null;
+    _dashboardRouterId = null;
+    _snapshotSavedAt = null;
+    _clients = const [];
+    _hasOfflineSnapshot = false;
+    _staleSnapshotSections.clear();
+    _errorMessage = null;
+    await loadDashboardPreferences();
+    await _restoreDashboardSnapshot(router);
+    notifyListeners();
+  }
+
+  Future<void> _saveDashboardSnapshot(model.Router router) async {
+    if (_dashboardRouterId != router.id || _dashboardData == null) return;
+    final data = <String, dynamic>{
+      for (final key in [
+        'boardInfo',
+        'sysInfo',
+        'networkDevices',
+        'interfaceDump',
+        'wireless',
+        'associatedWirelessMacs',
+        'dhcpLeases',
+        'wan',
+        'uciWirelessConfig',
+        'conntrack',
+        'pingThresholdMs',
+        'netifyFlowCount',
+        'notificationCount',
+        'deviceCount',
+        'rulesCount',
+        '_lastUpdated',
+      ])
+        key: _dashboardData![key],
+      'flowProvider':
+          (_dashboardData!['flowProvider'] as OpenwallaFlowProvider?)?.name,
+      'pingSamples':
+          (_dashboardData!['pingSamples'] as List<PingMonitorSample>? ?? [])
+              .map(
+                (s) =>
+                    '${s.timestamp.toIso8601String()}|${s.target}|${s.status}|${s.latencyMs ?? 'N/A'}|${s.message}',
+              )
+              .toList(),
+    };
+    final saved = await _saveSnapshotSection(router, 'dashboard', data);
+    if (saved && selectedRouter?.id == router.id) {
+      _hasOfflineSnapshot = true;
+      _snapshotSavedAt = DateTime.now();
+    }
+  }
+
   bool _isClientsLoading = false;
   final Set<String> _parentalPausedMacs = {};
 
@@ -2278,7 +2472,27 @@ class AppState extends ChangeNotifier {
   }
 
   AppState._() {
+    _snapshotCache = RouterSnapshotCache();
     _initializationFuture = _initialize();
+  }
+
+  @visibleForTesting
+  AppState.withServices({
+    required RouterSnapshotCache cache,
+    required RouterService routerService,
+    required IApiService apiService,
+    required IAuthService authService,
+  }) {
+    _snapshotCache = cache;
+    _routerService = routerService;
+    _apiService = apiService;
+    _authService = authService;
+    _secureStorageService = SecureStorageService();
+    _initializationFuture = () async {
+      await loadDashboardPreferences();
+      final router = selectedRouter;
+      if (router != null) await _restoreDashboardSnapshot(router);
+    }();
   }
 
   Future<void> get initialized => _initializationFuture;
@@ -2297,6 +2511,8 @@ class AppState extends ChangeNotifier {
     await _migrateGlobalDashboardPreferencesIfNeeded(); // Proactively migrate legacy prefs
     await _loadClientsViewMode();
     await loadDashboardPreferences(); // Load prefs scoped to selected router
+    final router = selectedRouter;
+    if (router != null) await _restoreDashboardSnapshot(router);
   }
 
   Future<void> _migrateWelcomeSetupSeenIfNeeded() async {
@@ -3132,6 +3348,13 @@ class AppState extends ChangeNotifier {
   }
 
   Future<bool> hasNetworkPerformanceSupport({BuildContext? context}) async {
+    if (_offlineViewing) {
+      return await readSnapshotSection(
+                'ping-samples:$kOpenwallaPingTimelineSampleLimit',
+              ) !=
+              null ||
+          await readSnapshotSection('speedtest-samples:30') != null;
+    }
     if (_reviewerModeEnabled) return true;
     final hasInstalledScripts = await _routerCommandSucceeds(
       '[ -x /usr/bin/openwalla-network-monitor ] && [ -x /usr/bin/openwalla-dns-monitor ] && [ -x /usr/bin/openwalla-speedtest-monitor ] && echo OK',
@@ -4403,6 +4626,7 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
     final wasSelected = _routerService!.selectedRouter?.id == id;
 
     await _secureStorageService.deleteRouterScopedValues(router.id);
+    await _snapshotCache.delete(router.id);
     await _httpClientManager.clearCertificatesForHost(router.ipAddress);
     _httpClientManager.disposeClient(router.ipAddress, router.useHttps);
 
@@ -4420,6 +4644,12 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
 
     if (wasSelected) {
       _cancelThroughputTimer();
+      _dashboardRouterId = null;
+      _hasOfflineSnapshot = false;
+      _snapshotSavedAt = null;
+      _offlineViewing = false;
+      RouterAccessGuard.offline = false;
+      _staleSnapshotSections.clear();
       _dashboardData = null;
       _dashboardError = null;
       _clients = const [];
@@ -4451,6 +4681,12 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
     _isLoading = true;
     _dashboardError = null;
     _hasUnseenNotifications = false;
+    _dashboardData = null;
+    _dashboardRouterId = null;
+    _clients = const [];
+    _hasOfflineSnapshot = false;
+    _staleSnapshotSections.clear();
+    await _restoreDashboardSnapshot(found);
 
     // Clear throughput data when switching routers to prevent mixing data from different routers
     _cancelThroughputTimer();
@@ -4477,6 +4713,8 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
     if (loginSuccess) {
       await fetchDashboardData();
       warmStatisticsData();
+    } else if (_hasOfflineSnapshot) {
+      await openOfflineSnapshot();
     }
     _isLoading = false;
     notifyListeners();
@@ -4552,6 +4790,7 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
   }) async {
     _isLoading = true;
     _errorMessage = null;
+    if (_offlineViewing) await _authService?.logout();
 
     // Clear throughput data when logging in to prevent mixing data from different sessions
     _cancelThroughputTimer();
@@ -4564,7 +4803,7 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
         user,
         pass,
         useHttps,
-        context: context,
+        context: context?.mounted == true ? context : null,
         saveCredentials: saveCredentials,
       );
 
@@ -4636,6 +4875,15 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
             }
           }
         }
+        _offlineViewing = false;
+        RouterAccessGuard.offline = false;
+        final currentRouter = selectedRouter;
+        if (currentRouter != null && _dashboardRouterId != currentRouter.id) {
+          _dashboardData = null;
+          _clients = const [];
+          _hasOfflineSnapshot = false;
+          await _restoreDashboardSnapshot(currentRouter);
+        }
         await _restoreDashboardPreferencesFromRouter();
         await fetchDashboardData();
         _startThroughputTimer();
@@ -4660,6 +4908,10 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
   }
 
   Future<void> logout({bool skipNextAutoLogin = true}) async {
+    _staleSnapshotSections.clear();
+    _dashboardRouterId = null;
+    _offlineViewing = false;
+    RouterAccessGuard.offline = false;
     _skipNextAutoLogin = skipNextAutoLogin;
     await _authService?.logout();
     _dashboardData = null;
@@ -4677,6 +4929,20 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
   }
 
   Future<void> retryDashboardConnection({BuildContext? context}) async {
+    if (_offlineViewing) {
+      final router = selectedRouter;
+      if (router != null) {
+        await login(
+          router.ipAddress,
+          router.username,
+          router.password,
+          router.useHttps,
+          fromRouter: true,
+          context: context,
+        );
+      }
+      return;
+    }
     final router = _routerService?.selectedRouter;
     if (router == null || _authService == null) {
       await fetchDashboardData();
@@ -4702,7 +4968,7 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
       if (!loginSuccess || _authService?.sysauth == null) {
         _dashboardError =
             'Failed to reconnect. Please check your router credentials and network connection.';
-        _dashboardData = null;
+        if (_dashboardRouterId != router.id) _dashboardData = null;
         return;
       }
 
@@ -4716,7 +4982,7 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
       warmStatisticsData();
     } catch (e) {
       _dashboardError = 'Failed to reconnect: $e';
-      _dashboardData = null;
+      if (_dashboardRouterId != router.id) _dashboardData = null;
     } finally {
       _isDashboardLoading = false;
       notifyListeners();
@@ -4724,6 +4990,7 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
   }
 
   Future<void> fetchDashboardData({bool allowAuthRetry = true}) async {
+    if (_offlineViewing) return;
     if (_reviewerModeEnabled) {
       // For reviewer mode, return mock data immediately
       _isDashboardLoading = true;
@@ -4845,7 +5112,8 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
 
     // If already loading, don't start another request (but this shouldn't prevent pull-to-refresh)
     // We'll let the new request proceed and the loading state will be handled properly
-    final ip = _routerService!.selectedRouter!.ipAddress;
+    final requestedRouter = _routerService!.selectedRouter!;
+    final ip = requestedRouter.ipAddress;
     final useHttps = _routerService!.selectedRouter!.useHttps;
 
     _isDashboardLoading = true;
@@ -5120,6 +5388,8 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
           ? Map<String, dynamic>.from(sysInfoData)
           : <String, dynamic>{};
 
+      if (selectedRouter?.id != requestedRouter.id) return;
+      _dashboardRouterId = requestedRouter.id;
       _dashboardData = {
         'boardInfo': boardInfoData,
         'sysInfo': normalizedSysInfo,
@@ -5154,6 +5424,7 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
       if (hostname != null && hostname.isNotEmpty) {
         await _routerService?.updateSelectedRouterHostname(hostname);
       }
+      await _saveDashboardSnapshot(requestedRouter);
 
       // Ensure throughput timer is running
       _startThroughputTimer();
@@ -5176,8 +5447,15 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
       }
       // Log error with stack trace for debugging
       // print('Dashboard fetch error: $e\n$stack');
-      // Clear dashboard data when there's an error so we don't show stale data
-      _dashboardData = null;
+      if (selectedRouter?.id != requestedRouter.id) return;
+      if (_dashboardData == null || _dashboardRouterId != requestedRouter.id) {
+        await _restoreDashboardSnapshot(requestedRouter);
+      }
+      if (_dashboardData != null && _dashboardRouterId == requestedRouter.id) {
+        _offlineViewing = true;
+        RouterAccessGuard.offline = true;
+        _cancelThroughputTimer();
+      }
     } finally {
       _isDashboardLoading = false;
       notifyListeners();
@@ -6910,19 +7188,24 @@ done | sort -nr | head -n ''' +
 
     final router = _routerService?.selectedRouter;
     final sysauth = _authService?.sysauth;
-    if (router == null || sysauth == null || _apiService == null) {
+    if (router == null ||
+        (sysauth == null && !_offlineViewing) ||
+        _apiService == null) {
       return const [];
     }
 
     try {
-      final result = await _apiService!.call(
-        router.ipAddress,
-        sysauth,
-        router.useHttps,
-        object: 'uci',
-        method: 'get',
-        params: {'config': 'firewall'},
-        context: context,
+      final result = await _cachedRead<Object?>(
+        'network-firewall',
+        () => _apiService!.call(
+          router.ipAddress,
+          sysauth!,
+          router.useHttps,
+          object: 'uci',
+          method: 'get',
+          params: {'config': 'firewall'},
+          context: context,
+        ),
       );
       final values = _firewallValuesFromResult(result);
       final forwards = values.entries
@@ -7198,7 +7481,9 @@ done | sort -nr | head -n ''' +
 
     final router = _routerService?.selectedRouter;
     final sysauth = _authService?.sysauth;
-    if (router == null || sysauth == null || _apiService == null) {
+    if (router == null ||
+        (sysauth == null && !_offlineViewing) ||
+        _apiService == null) {
       return const OpenwrtFirewallOverview(
         defaults: fallbackDefaults,
         zones: [],
@@ -7206,14 +7491,17 @@ done | sort -nr | head -n ''' +
     }
 
     try {
-      final result = await _apiService!.call(
-        router.ipAddress,
-        sysauth,
-        router.useHttps,
-        object: 'uci',
-        method: 'get',
-        params: {'config': 'firewall'},
-        context: context,
+      final result = await _cachedRead<Object?>(
+        'network-firewall',
+        () => _apiService!.call(
+          router.ipAddress,
+          sysauth!,
+          router.useHttps,
+          object: 'uci',
+          method: 'get',
+          params: {'config': 'firewall'},
+          context: context,
+        ),
       );
       final values = _firewallValuesFromResult(result);
       var defaults = fallbackDefaults;
@@ -9747,6 +10035,16 @@ done | sort -nr | head -n ''' +
     bool includeArchived = false,
     BuildContext? context,
   }) async {
+    if (_offlineViewing) {
+      final output = await readSnapshotSection('performance-events');
+      return (output is String ? output : '')
+          .split('\n')
+          .map((line) => OpenwallaNotification.fromSqliteRow(line.trim()))
+          .whereType<OpenwallaNotification>()
+          .where((n) => includeArchived || !n.archived)
+          .take(limit.clamp(1, 500))
+          .toList();
+    }
     if (_reviewerModeEnabled) {
       final now = DateTime.now().toUtc();
       return [
@@ -9787,6 +10085,24 @@ done | sort -nr | head -n ''' +
           sql:
               'SELECT id, timestamp, app, msg, archived, "delete" FROM notifications WHERE "delete" = 0$archivedFilter ORDER BY timestamp DESC LIMIT $safeLimit;',
           context: context,
+        );
+      }
+      final snapshotRouter = selectedRouter;
+      if (snapshotRouter != null) {
+        final events = output
+            .split('\n')
+            .where(
+              (line) =>
+                  OpenwallaNotification.fromSqliteRow(
+                    line.trim(),
+                  )?.isNetworkPerformanceEvent ==
+                  true,
+            )
+            .join('\n');
+        await _saveSnapshotSection(
+          snapshotRouter,
+          'performance-events',
+          events,
         );
       }
       return output
@@ -10137,6 +10453,15 @@ done | sort -nr | head -n ''' +
     }
   }
 
+  String _snapshotCommandOutput(dynamic result) {
+    final data = rpcDataMap(result);
+    if (data == null ||
+        (data['code'] != null && data['code'].toString() != '0')) {
+      throw StateError('Router could not read monitoring history');
+    }
+    return data['stdout']?.toString() ?? '';
+  }
+
   String _commandOutput(dynamic result) {
     if (result is List && result.length > 1 && result[0] == 0) {
       return _commandOutput(result[1]);
@@ -10237,6 +10562,15 @@ done | sort -nr | head -n ''' +
     );
     if (_reviewerModeEnabled) return defaults;
 
+    final saved = await readSnapshotSection('performance-settings');
+    final cached = saved is Map
+        ? NetworkMonitorSettings(
+            target: saved['target'] as String? ?? defaults.target,
+            thresholdMs: saved['thresholdMs'] as int? ?? defaults.thresholdMs,
+          )
+        : defaults;
+    if (_offlineViewing) return cached;
+
     final router = _routerService?.selectedRouter;
     final sysauth = _authService?.sysauth;
     if (router == null || sysauth == null || _apiService == null) {
@@ -10244,25 +10578,32 @@ done | sort -nr | head -n ''' +
     }
 
     try {
-      final values = await _fetchOpenwallaUciValues(context: context);
+      final values = await _fetchOpenwallaUciValues(
+        context: context?.mounted == true ? context : null,
+      );
       final ping = values is Map ? values['ping_monitor'] : null;
 
       if (ping is Map) {
         final target = ping['target']?.toString();
         final threshold = int.tryParse(ping['threshold']?.toString() ?? '');
-        return NetworkMonitorSettings(
+        final settings = NetworkMonitorSettings(
           target: target?.isNotEmpty == true ? target! : defaults.target,
           thresholdMs: threshold != null && threshold > 0
               ? threshold
               : defaults.thresholdMs,
         );
+        await _saveSnapshotSection(router, 'performance-settings', {
+          'target': settings.target,
+          'thresholdMs': settings.thresholdMs,
+        });
+        return settings;
       }
     } catch (e, stack) {
       Logger.warning('Failed to fetch network monitor settings: $e');
       Logger.debug('Network monitor settings stack: $stack');
     }
 
-    return defaults;
+    return cached;
   }
 
   Future<void> saveNetworkMonitorSettings(
@@ -10388,28 +10729,32 @@ done | sort -nr | head -n ''' +
 
     final router = _routerService?.selectedRouter;
     final sysauth = _authService?.sysauth;
-    if (router == null || sysauth == null || _apiService == null) {
+    if (router == null ||
+        (sysauth == null && !_offlineViewing) ||
+        _apiService == null) {
       return const [];
     }
 
     try {
-      final result = await _apiService!.call(
-        router.ipAddress,
-        sysauth,
-        router.useHttps,
-        object: 'file',
-        method: 'exec',
-        params: {
-          'command': '/bin/sh',
-          'params': [
-            '-c',
-            r'file="$(uci -q get openwalla.ping_monitor.output_file 2>/dev/null || echo /tmp/openwalla/openwalla-ping-monitor.txt)"; '
-                'if [ -f "\$file" ]; then tail -n $safeLimit "\$file" 2>/dev/null; fi',
-          ],
-        },
-        context: context,
-      );
-      final output = _commandOutput(result);
+      final output = await _cachedRead<String>('ping-samples:$safeLimit', () async {
+        final result = await _apiService!.call(
+          router.ipAddress,
+          sysauth!,
+          router.useHttps,
+          object: 'file',
+          method: 'exec',
+          params: {
+            'command': '/bin/sh',
+            'params': [
+              '-c',
+              r'file="$(uci -q get openwalla.ping_monitor.output_file 2>/dev/null || echo /tmp/openwalla/openwalla-ping-monitor.txt)"; '
+                  'if [ -f "\$file" ]; then tail -n $safeLimit "\$file" 2>/dev/null; else exit 1; fi',
+            ],
+          },
+          context: context,
+        );
+        return _snapshotCommandOutput(result);
+      });
       return output
           .split('\n')
           .map((line) => PingMonitorSample.fromLine(line.trim()))
@@ -10442,29 +10787,36 @@ done | sort -nr | head -n ''' +
 
     final router = _routerService?.selectedRouter;
     final sysauth = _authService?.sysauth;
-    if (router == null || sysauth == null || _apiService == null) {
+    if (router == null ||
+        (sysauth == null && !_offlineViewing) ||
+        _apiService == null) {
       return const [];
     }
 
     try {
       final safeLimit = limit.clamp(1, 365).toInt();
-      final result = await _apiService!.call(
-        router.ipAddress,
-        sysauth,
-        router.useHttps,
-        object: 'file',
-        method: 'exec',
-        params: {
-          'command': '/bin/sh',
-          'params': [
-            '-c',
-            r'file="$(uci -q get openwalla.speedtest_monitor.output_file 2>/dev/null || echo /tmp/openwalla/openwalla-speedtest-monitor.txt)"; '
-                'if [ -f "\$file" ]; then tail -n $safeLimit "\$file" 2>/dev/null; fi',
-          ],
+      final output = await _cachedRead<String>(
+        'speedtest-samples:$safeLimit',
+        () async {
+          final result = await _apiService!.call(
+            router.ipAddress,
+            sysauth!,
+            router.useHttps,
+            object: 'file',
+            method: 'exec',
+            params: {
+              'command': '/bin/sh',
+              'params': [
+                '-c',
+                r'file="$(uci -q get openwalla.speedtest_monitor.output_file 2>/dev/null || echo /tmp/openwalla/openwalla-speedtest-monitor.txt)"; '
+                    'if [ -f "\$file" ]; then tail -n $safeLimit "\$file" 2>/dev/null; else exit 1; fi',
+              ],
+            },
+            context: context,
+          );
+          return _snapshotCommandOutput(result);
         },
-        context: context,
       );
-      final output = _commandOutput(result);
       return output
           .split('\n')
           .map((line) => SpeedtestMonitorSample.fromLine(line.trim()))
@@ -10537,6 +10889,20 @@ done | sort -nr | head -n ''' +
 
     final router = _routerService?.selectedRouter;
     final sysauth = _authService?.sysauth;
+    final section = 'usage:$period:${interfaceName ?? ''}';
+    Future<List<VnstatUsageSample>> savedSamples() async {
+      final output = await readSnapshotSection(section);
+      return output is String
+          ? _parseVnstatSamples(
+              output,
+              period: period,
+              preferredInterface: interfaceName,
+              limit: limit,
+            )
+          : const [];
+    }
+
+    if (_offlineViewing) return savedSamples();
     if (router == null || sysauth == null || _apiService == null) {
       return const [];
     }
@@ -10563,7 +10929,10 @@ done | sort -nr | head -n ''' +
             preferredInterface: interfaceName,
             limit: limit,
           );
-          if (samples.isNotEmpty) return samples;
+          if (samples.isNotEmpty) {
+            await _saveSnapshotSection(router, section, output);
+            return samples;
+          }
         } catch (e, stack) {
           Logger.debug(
             'Optional vnstat command $command ${paramsVariant.join(' ')} failed: $e',
@@ -10572,7 +10941,7 @@ done | sort -nr | head -n ''' +
         }
       }
     }
-    return const [];
+    return savedSamples();
   }
 
   List<List<String>> _vnstatJsonParamVariants(String period) {
@@ -13202,6 +13571,28 @@ done | sort -nr | head -n ''' +
   /// Aggregates DHCP leases across all configured routers and classifies clients
   /// as wireless if their MAC appears in any router's associated stations list.
   Future<List<Client>> fetchAggregatedClients() async {
+    if (_offlineViewing) {
+      final lists = await Future.wait(
+        routers.map((router) async {
+          final snapshot = await _snapshotCache.load(
+            router.id,
+            router.fingerprint,
+          );
+          final data = (snapshot?['sections'] as Map?)?['devices']?['data'];
+          return data is List
+              ? data
+                    .map(
+                      (c) => RouterSnapshotCache.decodeClient(
+                        Map<String, dynamic>.from(c as Map),
+                      ),
+                    )
+                    .toList()
+              : <Client>[];
+        }),
+      );
+      final byMac = {for (final c in lists.expand((l) => l)) c.macAddress: c};
+      return byMac.values.toList();
+    }
     if (_isClientsLoading) return _clients;
     _isClientsLoading = true;
     notifyListeners();
@@ -13401,6 +13792,12 @@ done | sort -nr | head -n ''' +
         .then(parseDeviceFirewallState)
         .catchError((_) => const DeviceFirewallState(available: false));
     final snapshot = await snapshotFuture;
+    if (snapshot.leases == null &&
+        snapshot.devices == null &&
+        snapshot.hints == null &&
+        !snapshot.wiredAvailable) {
+      throw StateError('Live client discovery is unavailable');
+    }
     final connections = await connectionsFuture;
     final records = await recordsFuture;
     final firewall = await firewallFuture;
@@ -13452,11 +13849,18 @@ done | sort -nr | head -n ''' +
       if (a.isConnected != b.isConnected) return a.isConnected ? -1 : 1;
       return a.hostname.toLowerCase().compareTo(b.hostname.toLowerCase());
     });
+    await _saveSnapshotSection(
+      router,
+      'devices',
+      clients.map(RouterSnapshotCache.encodeClient).toList(),
+    );
+    if (selectedRouter?.id == router.id) _clients = clients;
     return clients;
   }
 
   /// Returns clients for the currently selected router only
   Future<List<Client>> fetchClientsForSelectedRouter() async {
+    if (_offlineViewing) return List.of(_clients);
     try {
       if (_reviewerModeEnabled) {
         final firewallState = await fetchDeviceFirewallStateForSelectedRouter();
@@ -13538,7 +13942,16 @@ done | sort -nr | head -n ''' +
       );
     } catch (e, stack) {
       Logger.exception('Failed to fetch clients for selected router', e, stack);
-      return [];
+      final saved = await readSnapshotSection('devices');
+      return saved is List
+          ? saved
+                .map(
+                  (c) => RouterSnapshotCache.decodeClient(
+                    Map<String, dynamic>.from(c as Map),
+                  ),
+                )
+                .toList()
+          : [];
     }
   }
 

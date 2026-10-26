@@ -1034,6 +1034,10 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
   }
 
   Future<void> _showShareWifiDialog(Map<String, dynamic> iface) async {
+    if (ref.read(appStateProvider).offlineViewing) {
+      context.showToastError('Wi-Fi passwords are not available offline');
+      return;
+    }
     final ssid = iface['ssid']?.toString() ?? '';
     if (ssid.trim().isEmpty) return;
     final password = iface['password']?.toString() ?? '';

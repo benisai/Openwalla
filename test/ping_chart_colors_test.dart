@@ -6,6 +6,8 @@ import 'package:openwalla/screens/network_performance_screen.dart';
 import 'package:openwalla/state/app_state.dart';
 
 class _PingState extends ChangeNotifier implements AppState {
+  @override
+  bool get offlineViewing => false;
   final List<PingMonitorSample> samples;
   final int thresholdMs;
   _PingState(this.samples, this.thresholdMs);
