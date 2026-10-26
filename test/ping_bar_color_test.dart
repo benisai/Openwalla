@@ -4,10 +4,10 @@ import 'package:openwalla/screens/network_performance_screen.dart';
 
 void main() {
   for (final entry in {
-    59.99: const Color(0xFF86EFAC),
-    60.0: const Color(0xFF168A48),
-    150.0: const Color(0xFF168A48),
-    199.99: const Color(0xFF168A48),
+    59.99: const Color(0xFF168A48),
+    60.0: const Color(0xFF86EFAC),
+    150.0: const Color(0xFF86EFAC),
+    199.99: const Color(0xFF86EFAC),
     200.0: const Color(0xFFEAB308),
     250.0: const Color(0xFFEAB308),
   }.entries) {
@@ -27,7 +27,7 @@ void main() {
   test('lower thresholds scale down and invalid thresholds use defaults', () {
     expect(
       NetworkPerformanceScreen.pingLatencyColor(15, thresholdMs: 50),
-      const Color(0xFF168A48),
+      const Color(0xFF86EFAC),
     );
     expect(
       NetworkPerformanceScreen.pingLatencyColor(50, thresholdMs: 50),
@@ -77,19 +77,19 @@ void main() {
   });
 
   for (final latency in [0.0, 12.0, 29.99]) {
-    test('$latency ms uses excellent light green', () {
+    test('$latency ms uses excellent dark green', () {
       expect(
         NetworkPerformanceScreen.pingLatencyColor(latency),
-        const Color(0xFF86EFAC),
+        const Color(0xFF168A48),
       );
     });
   }
 
   for (final latency in [30.0, 65.0, 99.99]) {
-    test('$latency ms uses regular dark green', () {
+    test('$latency ms uses regular light green', () {
       expect(
         NetworkPerformanceScreen.pingLatencyColor(latency),
-        const Color(0xFF168A48),
+        const Color(0xFF86EFAC),
       );
     });
   }

@@ -107,8 +107,8 @@ class NetworkPerformanceScreen extends ConsumerStatefulWidget {
         ? thresholdMs
         : NetworkMonitorSettings.defaultThresholdMs;
     if (latencyMs >= threshold) return _yellow;
-    if (latencyMs >= threshold * 0.3) return const Color(0xFF168A48);
-    return const Color(0xFF86EFAC);
+    if (latencyMs >= threshold * 0.3) return const Color(0xFF86EFAC);
+    return const Color(0xFF168A48);
   }
 
   @override
