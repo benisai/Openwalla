@@ -96,7 +96,8 @@ class SecureStorageService {
     try {
       final values = await _storage.readAll();
       final suffix = ':$routerId';
-      for (final key in values.keys.where((key) => key.endsWith(suffix))) {
+      for (final key
+          in values.keys.where((key) => key.endsWith(suffix)).toList()) {
         await _storage.delete(key: key);
       }
     } catch (e, stack) {

@@ -1034,14 +1034,17 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
   }
 
   Future<void> _showShareWifiDialog(Map<String, dynamic> iface) async {
-    if (ref.read(appStateProvider).offlineViewing) {
-      context.showToastError('Wi-Fi passwords are not available offline');
-      return;
-    }
     final ssid = iface['ssid']?.toString() ?? '';
     if (ssid.trim().isEmpty) return;
     final password = iface['password']?.toString() ?? '';
     final encryption = iface['encryption']?.toString() ?? '';
+    if (password.isEmpty && encryption != 'none' && encryption != 'nopass') {
+      context.showToastError(
+        'Wi-Fi password is not saved',
+        subtitle: 'Refresh Wi-Fi while connected to the router first.',
+      );
+      return;
+    }
     final hidden = iface['hidden'] == true;
     final qrData = _wifiQrPayload(
       ssid: ssid,
@@ -2016,7 +2019,12 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
         _buildDetailRow(
           context,
           'Password',
-          password.isEmpty ? 'No password set' : password,
+          password.isEmpty
+              ? (iface['encryption'] == 'none' ||
+                        iface['encryption'] == 'nopass'
+                    ? 'No password set'
+                    : 'Password not saved')
+              : password,
           onTap: canShare ? () => _showShareWifiDialog(iface) : null,
         ),
         const Divider(height: 1, indent: 16, endIndent: 16),

@@ -17,6 +17,7 @@ import 'package:openwalla/services/router_access_guard.dart';
 import 'package:openwalla/services/router_service.dart';
 import 'package:openwalla/services/router_snapshot_cache.dart';
 import 'package:openwalla/services/ssh_service.dart';
+import 'package:openwalla/services/wifi_sharing_cache.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/offline_snapshot_banner.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -127,6 +128,7 @@ void main() {
         'values': {
           'default_radio0': {
             '.type': 'wifi-iface',
+            'mode': 'ap',
             'ssid': 'Home',
             'encryption': 'psk2',
             'key': 'secret',
@@ -206,6 +208,36 @@ void main() {
         'Phone',
       );
       await state.fetchDashboardData();
+      expect(api.calls, 0);
+    },
+  );
+
+  test(
+    'offline Wi-Fi restores secure password without changing the JSON snapshot',
+    () async {
+      await WifiSharingCache().save('uuid-a', 'serial:a', {
+        'values': {
+          'default_radio0': {
+            '.type': 'wifi-iface',
+            'mode': 'ap',
+            'ssid': 'Home',
+            'encryption': 'psk2',
+            'key': 'saved-wifi-password',
+          },
+        },
+      });
+      await state.openOfflineSnapshot();
+      expect(
+        state
+            .dashboardData!['uciWirelessConfig']['values']['default_radio0']['key'],
+        'saved-wifi-password',
+      );
+      final snapshot = await cache.load('uuid-a', 'serial:a');
+      expect(
+        snapshot!['sections']['dashboard']['data']['uciWirelessConfig']['values']['default_radio0']
+            .containsKey('key'),
+        isFalse,
+      );
       expect(api.calls, 0);
     },
   );

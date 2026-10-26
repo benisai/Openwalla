@@ -10,6 +10,7 @@ Openwalla is an open-source mobile application for managing OpenWrt routers. Thi
 
 - Openwalla uses the router address, username, password, and connection preferences that you provide to connect to your router.
 - Saved credentials and API tokens are stored on your device using platform-provided secure storage through `flutter_secure_storage`.
+- Access-point Wi-Fi passwords are also saved in platform secure storage for viewing and QR sharing while offline. They remain separate from the unencrypted display snapshots and are deleted when you remove the router profile.
 - The Openwalla project does not operate a service that receives or stores your router credentials.
 
 ### Router and network data

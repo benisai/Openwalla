@@ -39,6 +39,7 @@ import 'package:openwalla/utils/router_identity.dart';
 import 'package:openwalla/services/client_discovery_service.dart';
 import 'package:openwalla/services/router_snapshot_cache.dart';
 import 'package:openwalla/services/router_access_guard.dart';
+import 'package:openwalla/services/wifi_sharing_cache.dart';
 
 typedef _WirelessConnection = ({
   String band,
@@ -2136,6 +2137,7 @@ class AppState extends ChangeNotifier {
   final RouterAclService _routerAclService = RouterAclService();
   List<Client> _clients = const [];
   late final RouterSnapshotCache _snapshotCache;
+  final WifiSharingCache _wifiSharingCache = WifiSharingCache();
   bool _offlineViewing = false;
   bool _hasOfflineSnapshot = false;
   String? _dashboardRouterId;
@@ -2225,6 +2227,12 @@ class AppState extends ChangeNotifier {
     if (!_hasOfflineSnapshot) return false;
     try {
       final data = Map<String, dynamic>.from(entry['data'] as Map);
+      await _wifiSharingCache.restoreInto(
+        router.id,
+        router.fingerprint,
+        data['uciWirelessConfig'],
+      );
+      if (selectedRouter?.id != router.id) return false;
       data['flowProvider'] = OpenwallaFlowProvider.values.firstWhere(
         (v) => v.name == data['flowProvider'],
         orElse: () => OpenwallaFlowProvider.none,
@@ -5427,6 +5435,15 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
       final hostname = boardInfo?['hostname']?.toString();
       if (hostname != null && hostname.isNotEmpty) {
         await _routerService?.updateSelectedRouterHostname(hostname);
+      }
+      try {
+        await _wifiSharingCache.save(
+          requestedRouter.id,
+          requestedRouter.fingerprint,
+          uciWirelessConfig,
+        );
+      } catch (_) {
+        Logger.warning('Could not securely cache Wi-Fi sharing credentials');
       }
       await _saveDashboardSnapshot(requestedRouter);
 
