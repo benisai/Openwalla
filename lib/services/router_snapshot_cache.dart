@@ -56,6 +56,10 @@ class RouterSnapshotCache {
     return future;
   }
 
+  Future<void> waitForPendingWrites(String id) async {
+    await _writes[id];
+  }
+
   Future<void> save(
     String id,
     String? fingerprint,

@@ -2190,10 +2190,11 @@ class AppState extends ChangeNotifier {
         if (result is List && rpcUbusStatusCode(result) != 0) {
           throw StateError('Router read failed');
         }
-        await _saveSnapshotSection(router, section, result);
+        unawaited(_saveSnapshotSection(router, section, result));
         if (_staleSnapshotSections.remove(section) != null) notifyListeners();
         return result;
       } catch (_) {
+        await _snapshotCache.waitForPendingWrites(router.id);
         final snapshot = await _snapshotCache.load(
           router.id,
           router.fingerprint,
@@ -2220,6 +2221,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<bool> _restoreDashboardSnapshot(model.Router router) async {
+    await _snapshotCache.waitForPendingWrites(router.id);
     final snapshot = await _snapshotCache.load(router.id, router.fingerprint);
     if (selectedRouter?.id != router.id) return false;
     final entry = (snapshot?['sections'] as Map?)?['dashboard'];
@@ -2332,6 +2334,21 @@ class AppState extends ChangeNotifier {
     if (saved && selectedRouter?.id == router.id) {
       _hasOfflineSnapshot = true;
       _snapshotSavedAt = DateTime.now();
+    }
+  }
+
+  Future<void> _saveWifiSharingSnapshot(
+    model.Router router,
+    Object? wirelessConfig,
+  ) async {
+    try {
+      await _wifiSharingCache.save(
+        router.id,
+        router.fingerprint,
+        wirelessConfig,
+      );
+    } catch (_) {
+      Logger.warning('Could not securely cache Wi-Fi sharing credentials');
     }
   }
 
@@ -5436,16 +5453,9 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
       if (hostname != null && hostname.isNotEmpty) {
         await _routerService?.updateSelectedRouterHostname(hostname);
       }
-      try {
-        await _wifiSharingCache.save(
-          requestedRouter.id,
-          requestedRouter.fingerprint,
-          uciWirelessConfig,
-        );
-      } catch (_) {
-        Logger.warning('Could not securely cache Wi-Fi sharing credentials');
-      }
-      await _saveDashboardSnapshot(requestedRouter);
+      // Optional persistence must not hold up login or a live dashboard refresh.
+      unawaited(_saveWifiSharingSnapshot(requestedRouter, uciWirelessConfig));
+      unawaited(_saveDashboardSnapshot(requestedRouter));
 
       // Ensure throughput timer is running
       _startThroughputTimer();
@@ -10642,10 +10652,12 @@ done | sort -nr | head -n ''' +
               ? threshold
               : defaults.thresholdMs,
         );
-        await _saveSnapshotSection(router, 'performance-settings', {
-          'target': settings.target,
-          'thresholdMs': settings.thresholdMs,
-        });
+        unawaited(
+          _saveSnapshotSection(router, 'performance-settings', {
+            'target': settings.target,
+            'thresholdMs': settings.thresholdMs,
+          }),
+        );
         return settings;
       }
     } catch (e, stack) {
