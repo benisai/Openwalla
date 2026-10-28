@@ -26,10 +26,16 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   final TextEditingController _searchController = TextEditingController();
   bool _openingDevice = false;
   final Set<int> _archivingIds = {};
+  int _loadGeneration = 0;
 
   @override
   void initState() {
     super.initState();
+    final cached = ref.read(appStateProvider).notificationsPageData;
+    if (cached != null) {
+      _notifications = cached;
+      _isLoading = false;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadNotifications());
   }
 
@@ -39,20 +45,29 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     super.dispose();
   }
 
-  Future<void> _loadNotifications() async {
+  Future<void> _loadNotifications({bool force = false}) async {
     if (!mounted) return;
-    setState(() => _isLoading = true);
+    final generation = ++_loadGeneration;
     final appState = ref.read(appStateProvider);
-    final notifications = await appState.fetchNotifications(context: context);
-    if (mounted) {
+    final routerId = appState.selectedRouter?.id;
+    try {
+      final notifications = await appState.loadNotificationsPage(force: force);
+      if (!mounted ||
+          generation != _loadGeneration ||
+          appState.selectedRouter?.id != routerId) {
+        return;
+      }
+      setState(() {
+        _notifications = notifications;
+        _isLoading = false;
+      });
       await appState.markNotificationsSeen(context: context);
+      await appState.refreshNotificationCount();
+    } catch (_) {
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() => _isLoading = false);
+      context.showToastError('Could not refresh notifications');
     }
-    await appState.refreshNotificationCount();
-    if (!mounted) return;
-    setState(() {
-      _notifications = notifications;
-      _isLoading = false;
-    });
   }
 
   Future<void> _archiveOne(OpenwallaNotification notification) async {
@@ -64,6 +79,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
           .archiveNotification(notification.id, context: context);
       if (!mounted) return;
       setState(() {
+        _loadGeneration++;
         _notifications = _notifications
             .where((item) => item.id != notification.id)
             .toList();
@@ -153,7 +169,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
 
   Future<void> _archiveAll() async {
     await ref.read(appStateProvider).archiveAllNotifications(context: context);
-    await _loadNotifications();
+    await _loadNotifications(force: true);
   }
 
   Future<void> _handleMenuAction(_NotificationMenuAction action) async {
@@ -272,7 +288,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       body: SafeArea(
         top: false,
         child: RefreshIndicator(
-          onRefresh: _loadNotifications,
+          onRefresh: () => _loadNotifications(force: true),
           child: _isLoading
               ? ListView(
                   padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),

@@ -38,6 +38,7 @@ import 'package:openwalla/utils/router_setup_commands.dart';
 import 'package:openwalla/utils/router_identity.dart';
 import 'package:openwalla/services/client_discovery_service.dart';
 import 'package:openwalla/services/router_snapshot_cache.dart';
+import 'package:openwalla/services/page_preload_cache.dart';
 import 'package:openwalla/services/router_access_guard.dart';
 import 'package:openwalla/services/wifi_sharing_cache.dart';
 
@@ -2356,6 +2357,61 @@ class AppState extends ChangeNotifier {
   final Set<String> _parentalPausedMacs = {};
 
   List<Client> get clients => List.unmodifiable(_clients);
+
+  final _devicePageCache = PagePreloadCache<List<Client>>();
+  final _notificationPageCache =
+      PagePreloadCache<List<OpenwallaNotification>>();
+  String get _pagePreloadKey =>
+      '${selectedRouter?.id}:${selectedRouter?.fingerprint}:$_offlineViewing';
+  String _devicePageKey(bool aggregate) =>
+      '$_pagePreloadKey:${aggregate ? routers.map((r) => '${r.id}:${r.fingerprint}').join(',') : 'selected'}';
+
+  List<Client>? devicesPageData({bool aggregate = false}) =>
+      _devicePageCache.peek(_devicePageKey(aggregate));
+  List<OpenwallaNotification>? get notificationsPageData =>
+      _notificationPageCache.peek(_pagePreloadKey);
+
+  Future<List<Client>> loadDevicesPage({
+    bool aggregate = false,
+    bool force = false,
+  }) => _devicePageCache.load(
+    _devicePageKey(aggregate),
+    () =>
+        aggregate ? fetchAggregatedClients() : fetchClientsForSelectedRouter(),
+    force: force,
+  );
+
+  Future<List<OpenwallaNotification>> loadNotificationsPage({
+    bool force = false,
+  }) => _notificationPageCache.load(
+    _pagePreloadKey,
+    () => fetchNotifications(),
+    force: force,
+  );
+
+  void invalidateDevicesPageData() => _devicePageCache.clear();
+  void invalidateNotificationsPageData() => _notificationPageCache.clear();
+
+  void warmDeviceAndNotificationPages() {
+    if (_offlineViewing ||
+        _authService?.isAuthenticated != true ||
+        selectedRouter == null) {
+      return;
+    }
+    unawaited(
+      loadDevicesPage(
+        aggregate: clientsAggregateAllRouters,
+      ).then<void>((_) {}).catchError((Object e) {
+        Logger.debug('Device page preload failed: $e');
+      }),
+    );
+    unawaited(
+      loadNotificationsPage().then<void>((_) {}).catchError((Object e) {
+        Logger.debug('Notification page preload failed: $e');
+      }),
+    );
+  }
+
   bool get isClientsLoading => _isClientsLoading;
 
   // Reviewer mode state
@@ -4817,6 +4873,8 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
     bool saveCredentials = true,
     BuildContext? context,
   }) async {
+    invalidateDevicesPageData();
+    invalidateNotificationsPageData();
     _isLoading = true;
     _errorMessage = null;
     if (_offlineViewing) await _authService?.logout();
@@ -4919,6 +4977,7 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
         warmStatisticsData();
         _isLoading = false;
         notifyListeners();
+        warmDeviceAndNotificationPages();
         unawaited(checkRouterAclAfterLogin());
         return true;
       } else {
@@ -4937,6 +4996,8 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
   }
 
   Future<void> logout({bool skipNextAutoLogin = true}) async {
+    invalidateDevicesPageData();
+    invalidateNotificationsPageData();
     _staleSnapshotSections.clear();
     _dashboardRouterId = null;
     _offlineViewing = false;
@@ -10104,6 +10165,7 @@ done | sort -nr | head -n ''' +
       ];
     }
 
+    final requestedRouter = selectedRouter;
     try {
       final safeLimit = limit.clamp(1, 500).toInt();
       final archivedFilter = includeArchived ? '' : ' AND archived = 0';
@@ -10124,7 +10186,7 @@ done | sort -nr | head -n ''' +
           context: context,
         );
       }
-      final snapshotRouter = selectedRouter;
+      final snapshotRouter = requestedRouter;
       if (snapshotRouter != null) {
         final events = output
             .split('\n')
@@ -10163,6 +10225,7 @@ done | sort -nr | head -n ''' +
       sql: 'UPDATE notifications SET archived = 1 WHERE id = $id;',
       context: context,
     );
+    invalidateNotificationsPageData();
     await refreshNotificationCount();
   }
 
@@ -10175,6 +10238,7 @@ done | sort -nr | head -n ''' +
           'UPDATE notifications SET archived = 1 WHERE "delete" = 0 AND archived = 0;',
       context: context,
     );
+    invalidateNotificationsPageData();
     await refreshNotificationCount();
   }
 
@@ -10186,6 +10250,7 @@ done | sort -nr | head -n ''' +
       sql: 'UPDATE notifications SET "delete" = 1 WHERE "delete" = 0;',
       context: context,
     );
+    invalidateNotificationsPageData();
     await refreshNotificationCount();
   }
 
@@ -13624,6 +13689,8 @@ done | sort -nr | head -n ''' +
 
   @override
   void dispose() {
+    invalidateDevicesPageData();
+    invalidateNotificationsPageData();
     _throughputTimer?.cancel();
     _systemInfoTimer?.cancel();
     _isRebooting = false;
@@ -14574,6 +14641,8 @@ done | sort -nr | head -n ''' +
       notifyListeners();
       Logger.exception('Failed to update parental pause state', e, stack);
       return false;
+    } finally {
+      invalidateDevicesPageData();
     }
   }
 
@@ -15077,7 +15146,7 @@ uci commit dhcp
         client,
         blocked: blocked,
         reason: blocked ? DeviceBlockReason.manual : null,
-      );
+      ).whenComplete(invalidateDevicesPageData);
 
   Future<void> queueClientInternetUnblock(Client client) =>
       setClientInternetBlocked(client, false);

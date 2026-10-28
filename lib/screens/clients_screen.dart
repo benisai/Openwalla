@@ -86,6 +86,8 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
   List<Client> _visibleClients = const [];
   final Set<String> _blockingMacs = {};
   bool _isRefreshingClients = false;
+  bool _hasClientData = false;
+  int _clientLoadGeneration = 0;
   static final Map<String, List<Client>> _clientCache = {};
 
   @override
@@ -106,28 +108,42 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
     _computeClientsFuture();
   }
 
-  void _computeClientsFuture() {
+  void _computeClientsFuture({bool force = false}) {
     final appState = ref.read(appStateProvider);
     final cacheKey = _clientCacheKey(appState);
     _activeClientCacheKey = cacheKey;
-    _visibleClients = _clientCache[cacheKey] ?? const [];
-    _clientsFuture = _loadClients(cacheKey);
+    final preloaded = appState.devicesPageData(aggregate: _aggregateAllRouters);
+    _hasClientData = preloaded != null;
+    _visibleClients = preloaded ?? (force ? _visibleClients : const []);
+    _clientsFuture = _loadClients(
+      cacheKey,
+      ++_clientLoadGeneration,
+      force: force,
+    );
   }
 
   String _clientCacheKey(dynamic appState) {
-    if (_aggregateAllRouters) return 'aggregate';
+    if (_aggregateAllRouters) return 'aggregate:${appState.selectedRouter?.id}';
     return appState.selectedRouter?.id?.toString() ?? 'selected:none';
   }
 
-  Future<List<Client>> _loadClients(String cacheKey) async {
+  Future<List<Client>> _loadClients(
+    String cacheKey,
+    int generation, {
+    bool force = false,
+  }) async {
     final appState = ref.read(appStateProvider);
-    final clients = _aggregateAllRouters
-        ? await appState.fetchAggregatedClients()
-        : await appState.fetchClientsForSelectedRouter();
-    _clientCache[cacheKey] = clients;
-    if (mounted && _activeClientCacheKey == cacheKey) {
+    final clients = await appState.loadDevicesPage(
+      aggregate: _aggregateAllRouters,
+      force: force,
+    );
+    if (mounted &&
+        _activeClientCacheKey == cacheKey &&
+        generation == _clientLoadGeneration) {
       setState(() {
+        _clientCache[cacheKey] = clients;
         _visibleClients = clients;
+        _hasClientData = true;
       });
     }
     return clients;
@@ -144,7 +160,7 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
       await appState.fetchDashboardData();
       if (!mounted) return;
       setState(() {
-        _computeClientsFuture();
+        _computeClientsFuture(force: true);
       });
       await _clientsFuture;
     } finally {
@@ -172,7 +188,9 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
       future = _clientsFuture;
     }
     return FutureBuilder<List<Client>>(
+      key: ValueKey(_activeClientCacheKey),
       future: future,
+      initialData: _hasClientData ? _visibleClients : null,
       builder: (context, snapshot) {
         final aggregatedClients = snapshot.data ?? _visibleClients;
         return Scaffold(
@@ -238,7 +256,8 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
                   final appState = ref.watch(appStateProvider);
                   final isLoading =
                       snapshot.connectionState == ConnectionState.waiting &&
-                      (aggregatedClients.isEmpty);
+                      (aggregatedClients.isEmpty) &&
+                      !_hasClientData;
                   final dashboardError = appState.dashboardError;
 
                   if (isLoading) {
@@ -617,6 +636,8 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
     bool blocked, {
     bool? quarantined,
   }) {
+    _clientLoadGeneration++;
+    ref.read(appStateProvider).invalidateDevicesPageData();
     Client updateClient(Client client) {
       if (_normalizeMac(client.macAddress) != mac) return client;
       return client.copyWith(
@@ -638,6 +659,8 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
     required String deviceIcon,
     required String staticIpAddress,
   }) {
+    _clientLoadGeneration++;
+    ref.read(appStateProvider).invalidateDevicesPageData();
     final normalizedMac = _normalizeMac(mac);
     Client updateClient(Client client) {
       if (_normalizeMac(client.macAddress) != normalizedMac) return client;
@@ -897,6 +920,8 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
                   normalizedMac,
             )
             .toList();
+        _clientLoadGeneration++;
+        ref.read(appStateProvider).invalidateDevicesPageData();
         _clientsFuture = Future.value(_visibleClients);
       });
       context.showToastSuccess(

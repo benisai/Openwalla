@@ -40,6 +40,8 @@ class _SlowCache extends RouterSnapshotCache {
 
 class _Auth implements IAuthService {
   @override
+  bool get useHttps => false;
+  @override
   String get sysauth => 'token';
   @override
   bool get isAuthenticated => true;
@@ -48,6 +50,7 @@ class _Auth implements IAuthService {
 }
 
 class _Api implements IApiService {
+  final commands = <String>[];
   @override
   Future<dynamic> call(
     String ipAddress,
@@ -71,6 +74,7 @@ class _Api implements IApiService {
     if (object == 'file') {
       if (method == 'read') return {'data': '0'};
       final command = (params?['params'] as List?)?.last.toString() ?? '';
+      commands.add(command);
       return {
         'code': 0,
         'stdout': command.contains('tail -n')
@@ -98,6 +102,7 @@ void main() {
   late AppState state;
   late _SlowCache cache;
   late RouterService routers;
+  late _Api api;
   setUp(() async {
     FlutterSecureStorage.setMockInitialValues({});
     routers = RouterService();
@@ -111,10 +116,11 @@ void main() {
       ),
     );
     cache = _SlowCache();
+    api = _Api();
     state = AppState.withServices(
       cache: cache,
       routerService: routers,
-      apiService: _Api(),
+      apiService: api,
       authService: _Auth(),
     );
     await state.initialized;
@@ -145,6 +151,34 @@ void main() {
       expect(cache.saved.keys, contains('router-a:performance-settings'));
     },
   );
+
+  test('warmup shares page reads without marking notifications seen', () async {
+    cache.gate.complete();
+    state.warmDeviceAndNotificationPages();
+    await Future.wait([state.loadDevicesPage(), state.loadNotificationsPage()]);
+    expect(state.devicesPageData(), isNotNull);
+    expect(state.notificationsPageData, isNotNull);
+    expect(
+      api.commands.where(
+        (command) => command.contains('FROM notifications WHERE'),
+      ),
+      hasLength(1),
+    );
+    expect(
+      api.commands.any(
+        (command) => command.contains('UPDATE notifications SET'),
+      ),
+      isFalse,
+    );
+    final count = api.commands.length;
+    await state.loadNotificationsPage();
+    await state.loadDevicesPage();
+    expect(api.commands, hasLength(count));
+    state.invalidateNotificationsPageData();
+    expect(state.notificationsPageData, isNull);
+    await state.loadNotificationsPage();
+    expect(api.commands.length, greaterThan(count));
+  });
 
   test('dashboard completion does not wait for snapshot persistence', () async {
     await state.fetchDashboardData().timeout(const Duration(seconds: 2));
