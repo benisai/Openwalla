@@ -1885,8 +1885,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
         children: [
           OfflineSnapshotBanner(
             backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-            offline: appState.offlineViewing,
-            savedAt: appState.offlineViewing
+            offline: appState.offlineViewing || appState.routerConnectionLost,
+            savedAt: appState.offlineViewing || appState.routerConnectionLost
                 ? appState.snapshotSavedAt
                 : appState.staleSectionSavedAt,
             reconnecting: appState.isLoading,

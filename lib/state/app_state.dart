@@ -2140,12 +2140,20 @@ class AppState extends ChangeNotifier {
   late final RouterSnapshotCache _snapshotCache;
   final WifiSharingCache _wifiSharingCache = WifiSharingCache();
   bool _offlineViewing = false;
+  bool _automaticConnectionLost = false;
+  bool _dashboardUsingSavedData = false;
+  Timer? _dashboardRecoveryTimer;
+  Future<void>? _dashboardFetch;
+  Future<void>? _dashboardRecovery;
+  int _dashboardGeneration = 0;
+  bool get routerConnectionLost => _automaticConnectionLost;
   bool _hasOfflineSnapshot = false;
   String? _dashboardRouterId;
   DateTime? _snapshotSavedAt;
   final Map<String, DateTime> _staleSnapshotSections = {};
   bool get showingSavedData =>
       _offlineViewing ||
+      _dashboardUsingSavedData ||
       (_authService?.isAuthenticated == true &&
           _staleSnapshotSections.isNotEmpty);
   DateTime? get staleSectionSavedAt => _staleSnapshotSections.values.isEmpty
@@ -2221,10 +2229,16 @@ class AppState extends ChangeNotifier {
     throw StateError('No saved data for this panel');
   }
 
-  Future<bool> _restoreDashboardSnapshot(model.Router router) async {
+  Future<bool> _restoreDashboardSnapshot(
+    model.Router router, {
+    int? generation,
+  }) async {
     await _snapshotCache.waitForPendingWrites(router.id);
     final snapshot = await _snapshotCache.load(router.id, router.fingerprint);
-    if (selectedRouter?.id != router.id) return false;
+    if (selectedRouter?.id != router.id ||
+        (generation != null && generation != _dashboardGeneration)) {
+      return false;
+    }
     final entry = (snapshot?['sections'] as Map?)?['dashboard'];
     _hasOfflineSnapshot = entry is Map && entry['data'] is Map;
     if (!_hasOfflineSnapshot) return false;
@@ -2235,7 +2249,10 @@ class AppState extends ChangeNotifier {
         router.fingerprint,
         data['uciWirelessConfig'],
       );
-      if (selectedRouter?.id != router.id) return false;
+      if (selectedRouter?.id != router.id ||
+          (generation != null && generation != _dashboardGeneration)) {
+        return false;
+      }
       data['flowProvider'] = OpenwallaFlowProvider.values.firstWhere(
         (v) => v.name == data['flowProvider'],
         orElse: () => OpenwallaFlowProvider.none,
@@ -2272,6 +2289,7 @@ class AppState extends ChangeNotifier {
         !await _restoreDashboardSnapshot(router)) {
       return false;
     }
+    _invalidateDashboardRequests();
     _cancelThroughputTimer();
     await _authService?.logout();
     _offlineViewing = true;
@@ -2394,6 +2412,7 @@ class AppState extends ChangeNotifier {
 
   void warmDeviceAndNotificationPages() {
     if (_offlineViewing ||
+        _automaticConnectionLost ||
         _authService?.isAuthenticated != true ||
         selectedRouter == null) {
       return;
@@ -4875,6 +4894,7 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
   }) async {
     invalidateDevicesPageData();
     invalidateNotificationsPageData();
+    _invalidateDashboardRequests();
     _isLoading = true;
     _errorMessage = null;
     if (_offlineViewing) await _authService?.logout();
@@ -4963,6 +4983,8 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
           }
         }
         _offlineViewing = false;
+        _automaticConnectionLost = false;
+        _dashboardUsingSavedData = false;
         RouterAccessGuard.offline = false;
         final currentRouter = selectedRouter;
         if (currentRouter != null && _dashboardRouterId != currentRouter.id) {
@@ -4996,6 +5018,9 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
   }
 
   Future<void> logout({bool skipNextAutoLogin = true}) async {
+    _invalidateDashboardRequests();
+    _automaticConnectionLost = false;
+    _dashboardUsingSavedData = false;
     invalidateDevicesPageData();
     invalidateNotificationsPageData();
     _staleSnapshotSections.clear();
@@ -5031,6 +5056,10 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
           context: context,
         );
       }
+      return;
+    }
+    if (_dashboardUsingSavedData && _authService?.isAuthenticated == true) {
+      await _recoverDashboardConnection(_dashboardGeneration);
       return;
     }
     final router = _routerService?.selectedRouter;
@@ -5079,8 +5108,139 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
     }
   }
 
-  Future<void> fetchDashboardData({bool allowAuthRetry = true}) async {
+  void _invalidateDashboardRequests() {
+    _dashboardGeneration++;
+    _dashboardFetch = null;
+    _dashboardRecovery = null;
+    _dashboardRecoveryTimer?.cancel();
+    _dashboardRecoveryTimer = null;
+  }
+
+  bool _isConnectionFailure(Object error) =>
+      error is SocketException ||
+      (error is DioException &&
+          {
+            DioExceptionType.connectionError,
+            DioExceptionType.connectionTimeout,
+            DioExceptionType.receiveTimeout,
+            DioExceptionType.sendTimeout,
+          }.contains(error.type)) ||
+      error is TimeoutException;
+
+  Future<bool> _probeDashboardConnection() async {
+    final router = selectedRouter;
+    final token = _authService?.sysauth;
+    if (router == null || token == null || _apiService == null) return false;
+    try {
+      await _apiService!
+          .call(
+            router.ipAddress,
+            token,
+            router.useHttps,
+            object: 'system',
+            method: 'board',
+            params: const {},
+            receiveTimeout: const Duration(seconds: 3),
+          )
+          .timeout(const Duration(seconds: 3));
+      return true;
+    } catch (error) {
+      // An RPC permission/data error still means the router answered.
+      return !_isConnectionFailure(error);
+    }
+  }
+
+  void _scheduleDashboardRecovery(int generation) {
+    if (generation != _dashboardGeneration ||
+        _offlineViewing ||
+        _authService?.isAuthenticated != true ||
+        _dashboardRecoveryTimer != null) {
+      return;
+    }
+    _dashboardRecoveryTimer = Timer(const Duration(seconds: 10), () {
+      _dashboardRecoveryTimer = null;
+      unawaited(
+        _recoverDashboardConnection(generation).catchError((Object error) {
+          Logger.debug('Dashboard recovery failed: $error');
+          _scheduleDashboardRecovery(generation);
+        }),
+      );
+    });
+  }
+
+  Future<void> _recoverDashboardConnection(int generation) {
+    if (generation != _dashboardGeneration) return Future.value();
+    if (_dashboardRecovery != null) return _dashboardRecovery!;
+    late final Future<void> request;
+    request = _runDashboardRecovery(generation).whenComplete(() {
+      if (identical(_dashboardRecovery, request)) _dashboardRecovery = null;
+    });
+    _dashboardRecovery = request;
+    return request;
+  }
+
+  Future<void> _runDashboardRecovery(int generation) async {
+    if (generation != _dashboardGeneration ||
+        _offlineViewing ||
+        _authService?.isAuthenticated != true) {
+      return;
+    }
+    if (_dashboardFetch != null) {
+      await _dashboardFetch;
+      return;
+    }
+    final reachable = await _probeDashboardConnection();
+    if (generation != _dashboardGeneration ||
+        _offlineViewing ||
+        _authService?.isAuthenticated != true) {
+      return;
+    }
+    if (!reachable) {
+      _automaticConnectionLost = true;
+      RouterAccessGuard.offline = true;
+      notifyListeners();
+      _scheduleDashboardRecovery(generation);
+      return;
+    }
+    _automaticConnectionLost = false;
+    RouterAccessGuard.offline = false;
+    await fetchDashboardData();
+  }
+
+  Future<void> fetchDashboardData({bool allowAuthRetry = true}) {
+    if (_offlineViewing) return Future.value();
+    if (_dashboardFetch != null) return _dashboardFetch!;
+    final generation = _dashboardGeneration;
+    late final Future<void> request;
+    request =
+        Future<void>(
+          () => _fetchDashboardData(
+            allowAuthRetry: allowAuthRetry,
+            generation: generation,
+          ),
+        ).whenComplete(() {
+          if (identical(_dashboardFetch, request)) _dashboardFetch = null;
+        });
+    _dashboardFetch = request;
+    return request;
+  }
+
+  Future<void> _fetchDashboardData({
+    required bool allowAuthRetry,
+    required int generation,
+  }) async {
+    if (generation != _dashboardGeneration) return;
     if (_offlineViewing) return;
+    if (_automaticConnectionLost) {
+      final reachable = await _probeDashboardConnection();
+      if (generation != _dashboardGeneration) return;
+      if (!reachable) {
+        _scheduleDashboardRecovery(generation);
+        return;
+      }
+      _automaticConnectionLost = false;
+      RouterAccessGuard.offline = false;
+    }
     if (_reviewerModeEnabled) {
       // For reviewer mode, return mock data immediately
       _isDashboardLoading = true;
@@ -5478,7 +5638,10 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
           ? Map<String, dynamic>.from(sysInfoData)
           : <String, dynamic>{};
 
-      if (selectedRouter?.id != requestedRouter.id) return;
+      if (generation != _dashboardGeneration ||
+          selectedRouter?.id != requestedRouter.id) {
+        return;
+      }
       _dashboardRouterId = requestedRouter.id;
       _dashboardData = {
         'boardInfo': boardInfoData,
@@ -5512,11 +5675,21 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
       final boardInfo = _dashboardData?['boardInfo'] as Map<String, dynamic>?;
       final hostname = boardInfo?['hostname']?.toString();
       if (hostname != null && hostname.isNotEmpty) {
-        await _routerService?.updateSelectedRouterHostname(hostname);
+        try {
+          await _routerService?.updateSelectedRouterHostname(hostname);
+        } catch (error) {
+          Logger.warning('Could not save router display name: $error');
+        }
       }
+      if (generation != _dashboardGeneration) return;
       // Optional persistence must not hold up login or a live dashboard refresh.
       unawaited(_saveWifiSharingSnapshot(requestedRouter, uciWirelessConfig));
       unawaited(_saveDashboardSnapshot(requestedRouter));
+      _dashboardUsingSavedData = false;
+      _automaticConnectionLost = false;
+      RouterAccessGuard.offline = false;
+      _dashboardRecoveryTimer?.cancel();
+      _dashboardRecoveryTimer = null;
 
       // Ensure throughput timer is running
       _startThroughputTimer();
@@ -5527,8 +5700,21 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
         _updateThroughputOnly();
       });
     } catch (e) {
+      if (generation != _dashboardGeneration ||
+          selectedRouter?.id != requestedRouter.id) {
+        return;
+      }
       if (allowAuthRetry && await _tryRefreshDashboardSession(e)) {
-        return fetchDashboardData(allowAuthRetry: false);
+        if (generation != _dashboardGeneration) return;
+        return _fetchDashboardData(
+          allowAuthRetry: false,
+          generation: generation,
+        );
+      }
+
+      if (generation != _dashboardGeneration ||
+          selectedRouter?.id != requestedRouter.id) {
+        return;
       }
 
       final errorMessage = e.toString();
@@ -5541,16 +5727,33 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
       // print('Dashboard fetch error: $e\n$stack');
       if (selectedRouter?.id != requestedRouter.id) return;
       if (_dashboardData == null || _dashboardRouterId != requestedRouter.id) {
-        await _restoreDashboardSnapshot(requestedRouter);
+        await _restoreDashboardSnapshot(
+          requestedRouter,
+          generation: generation,
+        );
+      }
+      if (generation != _dashboardGeneration ||
+          selectedRouter?.id != requestedRouter.id) {
+        return;
       }
       if (_dashboardData != null && _dashboardRouterId == requestedRouter.id) {
-        _offlineViewing = true;
-        RouterAccessGuard.offline = true;
-        _cancelThroughputTimer();
+        _dashboardUsingSavedData = true;
+        if (_isConnectionFailure(e)) {
+          final reachable = await _probeDashboardConnection();
+          if (generation != _dashboardGeneration ||
+              selectedRouter?.id != requestedRouter.id) {
+            return;
+          }
+          _automaticConnectionLost = !reachable;
+          RouterAccessGuard.offline = !reachable;
+          _scheduleDashboardRecovery(generation);
+        }
       }
     } finally {
-      _isDashboardLoading = false;
-      notifyListeners();
+      if (generation == _dashboardGeneration) {
+        _isDashboardLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -12884,7 +13087,11 @@ done | sort -nr | head -n ''' +
   }
 
   Future<void> _updateSystemInfoOnly() async {
-    if (_isRebooting || _dashboardData == null) {
+    final generation = _dashboardGeneration;
+    if (_isRebooting ||
+        _offlineViewing ||
+        _automaticConnectionLost ||
+        _dashboardData == null) {
       return;
     }
 
@@ -12926,6 +13133,11 @@ done | sort -nr | head -n ''' +
 
       if (result is List && result.length > 1 && result[0] == 0) {
         final conntrackData = await conntrackFuture;
+        if (generation != _dashboardGeneration ||
+            _offlineViewing ||
+            _automaticConnectionLost) {
+          return;
+        }
         _dashboardData = {
           ...?_dashboardData,
           'sysInfo': result[1],
@@ -12941,6 +13153,8 @@ done | sort -nr | head -n ''' +
 
   /// Updates only throughput data without refetching the entire dashboard
   Future<void> _updateThroughputOnly() async {
+    final generation = _dashboardGeneration;
+    if (_offlineViewing || _automaticConnectionLost) return;
     // Don't try to update throughput during reboot
     if (_isRebooting) {
       return;
@@ -13001,6 +13215,11 @@ done | sort -nr | head -n ''' +
         params: {},
       );
 
+      if (generation != _dashboardGeneration ||
+          _offlineViewing ||
+          _automaticConnectionLost) {
+        return;
+      }
       if (result is List && result.length > 1 && result[0] == 0) {
         final networkData = result[1] as Map<String, dynamic>?;
 
@@ -13689,6 +13908,7 @@ done | sort -nr | head -n ''' +
 
   @override
   void dispose() {
+    _invalidateDashboardRequests();
     invalidateDevicesPageData();
     invalidateNotificationsPageData();
     _throughputTimer?.cancel();

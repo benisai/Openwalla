@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart' hide Router;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -8,6 +9,7 @@ import 'package:openwalla/services/interfaces/api_service_interface.dart';
 import 'package:openwalla/services/interfaces/auth_service_interface.dart';
 import 'package:openwalla/services/router_service.dart';
 import 'package:openwalla/services/router_snapshot_cache.dart';
+import 'package:openwalla/services/router_access_guard.dart';
 import 'package:openwalla/state/app_state.dart';
 
 class _SlowCache extends RouterSnapshotCache {
@@ -39,18 +41,29 @@ class _SlowCache extends RouterSnapshotCache {
 }
 
 class _Auth implements IAuthService {
+  bool authenticated = true;
   @override
   bool get useHttps => false;
   @override
-  String get sysauth => 'token';
+  String? get sysauth => authenticated ? 'token' : null;
   @override
-  bool get isAuthenticated => true;
+  bool get isAuthenticated => authenticated;
+  @override
+  Future<void> logout() async {
+    authenticated = false;
+  }
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _Api implements IApiService {
   final commands = <String>[];
+  Object? infoFailure;
+  bool probeFails = false;
+  int probes = 0;
+  int boardReads = 0;
+  Completer<void>? boardGate;
   @override
   Future<dynamic> call(
     String ipAddress,
@@ -63,6 +76,18 @@ class _Api implements IApiService {
     Duration? receiveTimeout,
     Duration? sendTimeout,
   }) async {
+    if (object == 'system' && method == 'board') {
+      if (receiveTimeout == const Duration(seconds: 3)) {
+        probes++;
+        if (probeFails) throw const SocketException('Network unreachable');
+      } else {
+        boardReads++;
+        if (boardGate != null) await boardGate!.future;
+      }
+    }
+    if (object == 'system' && method == 'info' && infoFailure != null) {
+      throw infoFailure!;
+    }
     if (object == 'uci') {
       return {
         'values': {
@@ -104,6 +129,7 @@ void main() {
   late RouterService routers;
   late _Api api;
   setUp(() async {
+    RouterAccessGuard.offline = false;
     FlutterSecureStorage.setMockInitialValues({});
     routers = RouterService();
     await routers.addRouter(
@@ -130,7 +156,111 @@ void main() {
     await Future.wait(cache.writes);
     await Future<void>.delayed(const Duration(milliseconds: 150));
     state.dispose();
+    RouterAccessGuard.offline = false;
   });
+
+  test(
+    'non-network dashboard errors never enable global offline guard',
+    () async {
+      cache.gate.complete();
+      await state.fetchDashboardData();
+      api.infoFailure = const FormatException('Unexpected optional data');
+      await state.fetchDashboardData();
+      expect(state.showingSavedData, isTrue);
+      expect(state.offlineViewing, isFalse);
+      expect(state.routerConnectionLost, isFalse);
+      expect(RouterAccessGuard.offline, isFalse);
+      expect(api.probes, 0);
+    },
+  );
+
+  test(
+    'one network failure with a healthy probe stays live and can refresh',
+    () async {
+      cache.gate.complete();
+      await state.fetchDashboardData();
+      api.infoFailure = const SocketException('Temporary disconnect');
+      await state.fetchDashboardData();
+      expect(api.probes, 1);
+      expect(state.routerConnectionLost, isFalse);
+      expect(RouterAccessGuard.offline, isFalse);
+      api.infoFailure = null;
+      await state.fetchDashboardData();
+      expect(state.showingSavedData, isFalse);
+    },
+  );
+
+  test(
+    'confirmed connection loss recovers automatically without entering explicit offline mode',
+    () async {
+      cache.gate.complete();
+      await state.fetchDashboardData();
+      api.infoFailure = const SocketException('Disconnected');
+      api.probeFails = true;
+      await state.fetchDashboardData();
+      expect(state.offlineViewing, isFalse);
+      expect(state.routerConnectionLost, isTrue);
+      expect(RouterAccessGuard.offline, isTrue);
+      api.infoFailure = null;
+      api.probeFails = false;
+      await Future<void>.delayed(const Duration(seconds: 11));
+      expect(api.probes, greaterThanOrEqualTo(2));
+      expect(state.routerConnectionLost, isFalse);
+      expect(state.showingSavedData, isFalse);
+      expect(RouterAccessGuard.offline, isFalse);
+    },
+  );
+
+  test('overlapping dashboard refreshes share a single request', () async {
+    cache.gate.complete();
+    final gate = Completer<void>();
+    api.boardGate = gate;
+    final first = state.fetchDashboardData();
+    final second = state.fetchDashboardData();
+    expect(identical(first, second), isTrue);
+    await Future<void>.delayed(Duration.zero);
+    expect(api.boardReads, 1);
+    gate.complete();
+    await Future.wait([first, second]);
+    expect(state.dashboardData, isNotNull);
+  });
+
+  test(
+    'normal refresh can recover confirmed loss without a new login',
+    () async {
+      cache.gate.complete();
+      await state.fetchDashboardData();
+      api.infoFailure = const SocketException('Disconnected');
+      api.probeFails = true;
+      await state.fetchDashboardData();
+      expect(RouterAccessGuard.offline, isTrue);
+      api.infoFailure = null;
+      api.probeFails = false;
+      await state.fetchDashboardData();
+      expect(RouterAccessGuard.offline, isFalse);
+      expect(state.showingSavedData, isFalse);
+    },
+  );
+
+  test(
+    'a late failed refresh cannot switch the app offline after logout',
+    () async {
+      cache.gate.complete();
+      await state.fetchDashboardData();
+      final gate = Completer<void>();
+      api.boardGate = gate;
+      api.infoFailure = const SocketException('Disconnected');
+      final pending = state.fetchDashboardData();
+      await Future<void>.delayed(Duration.zero);
+      await state.logout();
+      gate.complete();
+      await pending;
+      expect(state.dashboardData, isNull);
+      expect(state.offlineViewing, isFalse);
+      expect(state.routerConnectionLost, isFalse);
+      expect(RouterAccessGuard.offline, isFalse);
+    },
+  );
 
   test(
     'ping and settings return live values while disk saves are blocked',
