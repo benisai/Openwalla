@@ -146,21 +146,38 @@ read_quarantine_state_file() {
 save_sqlite() {
 	local src="$1"
 	local dst="$2"
+	local sqlite tmp check
 	if [ ! -f "$src" ]; then
 		return 0
 	fi
+	[ "$src" = "$dst" ] && return 0
 	if command -v sqlite3 >/dev/null 2>&1; then
-		sqlite3 "$src" ".timeout 5000" ".backup '$dst'" >/dev/null 2>&1 && return 0
+		sqlite=sqlite3
+	elif command -v sqlite3-cli >/dev/null 2>&1; then
+		sqlite=sqlite3-cli
+	else
+		echo "SQLite CLI is required to safely save $src" >&2
+		return 1
 	fi
-	cp -f "$src" "$dst" 2>/dev/null || true
+	tmp="$dst.new.$$"
+	if ! "$sqlite" "$src" ".timeout 30000" ".backup '$tmp'"; then
+		rm -f "$tmp"
+		echo "Could not back up $src" >&2
+		return 1
+	fi
+	check="$("$sqlite" "$tmp" 'PRAGMA quick_check;')" || { rm -f "$tmp"; return 1; }
+	[ "$check" = "ok" ] || { rm -f "$tmp"; echo "Invalid backup for $src" >&2; return 1; }
+	mv -f "$tmp" "$dst" || { rm -f "$tmp"; return 1; }
 }
 
 save_copy() {
 	local src="$1"
 	local dst="$2"
 	[ -f "$src" ] || return 0
-	mkdir -p "$(dirname "$dst")" 2>/dev/null || true
-	cp -f "$src" "$dst" 2>/dev/null || true
+	mkdir -p "$(dirname "$dst")" || return 1
+	[ "$src" = "$dst" ] && return 0
+	cp -f "$src" "$dst.new.$$" || { rm -f "$dst.new.$$"; return 1; }
+	mv -f "$dst.new.$$" "$dst" || { rm -f "$dst.new.$$"; return 1; }
 }
 
 save_netify_archives() {
@@ -169,26 +186,56 @@ save_netify_archives() {
 	local src_dir dst_dir
 	src_dir="$(dirname "$netify_db")"
 	dst_dir="$state_dir/netify-archives"
-	mkdir -p "$dst_dir"
-	rm -f "$dst_dir"/netify.* 2>/dev/null || true
+	mkdir -p "$dst_dir" || return 1
 	for f in "$src_dir"/netify.*; do
 		[ -f "$f" ] || continue
-		cp -f "$f" "$dst_dir/" 2>/dev/null || true
+		save_copy "$f" "$dst_dir/$(basename "$f")" || return 1
 	done
+	for f in "$dst_dir"/netify.*; do
+		[ -f "$f" ] || continue
+		if [ ! -f "$src_dir/$(basename "$f")" ]; then
+			rm -f "$f" || return 1
+		fi
+	done
+	return 0
+}
+
+save_vnstat_tree() {
+	local src="$1" dst="$2" f target
+	mkdir -p "$dst" || return 1
+	for f in "$src"/* "$src"/.[!.]* "$src"/..?*; do
+		[ -e "$f" ] || continue
+		if [ -L "$f" ]; then
+			echo "Cannot safely checkpoint vnStat symlink: $f" >&2
+			return 1
+		fi
+		target="$dst/$(basename "$f")"
+		if [ -d "$f" ]; then
+			save_vnstat_tree "$f" "$target" || return 1
+		else
+			case "$f" in
+			*-wal|*-shm) continue ;;
+			*.db|*.sqlite|*.sqlite3)
+				save_sqlite "$f" "$target" || return 1
+				rm -f "$target-wal" "$target-shm" || return 1
+				;;
+			*) save_copy "$f" "$target" || return 1 ;;
+			esac
+		fi
+	done
+	return 0
 }
 
 save_vnstat_dir() {
 	local src="/var/lib/vnstat"
-	local dst="$1/vnstat"
 	[ -d "$src" ] || return 0
-	mkdir -p "$dst"
-	( cd "$src" && tar -cf - . ) | ( cd "$dst" && tar -xf - ) 2>/dev/null || true
+	save_vnstat_tree "$src" "$1/vnstat"
 }
 
 save_runtime_logs() {
 	local state_dir="$1"
 	local dst="$state_dir/tmp"
-	mkdir -p "$dst"
+	mkdir -p "$dst" || return 1
 	for f in \
 		/tmp/openwalla/openwalla-netify-collector.log \
 		/tmp/openwalla/openwalla-connection-flows-collector.log \
@@ -200,8 +247,9 @@ save_runtime_logs() {
 		/tmp/openwalla/openwalla-speedtest-monitor.last.log
 	do
 		[ -f "$f" ] || continue
-		cp -f "$f" "$dst/" 2>/dev/null || true
+		save_copy "$f" "$dst/$(basename "$f")" || return 1
 	done
+	return 0
 }
 
 file_mtime_epoch() {
@@ -320,7 +368,7 @@ restore_vnstat_dir() {
 }
 
 save_state() {
-	local state_dir netify_db netify_flow_stats_db flows_db devices_db device_bandwidth_db notifications_db parental_db ping_file dns_file speedtest_file quarantine_state_file
+	local state_dir resolved netify_db netify_flow_stats_db flows_db devices_db device_bandwidth_db notifications_db parental_db ping_file dns_file speedtest_file quarantine_state_file
 	state_dir="$(read_state_dir)"
 	netify_db="$(read_netify_db)"
 	netify_flow_stats_db="$(read_netify_flow_stats_db)"
@@ -334,24 +382,32 @@ save_state() {
 	speedtest_file="$(read_speedtest_file)"
 	quarantine_state_file="$(read_quarantine_state_file)"
 
-	mkdir -p "$state_dir"
-	save_sqlite "$netify_db" "$state_dir/openwalla-netify.sqlite"
-	save_sqlite "$netify_flow_stats_db" "$state_dir/openwalla-netify-flow-stats.sqlite"
-	save_sqlite "$flows_db" "$state_dir/openwalla-connection-flows.sqlite"
-	save_sqlite "$devices_db" "$state_dir/openwalla-devices.sqlite"
-	save_sqlite "$device_bandwidth_db" "$state_dir/openwalla-device-bandwidth.sqlite"
-	save_sqlite "$notifications_db" "$state_dir/openwalla-notifications.sqlite"
-	save_sqlite "$parental_db" "$state_dir/openwalla-parental.sqlite"
-	save_netify_archives "$netify_db" "$state_dir"
-	save_copy "$ping_file" "$state_dir/openwalla-ping-monitor.txt"
-	save_copy "$dns_file" "$state_dir/openwalla-dns-monitor.txt"
-	save_copy "$speedtest_file" "$state_dir/openwalla-speedtest-monitor.txt"
-	save_copy "$quarantine_state_file" "$state_dir/openwalla-quarantine-known.txt"
-	save_copy "/etc/config/openwalla" "$state_dir/openwalla.config"
-	save_vnstat_dir "$state_dir"
-	save_runtime_logs "$state_dir"
-	date +%s >"$STATE_TS_FILE" 2>/dev/null || true
-	save_copy "$STATE_TS_FILE" "$state_dir/openwalla-state-sync.last"
+	case "$state_dir" in
+	/tmp|/tmp/*|/var|/var/*) echo "Backup destination must be persistent: $state_dir" >&2; return 1 ;;
+	esac
+	mkdir -p "$state_dir" || return 1
+	resolved="$(cd "$state_dir" && pwd -P)" || return 1
+	case "$resolved" in
+	/tmp|/tmp/*|/var|/var/*) echo "Backup destination resolves to volatile storage: $resolved" >&2; return 1 ;;
+	esac
+	save_sqlite "$netify_db" "$state_dir/openwalla-netify.sqlite" || return 1
+	save_sqlite "$netify_flow_stats_db" "$state_dir/openwalla-netify-flow-stats.sqlite" || return 1
+	save_sqlite "$flows_db" "$state_dir/openwalla-connection-flows.sqlite" || return 1
+	save_sqlite "$devices_db" "$state_dir/openwalla-devices.sqlite" || return 1
+	save_sqlite "$device_bandwidth_db" "$state_dir/openwalla-device-bandwidth.sqlite" || return 1
+	save_sqlite "$notifications_db" "$state_dir/openwalla-notifications.sqlite" || return 1
+	save_sqlite "$parental_db" "$state_dir/openwalla-parental.sqlite" || return 1
+	save_netify_archives "$netify_db" "$state_dir" || return 1
+	save_copy "$ping_file" "$state_dir/openwalla-ping-monitor.txt" || return 1
+	save_copy "$dns_file" "$state_dir/openwalla-dns-monitor.txt" || return 1
+	save_copy "$speedtest_file" "$state_dir/openwalla-speedtest-monitor.txt" || return 1
+	save_copy "$quarantine_state_file" "$state_dir/openwalla-quarantine-known.txt" || return 1
+	save_copy "/etc/config/openwalla" "$state_dir/openwalla.config" || return 1
+	save_vnstat_dir "$state_dir" || return 1
+	save_runtime_logs "$state_dir" || return 1
+	date +%s >"$STATE_TS_FILE" || return 1
+	save_copy "$STATE_TS_FILE" "$state_dir/openwalla-state-sync.last" || return 1
+	sync
 }
 
 restore_state() {
@@ -496,6 +552,10 @@ sync_cron() {
 }
 
 case "${1:-}" in
+save-for-reboot)
+	save_state || exit 1
+	echo OPENWALLA_STATE_SAVED
+	;;
 save|backup)
 	save_state
 	;;
@@ -515,7 +575,7 @@ sync-cron)
 	sync_cron
 	;;
 *)
-	echo "usage: $0 {save|backup|restore|status|debug|save-if-due|sync-cron}"
+	echo "usage: $0 {save|backup|save-for-reboot|restore|status|debug|save-if-due|sync-cron}"
 	exit 1
 	;;
 esac

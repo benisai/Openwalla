@@ -2449,6 +2449,8 @@ class AppState extends ChangeNotifier {
 
   // Add rebooting state
   bool _isRebooting = false;
+  String? _rebootError;
+  String? get rebootError => _rebootError;
   bool get isRebooting => _isRebooting;
 
   // Theme mode state
@@ -12239,7 +12241,12 @@ done | sort -nr | head -n ''' +
     String action, {
     BuildContext? context,
   }) async {
-    if (!const {'backup', 'save', 'restore'}.contains(action)) {
+    if (!const {
+      'backup',
+      'save',
+      'restore',
+      'save-for-reboot',
+    }.contains(action)) {
       throw Exception('Unsupported state backup action: $action');
     }
     if (_reviewerModeEnabled) {
@@ -12265,7 +12272,28 @@ done | sort -nr | head -n ''' +
         'params': [action],
       },
       context: context,
+      receiveTimeout: const Duration(minutes: 5),
     );
+    final data = rpcDataMap(result);
+    if ((result is List && rpcUbusStatusCode(result) != 0) ||
+        data == null ||
+        data['code']?.toString() != '0') {
+      final reason = data?['stderr']?.toString().trim();
+      throw StateError(
+        reason?.isNotEmpty == true
+            ? 'State backup failed: $reason'
+            : 'State backup failed. Update the State Sync helper and check router permissions.',
+      );
+    }
+    if (action == 'save-for-reboot' &&
+        !data['stdout']
+            .toString()
+            .split('\n')
+            .contains('OPENWALLA_STATE_SAVED')) {
+      throw StateError(
+        'Backup was not verified. Update the State Sync helper before rebooting.',
+      );
+    }
     final output = _commandOutput(result).trim();
     if (output.isEmpty || output == '{code: 0}') {
       return action == 'restore' ? 'Restore completed.' : 'Backup completed.';
@@ -13280,9 +13308,18 @@ done | sort -nr | head -n ''' +
   }
 
   Future<bool> reboot({BuildContext? context}) async {
+    _rebootError = null;
     if (_authService?.sysauth == null || _authService?.ipAddress == null) {
+      _rebootError = 'Router is not connected.';
       return false;
     }
+    if (_isRebooting) return false;
+    _invalidateDashboardRequests();
+    final generation = _dashboardGeneration;
+    final routerId = selectedRouter?.id;
+    final ip = _authService!.ipAddress!;
+    final token = _authService!.sysauth!;
+    final useHttps = _authService!.useHttps;
 
     // Cancel throughput timer before starting reboot to prevent "client closed" errors
     _cancelThroughputTimer();
@@ -13291,25 +13328,30 @@ done | sort -nr | head -n ''' +
     notifyListeners();
 
     try {
-      try {
-        await runOpenwallaStateBackupAction('save', context: context);
-      } catch (e, stack) {
-        Logger.warning('Openwalla state save before reboot failed: $e');
-        Logger.debug('Openwalla state save before reboot stack: $stack');
+      await runOpenwallaStateBackupAction('save-for-reboot', context: context);
+      if (generation != _dashboardGeneration ||
+          selectedRouter?.id != routerId ||
+          _authService?.sysauth != token) {
+        throw StateError(
+          'Router connection changed during backup. Reconnect and try again.',
+        );
       }
 
-      final result = await _apiService!.reboot(
-        _authService!.ipAddress!,
-        _authService!.sysauth!,
-        _authService!.useHttps,
-      );
+      final result = await _apiService!.reboot(ip, token, useHttps);
       if (!result) {
+        _rebootError = 'Backup completed, but the reboot command failed.';
         _isRebooting = false;
+        _startThroughputTimer();
+        _startSystemInfoTimer();
         notifyListeners();
       }
       return result;
     } catch (e) {
+      _rebootError =
+          'Reboot cancelled: ${e.toString().replaceFirst('Bad state: ', '')}';
       _isRebooting = false;
+      _startThroughputTimer();
+      _startSystemInfoTimer();
       notifyListeners();
       return false;
     }

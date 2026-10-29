@@ -365,9 +365,10 @@ class _RebootCountdownDialogState extends ConsumerState<RebootCountdownDialog>
                   const SizedBox(height: 20),
                   Text(
                     _sendFailed
-                        ? 'Openwalla could not send the reboot command. You can close this and try again.'
+                        ? ref.read(appStateProvider).rebootError ??
+                              'Openwalla could not send the reboot command. You can close this and try again.'
                         : _sendingReboot
-                        ? 'Sending reboot command to the router.'
+                        ? 'Saving router data before reboot. Please keep the app connected.'
                         : _checking
                         ? 'The router may be ready. Trying to reconnect now.'
                         : widget.returnToLoginAfterRecovery

@@ -15,6 +15,11 @@ require_file "$FILES_DIR/openwalla-state-sync.init"
 require_file "$FILES_DIR/openwalla.config"
 require_file "$RPCD_ACL"
 
+if ! have_cmd sqlite3 && ! have_cmd sqlite3-cli; then
+	update_package_feeds
+	install_first_available_pkg "sqlite-cli" sqlite3-cli sqlite3
+fi
+
 ensure_openwalla_config
 ensure_uci_section state_backup state_backup
 
@@ -29,7 +34,10 @@ uci commit openwalla
 # Preserve the current runtime state before restarting the sync service. A
 # restore here can overwrite newer /tmp data with an older checkpoint during
 # a routine reinstall; boot-time restore remains handled by the init service.
-/usr/bin/openwalla-state-sync save || true
+if ! /usr/bin/openwalla-state-sync save; then
+	log "ERROR: State backup failed; refusing to restart State Sync and restore an older checkpoint."
+	exit 1
+fi
 /usr/bin/openwalla-state-sync sync-cron || true
 
 if [ -f /etc/rc.local ]; then
