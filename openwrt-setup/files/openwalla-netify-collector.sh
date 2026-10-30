@@ -15,6 +15,7 @@ DEFAULT_RETENTION_ROWS="500000"
 DEFAULT_RETENTION_HOURS="24"
 DEFAULT_STREAM_TIMEOUT="45"
 DEFAULT_EXCLUDE_PROTOCOLS="MDNS,DNS,QUIC,DHCPv6,ICMP"
+DEFAULT_INCLUDE_PROTOCOLS="HTTP,HTTP/S"
 RECONNECT_DELAY="3"
 LOG_FILE="/tmp/openwalla/openwalla-netify-collector.log"
 FLOW_STATS_WORK_DIR="/tmp/openwalla/openwalla-netify-stats-work"
@@ -29,6 +30,7 @@ RETENTION_ROWS="$DEFAULT_RETENTION_ROWS"
 RETENTION_HOURS="$DEFAULT_RETENTION_HOURS"
 STREAM_TIMEOUT="$DEFAULT_STREAM_TIMEOUT"
 EXCLUDE_PROTOCOLS="$DEFAULT_EXCLUDE_PROTOCOLS"
+INCLUDE_PROTOCOLS="$DEFAULT_INCLUDE_PROTOCOLS"
 FLOW_STATS_ENABLED="0"
 FLOW_STATS_POLL_SECONDS="5"
 FLOW_STATS_BUCKET_SECONDS="300"
@@ -158,6 +160,9 @@ load_config() {
 		value="$(uci -q get openwalla.collector.exclude_protocols 2>/dev/null || true)"
 		value="$(sanitize_text "$value")"
 		[ -n "$value" ] && EXCLUDE_PROTOCOLS="$value"
+		value="$(uci -q get openwalla.collector.include_protocols 2>/dev/null || true)"
+		value="$(sanitize_text "$value")"
+		INCLUDE_PROTOCOLS="${value:-$DEFAULT_INCLUDE_PROTOCOLS}"
 
 		value="$(uci -q get openwalla.flow_stats.enabled 2>/dev/null || true)"
 		value="$(sanitize_text "$value")"
@@ -741,16 +746,30 @@ prefer_client_sni() {
 }
 
 should_skip_protocol() {
-	local line proto token normalized_proto normalized_token old_ifs
+	local line proto token normalized_proto normalized_token old_ifs included
 	line="$1"
 	proto="$(extract_protocol_name "$line")"
-	[ -n "$proto" ] || return 1
-
 	normalized_proto="$(normalize_protocol "$proto")"
-	[ -n "$normalized_proto" ] || return 1
 
 	old_ifs="$IFS"
 	IFS=','
+	included=0
+	if [ "$INCLUDE_PROTOCOLS" = '*' ]; then
+		included=1
+	else
+		for token in $INCLUDE_PROTOCOLS; do
+			normalized_token="$(normalize_protocol "$token")"
+			if [ -n "$normalized_token" ] && [ "$normalized_proto" = "$normalized_token" ]; then
+				included=1
+				break
+			fi
+		done
+	fi
+	if [ "$included" != 1 ]; then
+		IFS="$old_ifs"
+		return 0
+	fi
+	[ -n "$normalized_proto" ] || { IFS="$old_ifs"; return 1; }
 	for token in $EXCLUDE_PROTOCOLS; do
 		token="$(sanitize_text "$token")"
 		token="$(printf "%s" "$token" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
@@ -934,7 +953,7 @@ run_forever() {
 		stats_pid=$!
 		trap '[ -n "$stats_pid" ] && kill "$stats_pid" 2>/dev/null || true; rm -rf "$FLOW_STATS_WORK_DIR.$$"; exit 0' INT TERM EXIT
 	fi
-	log "starting netify collector host=$NETIFY_HOST port=$NETIFY_PORT db=$NETIFY_DB timeout=${STREAM_TIMEOUT}s retention=${RETENTION_HOURS}h flow_stats=$FLOW_STATS_ENABLED flow_stats_db=$FLOW_STATS_DB"
+	log "starting netify collector host=$NETIFY_HOST port=$NETIFY_PORT db=$NETIFY_DB timeout=${STREAM_TIMEOUT}s retention=${RETENTION_HOURS}h include_protocols=$INCLUDE_PROTOCOLS flow_stats=$FLOW_STATS_ENABLED flow_stats_db=$FLOW_STATS_DB"
 	while true; do
 		refresh_runtime_config
 		log "connecting to netify stream at $NETIFY_HOST:$NETIFY_PORT"
