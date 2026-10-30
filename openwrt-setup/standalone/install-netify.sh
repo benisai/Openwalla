@@ -26,6 +26,10 @@ ensure_uci_section collector netify
 ensure_uci_section flow_stats flow_stats
 ensure_uci_section features ui
 
+# The old running collector still inserts JSON; stop it before changing schema.
+if [ -x /etc/init.d/openwalla-netify-collector ]; then
+	/etc/init.d/openwalla-netify-collector stop || exit 1
+fi
 install_file "$FILES_DIR/openwalla-netify-collector.sh" /usr/bin/openwalla-netify-collector 0755
 install_file "$FILES_DIR/openwalla-netify-collector.init" /etc/init.d/openwalla-netify-collector 0755
 install_file "$FILES_DIR/Openwalla-5min-run.sh" /usr/bin/Openwalla-5min-run.sh 0755
@@ -67,7 +71,10 @@ if [ -f "$NETIFYD_CONF" ]; then
 	log "Updated netifyd listen_address[0] to $NETIFY_LISTEN"
 fi
 
-/usr/bin/openwalla-netify-collector --init-db || true
+if ! /usr/bin/openwalla-netify-collector --init-db; then
+	log "Netify database initialization/migration failed; original history retained. Check the collector log and free space."
+	exit 1
+fi
 /usr/bin/openwalla-netify-collector --install-prune-cron || true
 /usr/bin/Openwalla-5min-run.sh install-cron || true
 

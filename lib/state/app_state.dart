@@ -39,6 +39,7 @@ import 'package:openwalla/utils/router_identity.dart';
 import 'package:openwalla/services/client_discovery_service.dart';
 import 'package:openwalla/services/router_snapshot_cache.dart';
 import 'package:openwalla/services/page_preload_cache.dart';
+import 'package:openwalla/services/netify_flow_storage.dart';
 import 'package:openwalla/services/router_access_guard.dart';
 import 'package:openwalla/services/wifi_sharing_cache.dart';
 
@@ -10758,13 +10759,33 @@ done | sort -nr | head -n ''' +
 
     try {
       const endMarker = '__OPENWALLA_FLOW_PAGE_END__';
-      final output = await _sqliteQueryOutput(
-        dbExpression: _netifyDbExpression(),
-        sql:
-            'SELECT json FROM flow_raw ${_netifyRawWhereClause(protocolFilter, deviceMac: deviceMac, searchQuery: searchQuery, hoursBack: hoursBack)} ORDER BY id DESC LIMIT $limit OFFSET $offset; SELECT \'$endMarker\';',
+      final result = await _apiService!.call(
+        router.ipAddress,
+        sysauth,
+        router.useHttps,
+        object: 'file',
+        method: 'exec',
+        params: {
+          'command': '/bin/sh',
+          'params': [
+            '-c',
+            NetifyFlowStorage.pageCommand(
+              dbExpression: _netifyDbExpression(),
+              where: _netifyRawWhereClause(
+                protocolFilter,
+                deviceMac: deviceMac,
+                searchQuery: searchQuery,
+                hoursBack: hoursBack,
+              ),
+              limit: limit,
+              offset: offset,
+              endMarker: endMarker,
+            ),
+          ],
+        },
         context: context?.mounted == true ? context : null,
-        requireSuccess: true,
       );
+      final output = _snapshotCommandOutput(result);
       final lines = output.trimRight().split('\n');
       if (lines.last.trim() != endMarker) {
         throw const FormatException('Incomplete Netify flow page');

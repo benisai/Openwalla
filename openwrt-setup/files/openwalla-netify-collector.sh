@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Openwalla Netify collector for OpenWrt.
-# Captures Netify flow JSON events and stores them in a local SQLite database.
+# Captures Netify flow events and stores normalized columns in SQLite.
 
 set -e
 
@@ -37,6 +37,8 @@ FLOW_STATS_WARM="1"
 SQLITE_BIN=""
 JSHN_AVAILABLE="0"
 ROUTER_LAN_IPV4S=""
+FLOW_EXTRA_SQL=""
+FLOW_IDENTITY_SQL=""
 
 log() {
 	printf "%s %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
@@ -266,9 +268,8 @@ ensure_db_file() {
 	init_db
 }
 
-init_db() {
-	sql_exec "PRAGMA journal_mode=WAL;"
-	sql_exec "CREATE TABLE IF NOT EXISTS flow_raw (
+flow_raw_schema() {
+	printf '%s\n' "CREATE TABLE IF NOT EXISTS $1 (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		timeinsert INTEGER NOT NULL DEFAULT (strftime('%s','now')),
 		local_ip TEXT NOT NULL DEFAULT '',
@@ -294,8 +295,114 @@ init_db() {
 		dns_host_name TEXT NOT NULL DEFAULT '',
 		host_server_name TEXT NOT NULL DEFAULT '',
 		digest TEXT NOT NULL DEFAULT '',
-		json TEXT NOT NULL
+		local_port INTEGER NOT NULL DEFAULT 0,
+		first_seen_at NUMERIC NOT NULL DEFAULT 0,
+		last_seen_at NUMERIC NOT NULL DEFAULT 0,
+		downloaded_bytes INTEGER NOT NULL DEFAULT 0,
+		uploaded_bytes INTEGER NOT NULL DEFAULT 0,
+		total_bytes INTEGER NOT NULL DEFAULT 0,
+		country_code TEXT NOT NULL DEFAULT '',
+		region TEXT NOT NULL DEFAULT '',
+		direction TEXT NOT NULL DEFAULT 'Outbound'
 	);"
+}
+
+# Used for both historical backfill and new inserts; raw_flow is a JSON object.
+flow_json_text() {
+	local key
+	printf 'COALESCE('
+	for key in "$@"; do
+		printf "NULLIF(TRIM(CAST(json_extract(raw_flow,'$.%s') AS TEXT)),'')," "$key"
+	done
+	printf "'')"
+}
+
+flow_json_bytes() {
+	local key
+	printf 'COALESCE('
+	for key in "$@"; do
+		printf "CASE WHEN json_extract(raw_flow,'$.%s') IS NOT NULL AND CAST(json_extract(raw_flow,'$.%s') AS INTEGER)>=0 THEN CAST(json_extract(raw_flow,'$.%s') AS INTEGER) END," "$key" "$key" "$key"
+	done
+	printf '0)'
+}
+
+flow_extra_values() {
+	local rx tx
+	rx="$(flow_json_bytes other_bytes download_bytes server_bytes dst_bytes dest_bytes)"
+	tx="$(flow_json_bytes local_bytes upload_bytes client_bytes src_bytes)"
+	printf '%s\n' "
+		$(flow_json_bytes local_port src_port),
+		COALESCE(json_extract(raw_flow,'$.first_seen_at'),timeinsert),
+		COALESCE(json_extract(raw_flow,'$.last_seen_at'),json_extract(raw_flow,'$.first_seen_at'),timeinsert),
+		$rx,$tx,
+		CASE WHEN json_extract(raw_flow,'$.total_bytes') IS NOT NULL AND CAST(json_extract(raw_flow,'$.total_bytes') AS INTEGER)>=0
+			THEN CAST(json_extract(raw_flow,'$.total_bytes') AS INTEGER) ELSE $rx+$tx END,
+		$(flow_json_text other_country_code country_code country),
+		$(flow_json_text other_country_name country_name region),
+		COALESCE(NULLIF($(flow_json_text direction),''),'Outbound')"
+}
+
+flow_identity_values() {
+	local destination
+	destination="$(flow_json_text ssl.client_sni client_sni tls.client_sni tls_client_sni host_server_name server_name fqdn dns_host_name host hostname other_ip remote_ip)"
+	printf '%s\n' "
+		COALESCE(NULLIF($(flow_json_text local_ip src_ip),''),'-'),
+		CASE WHEN json_type(raw_flow,'$.local_mac')='array' THEN
+			COALESCE((SELECT value FROM json_each(raw_flow,'$.local_mac') WHERE TRIM(CAST(value AS TEXT))!='' LIMIT 1),'')
+			ELSE $(flow_json_text local_mac src_mac client_mac) END,
+		COALESCE(NULLIF($destination,''),'Unknown'),
+		COALESCE(NULLIF($(flow_json_text other_ip remote_ip dst_ip dest_ip),''),'-'),
+		$(flow_json_bytes other_port remote_port dst_port dest_port),'remote',
+		COALESCE(NULLIF($(flow_json_text detected_protocol_name protocol_name protocol),''),'N/A'),
+		COALESCE(NULLIF($(flow_json_text detected_application_name detected_app_name application_name app_name),''),NULLIF($destination,''),'Unknown'),
+		COALESCE(NULLIF(TRIM(CAST(json_extract(raw_event,'$.interface') AS TEXT)),''),NULLIF($(flow_json_text interface local_interface),''),'-')"
+}
+
+migrate_raw_flows() {
+	local has_json invalid schema extras identity sequence
+	has_json="$("$SQLITE_BIN" -batch -list -noheader "$NETIFY_DB" "SELECT count(*) FROM pragma_table_info('flow_raw') WHERE name='json';")" || return 1
+	[ "$has_json" = "1" ] || return 0
+	# Fail before touching history if JSON support or a stored payload is invalid.
+	invalid="$("$SQLITE_BIN" -batch -list -noheader "$NETIFY_DB" "SELECT count(*) FROM flow_raw WHERE NOT json_valid(json);")" || return 1
+	if [ "$invalid" != "0" ]; then
+		log "Netify migration cancelled: $invalid invalid JSON rows; original database retained"
+		return 1
+	fi
+	schema="$(flow_raw_schema flow_raw_compact)"
+	extras="$(flow_extra_values)"
+	identity="$(flow_identity_values)"
+	log "migrating Netify history to normalized columns (temporary free space is required)"
+	# Preserve the AUTOINCREMENT high-water mark even if the latest rows were pruned.
+	sequence="$("$SQLITE_BIN" -batch -list -noheader "$NETIFY_DB" "SELECT COALESCE(MAX(seq),0) FROM sqlite_sequence WHERE name='flow_raw';")" || return 1
+	sql_exec "BEGIN IMMEDIATE;
+		$schema
+		INSERT INTO flow_raw_compact
+		WITH source AS (
+			SELECT *, json AS raw_event, CASE WHEN json_type(json,'$.flow')='object' THEN json_extract(json,'$.flow') ELSE json END AS raw_flow FROM flow_raw
+		)
+		SELECT id,timeinsert,$identity,internal,
+			ndpi_risk_score,ndpi_risk_score_client,ndpi_risk_score_server,client_sni,
+			category_application,category_domain,category_protocol,detected_application,
+			detected_protocol,detection_guessed,dns_host_name,host_server_name,digest,
+			$extras FROM source;
+		DROP TABLE flow_raw;
+		ALTER TABLE flow_raw_compact RENAME TO flow_raw;
+		UPDATE sqlite_sequence SET seq=MAX(seq,$sequence) WHERE name='flow_raw';
+		CREATE INDEX idx_flow_raw_time ON flow_raw(timeinsert);
+		CREATE INDEX idx_flow_raw_mac_time ON flow_raw(local_mac,timeinsert DESC);
+		CREATE INDEX idx_flow_raw_ip_time ON flow_raw(local_ip,timeinsert DESC);
+		CREATE INDEX idx_flow_raw_app_time ON flow_raw(detected_app_name,timeinsert DESC);
+		COMMIT;" || return 1
+	log "Netify history migrated; freed pages can be reused (file compaction is separate)"
+}
+
+init_db() {
+	sql_exec "SELECT json_valid('{}');" || return 1
+	sql_exec "PRAGMA journal_mode=WAL;" || return 1
+	sql_exec "$(flow_raw_schema flow_raw)" || return 1
+	migrate_raw_flows || return 1
+	FLOW_EXTRA_SQL="$(flow_extra_values)"
+	FLOW_IDENTITY_SQL="$(flow_identity_values)"
 	sql_exec "CREATE INDEX IF NOT EXISTS idx_flow_raw_time ON flow_raw(timeinsert);"
 	sql_exec "CREATE INDEX IF NOT EXISTS idx_flow_raw_mac_time ON flow_raw(local_mac, timeinsert DESC);"
 	sql_exec "CREATE INDEX IF NOT EXISTS idx_flow_raw_ip_time ON flow_raw(local_ip, timeinsert DESC);"
@@ -319,6 +426,19 @@ prune_db() {
 			END
 			FROM flow_raw
 		);"
+}
+
+compact_db() {
+	local checkpoint
+	# VACUUM needs working space. Keep it opt-in, not part of ordinary startup.
+	checkpoint="$("$SQLITE_BIN" -batch -list -noheader -cmd '.timeout 10000' "$NETIFY_DB" 'PRAGMA wal_checkpoint(TRUNCATE);')" || return 1
+	case "$checkpoint" in
+		0\|*) ;;
+		*) log "Netify compaction cancelled: database is busy ($checkpoint)"; return 1 ;;
+	esac
+	sql_exec "VACUUM;" || return 1
+	"$SQLITE_BIN" -batch -list -noheader -cmd '.timeout 10000' "$NETIFY_DB" 'PRAGMA wal_checkpoint(TRUNCATE);' || return 1
+	log "Netify database compacted"
 }
 
 reload_cron() {
@@ -760,29 +880,32 @@ parse_flow_columns() {
 }
 
 insert_flow() {
-	local line escaped
+	local line escaped extras identity
 	line="$1"
 	parse_flow_columns "$line" || return 1
 	is_router_lan_http_source "$local_ip" "$local_port" && return 0
 	is_router_lan_destination "$dest_ip" && return 0
 	escaped="$(sql_escape "$line")"
+	extras="${FLOW_EXTRA_SQL:-$(flow_extra_values)}"
+	identity="${FLOW_IDENTITY_SQL:-$(flow_identity_values)}"
 	sql_exec "INSERT INTO flow_raw(
 		timeinsert,local_ip,local_mac,fqdn,dest_ip,dest_port,dest_type,
 		detected_protocol_name,detected_app_name,interface,internal,
 		ndpi_risk_score,ndpi_risk_score_client,ndpi_risk_score_server,
 		client_sni,category_application,category_domain,category_protocol,
 		detected_application,detected_protocol,detection_guessed,dns_host_name,
-		host_server_name,digest,json
-	) VALUES (
-		strftime('%s','now'),'$(sql_escape "$local_ip")','$(sql_escape "$local_mac")',
-		'$(sql_escape "$fqdn")','$(sql_escape "$dest_ip")',$dest_port,'remote',
-		'$(sql_escape "$detected_protocol_name")','$(sql_escape "$detected_app_name")',
-		'$(sql_escape "$flow_interface")',$internal,$ndpi_risk_score,
+		host_server_name,digest,local_port,first_seen_at,last_seen_at,
+		downloaded_bytes,uploaded_bytes,total_bytes,country_code,region,direction
+	) WITH source AS (
+		SELECT strftime('%s','now') AS timeinsert, '$escaped' AS raw_event,
+			CASE WHEN json_type('$escaped','$.flow')='object' THEN json_extract('$escaped','$.flow') ELSE '$escaped' END AS raw_flow
+	) SELECT
+		strftime('%s','now'),$identity,$internal,$ndpi_risk_score,
 		$ndpi_risk_score_client,$ndpi_risk_score_server,'$(sql_escape "$client_sni")',
 		$category_application,$category_domain,$category_protocol,$detected_application,
 		$detected_protocol,$detection_guessed,'$(sql_escape "$dns_host_name")',
-		'$(sql_escape "$host_server_name")','$(sql_escape "$digest")','$escaped'
-	);"
+		'$(sql_escape "$host_server_name")','$(sql_escape "$digest")',$extras
+	FROM source;"
 }
 
 consume_stream() {
@@ -831,6 +954,15 @@ main() {
 	esac
 
 	require_dependencies
+	if [ "${1:-}" = "--compact-db" ]; then
+		if [ -x /etc/init.d/openwalla-netify-collector ] && /etc/init.d/openwalla-netify-collector running; then
+			/etc/init.d/openwalla-netify-collector stop || exit 1
+			trap '/etc/init.d/openwalla-netify-collector start >/dev/null 2>&1 || true' EXIT
+		fi
+		refresh_runtime_config
+		compact_db
+		exit 0
+	fi
 	if [ "${1:-}" = "--scheduled-prune" ]; then
 		scheduled_prune
 		exit 0
