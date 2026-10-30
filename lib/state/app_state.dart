@@ -2451,6 +2451,8 @@ class AppState extends ChangeNotifier {
   bool _isRebooting = false;
   String? _rebootError;
   String? get rebootError => _rebootError;
+  String? _rebootWarning;
+  String? get rebootWarning => _rebootWarning;
   bool get isRebooting => _isRebooting;
 
   // Theme mode state
@@ -13307,8 +13309,48 @@ done | sort -nr | head -n ''' +
     _throughputService?.clear();
   }
 
+  Future<bool> _hasStateSyncForReboot({BuildContext? context}) async {
+    final router = selectedRouter;
+    final token = _authService?.sysauth;
+    if (router == null || token == null || _apiService == null) {
+      throw StateError('Router is not connected');
+    }
+    final result = await _apiService!.call(
+      router.ipAddress,
+      token,
+      router.useHttps,
+      object: 'file',
+      method: 'exec',
+      params: {
+        'command': '/bin/sh',
+        'params': [
+          '-c',
+          'if [ -e /usr/bin/openwalla-state-sync ] || [ -L /usr/bin/openwalla-state-sync ]; then echo PRESENT; else echo MISSING; fi',
+        ],
+      },
+      context: context,
+      receiveTimeout: const Duration(seconds: 5),
+    );
+    final data = rpcDataMap(result);
+    if ((result is List && rpcUbusStatusCode(result) != 0) ||
+        data == null ||
+        data['code']?.toString() != '0') {
+      throw StateError(
+        'Could not check State Sync availability. Reconnect and try again.',
+      );
+    }
+    return switch (data['stdout']?.toString().trim()) {
+      'PRESENT' => true,
+      'MISSING' => false,
+      _ => throw StateError(
+        'Router returned an invalid State Sync availability response.',
+      ),
+    };
+  }
+
   Future<bool> reboot({BuildContext? context}) async {
     _rebootError = null;
+    _rebootWarning = null;
     if (_authService?.sysauth == null || _authService?.ipAddress == null) {
       _rebootError = 'Router is not connected.';
       return false;
@@ -13327,8 +13369,25 @@ done | sort -nr | head -n ''' +
     _isRebooting = true;
     notifyListeners();
 
+    var backupSaved = false;
     try {
-      await runOpenwallaStateBackupAction('save-for-reboot', context: context);
+      final hasSync = await _hasStateSyncForReboot(context: context);
+      if (generation != _dashboardGeneration ||
+          selectedRouter?.id != routerId ||
+          _authService?.sysauth != token) {
+        throw StateError('Router connection changed. Reconnect and try again.');
+      }
+      if (hasSync) {
+        await runOpenwallaStateBackupAction(
+          'save-for-reboot',
+          context: context?.mounted == true ? context : null,
+        );
+        backupSaved = true;
+      } else {
+        _rebootWarning =
+            'State Sync is not installed. Rebooting without a runtime data backup; temporary history may be lost.';
+        notifyListeners();
+      }
       if (generation != _dashboardGeneration ||
           selectedRouter?.id != routerId ||
           _authService?.sysauth != token) {
@@ -13339,7 +13398,9 @@ done | sort -nr | head -n ''' +
 
       final result = await _apiService!.reboot(ip, token, useHttps);
       if (!result) {
-        _rebootError = 'Backup completed, but the reboot command failed.';
+        _rebootError = backupSaved
+            ? 'Backup completed, but the reboot command failed.'
+            : 'The reboot command failed.';
         _isRebooting = false;
         _startThroughputTimer();
         _startSystemInfoTimer();

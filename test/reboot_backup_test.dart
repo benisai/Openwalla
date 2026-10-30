@@ -31,6 +31,9 @@ class _Auth implements IAuthService {
 }
 
 class _Api implements IApiService {
+  bool helperPresent = true;
+  int checks = 0;
+  dynamic checkResponse;
   final calls = <String>[];
   dynamic response = [
     0,
@@ -51,6 +54,15 @@ class _Api implements IApiService {
     Duration? receiveTimeout,
     Duration? sendTimeout,
   }) async {
+    if (params?['command'] == '/bin/sh') {
+      checks++;
+      expect(receiveTimeout, const Duration(seconds: 5));
+      return checkResponse ??
+          [
+            0,
+            {'code': 0, 'stdout': helperPresent ? 'PRESENT\n' : 'MISSING\n'},
+          ];
+    }
     expect(params?['command'], '/usr/bin/openwalla-state-sync');
     expect(params?['params'], ['save-for-reboot']);
     expect(receiveTimeout, const Duration(minutes: 5));
@@ -152,6 +164,50 @@ void main() {
     expect(api.calls, ['backup']);
     expect(state.rebootError, contains('timed out'));
   });
+
+  test(
+    'missing State Sync allows normal reboot without calling backup',
+    () async {
+      api.helperPresent = false;
+      expect(await state.reboot(), isTrue);
+      expect(api.checks, 1);
+      expect(api.calls, ['reboot']);
+      expect(state.rebootError, isNull);
+      expect(state.rebootWarning, contains('without a runtime data backup'));
+    },
+  );
+
+  test(
+    'availability check failure is not treated as a missing helper',
+    () async {
+      api.checkResponse = [
+        6,
+        {'code': 0, 'stdout': 'MISSING\n'},
+      ];
+      expect(await state.reboot(), isFalse);
+      expect(api.calls, isEmpty);
+      expect(state.rebootWarning, isNull);
+    },
+  );
+
+  test('malformed availability response does not bypass backup', () async {
+    api.checkResponse = [
+      0,
+      {'code': 0, 'stdout': ''},
+    ];
+    expect(await state.reboot(), isFalse);
+    expect(api.calls, isEmpty);
+  });
+
+  test(
+    'failed normal reboot does not claim a skipped backup completed',
+    () async {
+      api.helperPresent = false;
+      api.rebootResult = false;
+      expect(await state.reboot(), isFalse);
+      expect(state.rebootError, 'The reboot command failed.');
+    },
+  );
 
   test(
     'a replaced router session cannot reboot after the old backup completes',
