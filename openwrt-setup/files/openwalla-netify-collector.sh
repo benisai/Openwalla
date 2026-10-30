@@ -273,8 +273,8 @@ ensure_db_file() {
 	init_db
 }
 
-flow_raw_schema() {
-	printf '%s\n' "CREATE TABLE IF NOT EXISTS $1 (
+create_raw_flows() {
+	sql_exec "CREATE TABLE IF NOT EXISTS flow_raw (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		timeinsert INTEGER NOT NULL DEFAULT (strftime('%s','now')),
 		local_ip TEXT NOT NULL DEFAULT '',
@@ -312,7 +312,7 @@ flow_raw_schema() {
 	);"
 }
 
-# Used for both historical backfill and new inserts; raw_flow is a JSON object.
+# raw_flow is the incoming Netify JSON object, not stored history.
 flow_json_text() {
 	local key
 	printf 'COALESCE('
@@ -363,49 +363,14 @@ flow_identity_values() {
 		COALESCE(NULLIF(TRIM(CAST(json_extract(raw_event,'$.interface') AS TEXT)),''),NULLIF($(flow_json_text interface local_interface),''),'-')"
 }
 
-migrate_raw_flows() {
-	local has_json invalid schema extras identity sequence
-	has_json="$("$SQLITE_BIN" -batch -list -noheader "$NETIFY_DB" "SELECT count(*) FROM pragma_table_info('flow_raw') WHERE name='json';")" || return 1
-	[ "$has_json" = "1" ] || return 0
-	# Fail before touching history if JSON support or a stored payload is invalid.
-	invalid="$("$SQLITE_BIN" -batch -list -noheader "$NETIFY_DB" "SELECT count(*) FROM flow_raw WHERE NOT json_valid(json);")" || return 1
-	if [ "$invalid" != "0" ]; then
-		log "Netify migration cancelled: $invalid invalid JSON rows; original database retained"
-		return 1
-	fi
-	schema="$(flow_raw_schema flow_raw_compact)"
-	extras="$(flow_extra_values)"
-	identity="$(flow_identity_values)"
-	log "migrating Netify history to normalized columns (temporary free space is required)"
-	# Preserve the AUTOINCREMENT high-water mark even if the latest rows were pruned.
-	sequence="$("$SQLITE_BIN" -batch -list -noheader "$NETIFY_DB" "SELECT COALESCE(MAX(seq),0) FROM sqlite_sequence WHERE name='flow_raw';")" || return 1
-	sql_exec "BEGIN IMMEDIATE;
-		$schema
-		INSERT INTO flow_raw_compact
-		WITH source AS (
-			SELECT *, json AS raw_event, CASE WHEN json_type(json,'$.flow')='object' THEN json_extract(json,'$.flow') ELSE json END AS raw_flow FROM flow_raw
-		)
-		SELECT id,timeinsert,$identity,internal,
-			ndpi_risk_score,ndpi_risk_score_client,ndpi_risk_score_server,client_sni,
-			category_application,category_domain,category_protocol,detected_application,
-			detected_protocol,detection_guessed,dns_host_name,host_server_name,digest,
-			$extras FROM source;
-		DROP TABLE flow_raw;
-		ALTER TABLE flow_raw_compact RENAME TO flow_raw;
-		UPDATE sqlite_sequence SET seq=MAX(seq,$sequence) WHERE name='flow_raw';
-		CREATE INDEX idx_flow_raw_time ON flow_raw(timeinsert);
-		CREATE INDEX idx_flow_raw_mac_time ON flow_raw(local_mac,timeinsert DESC);
-		CREATE INDEX idx_flow_raw_ip_time ON flow_raw(local_ip,timeinsert DESC);
-		CREATE INDEX idx_flow_raw_app_time ON flow_raw(detected_app_name,timeinsert DESC);
-		COMMIT;" || return 1
-	log "Netify history migrated; freed pages can be reused (file compaction is separate)"
-}
-
 init_db() {
 	sql_exec "SELECT json_valid('{}');" || return 1
 	sql_exec "PRAGMA journal_mode=WAL;" || return 1
-	sql_exec "$(flow_raw_schema flow_raw)" || return 1
-	migrate_raw_flows || return 1
+	create_raw_flows || return 1
+	sql_exec "SELECT local_port,first_seen_at,last_seen_at,downloaded_bytes,uploaded_bytes,total_bytes,country_code,region,direction FROM flow_raw LIMIT 0;" || {
+		log "Unsupported Netify database schema; a fresh column-based database is required"
+		return 1
+	}
 	FLOW_EXTRA_SQL="$(flow_extra_values)"
 	FLOW_IDENTITY_SQL="$(flow_identity_values)"
 	sql_exec "CREATE INDEX IF NOT EXISTS idx_flow_raw_time ON flow_raw(timeinsert);"

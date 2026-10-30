@@ -26,16 +26,11 @@ class NetifyFlowStorage {
     final suffix =
         'FROM flow_raw $where ORDER BY id DESC LIMIT $limit OFFSET $offset; '
         "SELECT '$endMarker';";
-    // Choose by schema, not by query failure: lock/permission errors must surface.
     return 'db="$dbExpression"; '
         'if command -v sqlite3 >/dev/null 2>&1; then sqlite=sqlite3; '
         'elif command -v sqlite3-cli >/dev/null 2>&1; then sqlite=sqlite3-cli; '
         'else echo "sqlite3 not installed" >&2; exit 127; fi; '
-        'schema=\$("\$sqlite" -batch -list -noheader "\$db" '
-        '${_quote("SELECT count(*) FROM pragma_table_info('flow_raw') WHERE name='json';")}) || exit \$?; '
-        'if [ "\$schema" = 1 ]; then statement=${_quote('SELECT json $suffix')}; '
-        'elif [ "\$schema" = 0 ]; then statement=${_quote('SELECT $projection $suffix')}; '
-        'else echo "Invalid Netify schema response" >&2; exit 1; fi; '
+        'statement=${_quote('SELECT $projection $suffix')}; '
         '"\$sqlite" -batch -list -noheader "\$db" "\$statement"';
   }
 }

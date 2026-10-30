@@ -26,7 +26,7 @@ ensure_uci_section collector netify
 ensure_uci_section flow_stats flow_stats
 ensure_uci_section features ui
 
-# The old running collector still inserts JSON; stop it before changing schema.
+# Pause writes while deploying and initializing the collector.
 if [ -x /etc/init.d/openwalla-netify-collector ]; then
 	/etc/init.d/openwalla-netify-collector stop || exit 1
 fi
@@ -73,7 +73,7 @@ if [ -f "$NETIFYD_CONF" ]; then
 fi
 
 if ! /usr/bin/openwalla-netify-collector --init-db; then
-	log "Netify database initialization/migration failed; original history retained. Check the collector log and free space."
+	log "Netify database initialization failed. Check the collector log; a fresh column-based database is required."
 	exit 1
 fi
 /usr/bin/openwalla-netify-collector --install-prune-cron || true
