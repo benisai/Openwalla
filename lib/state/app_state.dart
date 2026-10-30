@@ -2449,10 +2449,6 @@ class AppState extends ChangeNotifier {
 
   // Add rebooting state
   bool _isRebooting = false;
-  String? _rebootError;
-  String? get rebootError => _rebootError;
-  String? _rebootWarning;
-  String? get rebootWarning => _rebootWarning;
   bool get isRebooting => _isRebooting;
 
   // Theme mode state
@@ -12243,12 +12239,7 @@ done | sort -nr | head -n ''' +
     String action, {
     BuildContext? context,
   }) async {
-    if (!const {
-      'backup',
-      'save',
-      'restore',
-      'save-for-reboot',
-    }.contains(action)) {
+    if (!const {'backup', 'save', 'restore'}.contains(action)) {
       throw Exception('Unsupported state backup action: $action');
     }
     if (_reviewerModeEnabled) {
@@ -12274,49 +12265,7 @@ done | sort -nr | head -n ''' +
         'params': [action],
       },
       context: context,
-      receiveTimeout: const Duration(minutes: 5),
     );
-    final data = rpcDataMap(result);
-    final diagnostic = [data?['stdout'], data?['stderr']]
-        .where((value) => value != null)
-        .map((value) => value.toString().trim())
-        .where((value) => value.isNotEmpty)
-        .join('\n');
-    final legacyUsage = RegExp(
-      r'usage:\s+\S*openwalla-state-sync\s+\{save\|backup\|',
-      caseSensitive: false,
-    ).hasMatch(diagnostic);
-    if (action == 'save-for-reboot' &&
-        (result is! List || rpcUbusStatusCode(result) == 0) &&
-        data?['code']?.toString() == '1' &&
-        legacyUsage &&
-        !diagnostic.contains('save-for-reboot')) {
-      final output = await runOpenwallaStateBackupAction(
-        'save',
-        context: context?.mounted == true ? context : null,
-      );
-      _rebootWarning =
-          'Legacy State Sync ran without integrity verification. Update State Sync for stronger backup checks.';
-      return output;
-    }
-    if ((result is List && rpcUbusStatusCode(result) != 0) ||
-        data == null ||
-        data['code']?.toString() != '0') {
-      throw StateError(
-        diagnostic.isNotEmpty
-            ? 'State backup failed: $diagnostic'
-            : 'State backup failed. Update the State Sync helper and check router permissions.',
-      );
-    }
-    if (action == 'save-for-reboot' &&
-        !data['stdout']
-            .toString()
-            .split('\n')
-            .contains('OPENWALLA_STATE_SAVED')) {
-      throw StateError(
-        'Backup was not verified. Update the State Sync helper before rebooting.',
-      );
-    }
     final output = _commandOutput(result).trim();
     if (output.isEmpty || output == '{code: 0}') {
       return action == 'restore' ? 'Restore completed.' : 'Backup completed.';
@@ -13330,59 +13279,10 @@ done | sort -nr | head -n ''' +
     _throughputService?.clear();
   }
 
-  Future<bool> _hasStateSyncForReboot({BuildContext? context}) async {
-    final router = selectedRouter;
-    final token = _authService?.sysauth;
-    if (router == null || token == null || _apiService == null) {
-      throw StateError('Router is not connected');
-    }
-    final result = await _apiService!.call(
-      router.ipAddress,
-      token,
-      router.useHttps,
-      object: 'file',
-      method: 'exec',
-      params: {
-        'command': '/bin/sh',
-        'params': [
-          '-c',
-          'if [ -e /usr/bin/openwalla-state-sync ] || [ -L /usr/bin/openwalla-state-sync ]; then echo PRESENT; else echo MISSING; fi',
-        ],
-      },
-      context: context,
-      receiveTimeout: const Duration(seconds: 5),
-    );
-    final data = rpcDataMap(result);
-    if ((result is List && rpcUbusStatusCode(result) != 0) ||
-        data == null ||
-        data['code']?.toString() != '0') {
-      throw StateError(
-        'Could not check State Sync availability. Reconnect and try again.',
-      );
-    }
-    return switch (data['stdout']?.toString().trim()) {
-      'PRESENT' => true,
-      'MISSING' => false,
-      _ => throw StateError(
-        'Router returned an invalid State Sync availability response.',
-      ),
-    };
-  }
-
   Future<bool> reboot({BuildContext? context}) async {
-    _rebootError = null;
-    _rebootWarning = null;
     if (_authService?.sysauth == null || _authService?.ipAddress == null) {
-      _rebootError = 'Router is not connected.';
       return false;
     }
-    if (_isRebooting) return false;
-    _invalidateDashboardRequests();
-    final generation = _dashboardGeneration;
-    final routerId = selectedRouter?.id;
-    final ip = _authService!.ipAddress!;
-    final token = _authService!.sysauth!;
-    final useHttps = _authService!.useHttps;
 
     // Cancel throughput timer before starting reboot to prevent "client closed" errors
     _cancelThroughputTimer();
@@ -13390,50 +13290,26 @@ done | sort -nr | head -n ''' +
     _isRebooting = true;
     notifyListeners();
 
-    var backupSaved = false;
     try {
-      final hasSync = await _hasStateSyncForReboot(context: context);
-      if (generation != _dashboardGeneration ||
-          selectedRouter?.id != routerId ||
-          _authService?.sysauth != token) {
-        throw StateError('Router connection changed. Reconnect and try again.');
-      }
-      if (hasSync) {
-        await runOpenwallaStateBackupAction(
-          'save-for-reboot',
-          context: context?.mounted == true ? context : null,
-        );
-        backupSaved = true;
-      } else {
-        _rebootWarning =
-            'State Sync is not installed. Rebooting without a runtime data backup; temporary history may be lost.';
-        notifyListeners();
-      }
-      if (generation != _dashboardGeneration ||
-          selectedRouter?.id != routerId ||
-          _authService?.sysauth != token) {
-        throw StateError(
-          'Router connection changed during backup. Reconnect and try again.',
-        );
+      try {
+        await runOpenwallaStateBackupAction('save', context: context);
+      } catch (e, stack) {
+        Logger.warning('Openwalla state save before reboot failed: $e');
+        Logger.debug('Openwalla state save before reboot stack: $stack');
       }
 
-      final result = await _apiService!.reboot(ip, token, useHttps);
+      final result = await _apiService!.reboot(
+        _authService!.ipAddress!,
+        _authService!.sysauth!,
+        _authService!.useHttps,
+      );
       if (!result) {
-        _rebootError = backupSaved
-            ? 'Backup completed, but the reboot command failed.'
-            : 'The reboot command failed.';
         _isRebooting = false;
-        _startThroughputTimer();
-        _startSystemInfoTimer();
         notifyListeners();
       }
       return result;
     } catch (e) {
-      _rebootError =
-          'Reboot cancelled: ${e.toString().replaceFirst('Bad state: ', '')}';
       _isRebooting = false;
-      _startThroughputTimer();
-      _startSystemInfoTimer();
       notifyListeners();
       return false;
     }

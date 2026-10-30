@@ -365,10 +365,9 @@ class _RebootCountdownDialogState extends ConsumerState<RebootCountdownDialog>
                   const SizedBox(height: 20),
                   Text(
                     _sendFailed
-                        ? ref.read(appStateProvider).rebootError ??
-                              'Openwalla could not send the reboot command. You can close this and try again.'
+                        ? 'Openwalla could not send the reboot command. You can close this and try again.'
                         : _sendingReboot
-                        ? 'Saving router data before reboot. Please keep the app connected.'
+                        ? 'Sending reboot command to the router.'
                         : _checking
                         ? 'The router may be ready. Trying to reconnect now.'
                         : widget.returnToLoginAfterRecovery
@@ -381,17 +380,6 @@ class _RebootCountdownDialogState extends ConsumerState<RebootCountdownDialog>
                       context,
                     ).copyWith(height: 1.35),
                   ),
-                  if (ref.read(appStateProvider).rebootWarning
-                      case final warning?) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      warning,
-                      textAlign: TextAlign.center,
-                      style: LuciTextStyles.cardSubtitle(
-                        context,
-                      ).copyWith(color: const Color(0xFFFFB020), height: 1.35),
-                    ),
-                  ],
                   if (_sendFailed) ...[
                     const SizedBox(height: 18),
                     OutlinedButton(
