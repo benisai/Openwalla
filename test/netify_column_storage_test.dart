@@ -13,7 +13,7 @@ void main() {
 
   final payload = {
     'type': 'flow',
-    'interface': 'wan',
+    'interface': 'br-lan',
     'flow': {
       'local_ip': '192.168.8.231',
       'local_mac': 'aa:bb:cc:dd:ee:ff',
@@ -234,5 +234,62 @@ PRAGMA wal_checkpoint(TRUNCATE);''');
     environment['PAYLOAD'] = alternate;
     await run('$setup\ninit_db\ninsert_flow "\$PAYLOAD"');
     expect((await readPage()).map(details), everyElement(expected));
+  });
+
+  test(
+    'WAN interface is excluded by default and configurable for new inserts',
+    () async {
+      environment['PAYLOAD'] = jsonEncode({...payload, 'interface': 'wan'});
+      await run('$setup\ninit_db\ninsert_flow "\$PAYLOAD"');
+      expect(await sql('SELECT count(*) FROM flow_raw;'), '0');
+      await run(
+        '$setup\ninit_db\nEXCLUDE_WAN_INTERFACE=0\ninsert_flow "\$PAYLOAD"',
+      );
+      expect(await sql('SELECT interface FROM flow_raw;'), 'wan');
+      await run('$setup\ninit_db\ninsert_flow "\$PAYLOAD"');
+      expect(await sql('SELECT count(*) FROM flow_raw;'), '1');
+    },
+  );
+
+  test('WAN check uses resolved interface and exact name only', () async {
+    final baseFlow = Map<String, dynamic>.from(payload['flow']! as Map);
+    final cases = <({Map<String, dynamic> event, bool keep})>[
+      (event: {...payload, 'interface': ' WAN '}, keep: false),
+      (
+        event: {
+          'type': 'flow',
+          'flow': {...baseFlow, 'interface': 'wan'},
+        },
+        keep: false,
+      ),
+      (
+        event: {
+          'type': 'flow',
+          'flow': {...baseFlow, 'local_interface': 'wan'},
+        },
+        keep: false,
+      ),
+      (event: {...payload, 'interface': 'wan6'}, keep: true),
+      (event: {...payload, 'interface': 'pppoe-wan'}, keep: true),
+      (event: {'type': 'flow', 'flow': baseFlow}, keep: true),
+      (
+        event: {
+          ...payload,
+          'flow': {...baseFlow, 'interface': 'wan'},
+        },
+        keep: true,
+      ),
+    ];
+    var count = 0;
+    for (final item in cases) {
+      environment['PAYLOAD'] = jsonEncode(item.event);
+      await run('$setup\ninit_db\ninsert_flow "\$PAYLOAD"');
+      if (item.keep) count++;
+      expect(
+        await sql('SELECT count(*) FROM flow_raw;'),
+        '$count',
+        reason: '${item.event}',
+      );
+    }
   });
 }

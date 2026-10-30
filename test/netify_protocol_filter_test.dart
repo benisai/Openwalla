@@ -93,16 +93,21 @@ if should_skip_protocol "$PAYLOAD"; then echo skip; else echo keep; fi
 uci() {
  case "$3" in
   openwalla.collector.include_protocols) printf '%s' "$SETTING" ;;
+  openwalla.collector.exclude_wan_interface) printf '%s' "$WAN_SETTING" ;;
   openwalla.flow_stats.retention_seconds) printf '2592000' ;;
   *) return 1 ;;
  esac
 }
 SETTING=SSH
+WAN_SETTING=0
 load_config
 [ "$INCLUDE_PROTOCOLS" = SSH ] || exit 2
+[ "$EXCLUDE_WAN_INTERFACE" = 0 ] || exit 4
 SETTING=''
+WAN_SETTING=''
 load_config
 [ "$INCLUDE_PROTOCOLS" = 'HTTP,HTTP/S' ] || exit 3
+[ "$EXCLUDE_WAN_INTERFACE" = 1 ] || exit 5
 ''',
         ],
         environment: {

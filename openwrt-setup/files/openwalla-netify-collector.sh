@@ -31,6 +31,7 @@ RETENTION_HOURS="$DEFAULT_RETENTION_HOURS"
 STREAM_TIMEOUT="$DEFAULT_STREAM_TIMEOUT"
 EXCLUDE_PROTOCOLS="$DEFAULT_EXCLUDE_PROTOCOLS"
 INCLUDE_PROTOCOLS="$DEFAULT_INCLUDE_PROTOCOLS"
+EXCLUDE_WAN_INTERFACE="1"
 FLOW_STATS_ENABLED="0"
 FLOW_STATS_POLL_SECONDS="5"
 FLOW_STATS_BUCKET_SECONDS="300"
@@ -41,6 +42,7 @@ JSHN_AVAILABLE="0"
 ROUTER_LAN_IPV4S=""
 FLOW_EXTRA_SQL=""
 FLOW_IDENTITY_SQL=""
+FLOW_INTERFACE_SQL=""
 
 log() {
 	printf "%s %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
@@ -163,6 +165,12 @@ load_config() {
 		value="$(uci -q get openwalla.collector.include_protocols 2>/dev/null || true)"
 		value="$(sanitize_text "$value")"
 		INCLUDE_PROTOCOLS="${value:-$DEFAULT_INCLUDE_PROTOCOLS}"
+		value="$(uci -q get openwalla.collector.exclude_wan_interface 2>/dev/null || true)"
+		value="$(sanitize_text "$value")"
+		case "$value" in
+			0) EXCLUDE_WAN_INTERFACE="0" ;;
+			*) EXCLUDE_WAN_INTERFACE="1" ;;
+		esac
 
 		value="$(uci -q get openwalla.flow_stats.enabled 2>/dev/null || true)"
 		value="$(sanitize_text "$value")"
@@ -347,6 +355,10 @@ flow_extra_values() {
 		COALESCE(NULLIF($(flow_json_text direction),''),'Outbound')"
 }
 
+flow_interface_value() {
+	printf '%s\n' "COALESCE(NULLIF(TRIM(CAST(json_extract(raw_event,'$.interface') AS TEXT)),''),NULLIF($(flow_json_text interface local_interface),''),'-')"
+}
+
 flow_identity_values() {
 	local destination
 	destination="$(flow_json_text ssl.client_sni client_sni tls.client_sni tls_client_sni host_server_name server_name fqdn dns_host_name host hostname other_ip remote_ip)"
@@ -360,7 +372,7 @@ flow_identity_values() {
 		$(flow_json_bytes other_port remote_port dst_port dest_port),'remote',
 		COALESCE(NULLIF($(flow_json_text detected_protocol_name protocol_name protocol),''),'N/A'),
 		COALESCE(NULLIF($(flow_json_text detected_application_name detected_app_name application_name app_name),''),NULLIF($destination,''),'Unknown'),
-		COALESCE(NULLIF(TRIM(CAST(json_extract(raw_event,'$.interface') AS TEXT)),''),NULLIF($(flow_json_text interface local_interface),''),'-')"
+		$(flow_interface_value)"
 }
 
 init_db() {
@@ -373,6 +385,7 @@ init_db() {
 	}
 	FLOW_EXTRA_SQL="$(flow_extra_values)"
 	FLOW_IDENTITY_SQL="$(flow_identity_values)"
+	FLOW_INTERFACE_SQL="$(flow_interface_value)"
 	sql_exec "CREATE INDEX IF NOT EXISTS idx_flow_raw_time ON flow_raw(timeinsert);"
 	sql_exec "CREATE INDEX IF NOT EXISTS idx_flow_raw_mac_time ON flow_raw(local_mac, timeinsert DESC);"
 	sql_exec "CREATE INDEX IF NOT EXISTS idx_flow_raw_ip_time ON flow_raw(local_ip, timeinsert DESC);"
@@ -864,7 +877,7 @@ parse_flow_columns() {
 }
 
 insert_flow() {
-	local line escaped extras identity
+	local line escaped extras identity interface_value
 	line="$1"
 	parse_flow_columns "$line" || return 1
 	is_router_lan_http_source "$local_ip" "$local_port" && return 0
@@ -872,6 +885,7 @@ insert_flow() {
 	escaped="$(sql_escape "$line")"
 	extras="${FLOW_EXTRA_SQL:-$(flow_extra_values)}"
 	identity="${FLOW_IDENTITY_SQL:-$(flow_identity_values)}"
+	interface_value="${FLOW_INTERFACE_SQL:-$(flow_interface_value)}"
 	sql_exec "INSERT INTO flow_raw(
 		timeinsert,local_ip,local_mac,fqdn,dest_ip,dest_port,dest_type,
 		detected_protocol_name,detected_app_name,interface,internal,
@@ -889,7 +903,7 @@ insert_flow() {
 		$category_application,$category_domain,$category_protocol,$detected_application,
 		$detected_protocol,$detection_guessed,'$(sql_escape "$dns_host_name")',
 		'$(sql_escape "$host_server_name")','$(sql_escape "$digest")',$extras
-	FROM source;"
+	FROM source WHERE $EXCLUDE_WAN_INTERFACE=0 OR LOWER($interface_value)!='wan';"
 }
 
 consume_stream() {
@@ -918,7 +932,7 @@ run_forever() {
 		stats_pid=$!
 		trap '[ -n "$stats_pid" ] && kill "$stats_pid" 2>/dev/null || true; rm -rf "$FLOW_STATS_WORK_DIR.$$"; exit 0' INT TERM EXIT
 	fi
-	log "starting netify collector host=$NETIFY_HOST port=$NETIFY_PORT db=$NETIFY_DB timeout=${STREAM_TIMEOUT}s retention=${RETENTION_HOURS}h include_protocols=$INCLUDE_PROTOCOLS flow_stats=$FLOW_STATS_ENABLED flow_stats_db=$FLOW_STATS_DB"
+	log "starting netify collector host=$NETIFY_HOST port=$NETIFY_PORT db=$NETIFY_DB timeout=${STREAM_TIMEOUT}s retention=${RETENTION_HOURS}h include_protocols=$INCLUDE_PROTOCOLS exclude_wan_interface=$EXCLUDE_WAN_INTERFACE flow_stats=$FLOW_STATS_ENABLED flow_stats_db=$FLOW_STATS_DB"
 	while true; do
 		refresh_runtime_config
 		log "connecting to netify stream at $NETIFY_HOST:$NETIFY_PORT"
