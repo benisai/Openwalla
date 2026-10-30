@@ -12277,13 +12277,34 @@ done | sort -nr | head -n ''' +
       receiveTimeout: const Duration(minutes: 5),
     );
     final data = rpcDataMap(result);
+    final diagnostic = [data?['stdout'], data?['stderr']]
+        .where((value) => value != null)
+        .map((value) => value.toString().trim())
+        .where((value) => value.isNotEmpty)
+        .join('\n');
+    final legacyUsage = RegExp(
+      r'usage:\s+\S*openwalla-state-sync\s+\{save\|backup\|',
+      caseSensitive: false,
+    ).hasMatch(diagnostic);
+    if (action == 'save-for-reboot' &&
+        (result is! List || rpcUbusStatusCode(result) == 0) &&
+        data?['code']?.toString() == '1' &&
+        legacyUsage &&
+        !diagnostic.contains('save-for-reboot')) {
+      final output = await runOpenwallaStateBackupAction(
+        'save',
+        context: context?.mounted == true ? context : null,
+      );
+      _rebootWarning =
+          'Legacy State Sync ran without integrity verification. Update State Sync for stronger backup checks.';
+      return output;
+    }
     if ((result is List && rpcUbusStatusCode(result) != 0) ||
         data == null ||
         data['code']?.toString() != '0') {
-      final reason = data?['stderr']?.toString().trim();
       throw StateError(
-        reason?.isNotEmpty == true
-            ? 'State backup failed: $reason'
+        diagnostic.isNotEmpty
+            ? 'State backup failed: $diagnostic'
             : 'State backup failed. Update the State Sync helper and check router permissions.',
       );
     }

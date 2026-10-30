@@ -557,7 +557,7 @@ save-for-reboot)
 	echo OPENWALLA_STATE_SAVED
 	;;
 save|backup)
-	save_state
+	save_state || exit 1
 	;;
 restore)
 	restore_state
@@ -569,7 +569,7 @@ debug|diagnose)
 	print_debug
 	;;
 save-if-due)
-	save_if_due
+	save_if_due || exit 1
 	;;
 sync-cron)
 	sync_cron

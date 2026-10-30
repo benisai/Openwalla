@@ -34,6 +34,10 @@ class _Api implements IApiService {
   bool helperPresent = true;
   int checks = 0;
   dynamic checkResponse;
+  dynamic legacyResponse = [
+    0,
+    {'code': 0, 'stdout': ''},
+  ];
   final calls = <String>[];
   dynamic response = [
     0,
@@ -64,12 +68,13 @@ class _Api implements IApiService {
           ];
     }
     expect(params?['command'], '/usr/bin/openwalla-state-sync');
-    expect(params?['params'], ['save-for-reboot']);
+    final action = (params?['params'] as List).single;
+    expect(action, anyOf('save-for-reboot', 'save'));
     expect(receiveTimeout, const Duration(minutes: 5));
-    calls.add('backup');
+    calls.add(action == 'save' ? 'legacy-backup' : 'backup');
     if (gate != null) await gate!.future;
     if (error != null) throw error!;
-    return response;
+    return action == 'save' ? legacyResponse : response;
   }
 
   @override
@@ -163,6 +168,69 @@ void main() {
     expect(await state.reboot(), isFalse);
     expect(api.calls, ['backup']);
     expect(state.rebootError, contains('timed out'));
+  });
+
+  test(
+    'existing helper with old usage response saves before rebooting',
+    () async {
+      api.response = [
+        0,
+        {
+          'code': 1,
+          'stdout':
+              'usage: /usr/bin/openwalla-state-sync {save|backup|restore|status|debug|save-if-due|sync-cron}\n',
+        },
+      ];
+      expect(await state.reboot(), isTrue);
+      expect(api.calls, ['backup', 'legacy-backup', 'reboot']);
+      expect(state.rebootWarning, contains('Legacy State Sync'));
+      expect(state.rebootError, isNull);
+    },
+  );
+
+  test('legacy helper with usage on stderr also supports reboot', () async {
+    api.response = [
+      0,
+      {
+        'code': 1,
+        'stderr':
+            'usage: /usr/bin/openwalla-state-sync {save|backup|restore|status}',
+      },
+    ];
+    expect(await state.reboot(), isTrue);
+    expect(api.calls, ['backup', 'legacy-backup', 'reboot']);
+  });
+
+  test('legacy save failure still prevents reboot', () async {
+    api.response = [
+      0,
+      {
+        'code': 1,
+        'stdout':
+            'usage: /usr/bin/openwalla-state-sync {save|backup|restore|status}',
+      },
+    ];
+    api.legacyResponse = [
+      0,
+      {'code': 1, 'stderr': 'No space left on device'},
+    ];
+    expect(await state.reboot(), isFalse);
+    expect(api.calls, ['backup', 'legacy-backup']);
+    expect(state.rebootError, contains('No space left'));
+  });
+
+  test('current helper failure never falls back to an unverified save', () async {
+    api.response = [
+      0,
+      {
+        'code': 1,
+        'stdout':
+            'usage: /usr/bin/openwalla-state-sync {save|backup|save-for-reboot|restore}',
+        'stderr': 'backup failed',
+      },
+    ];
+    expect(await state.reboot(), isFalse);
+    expect(api.calls, ['backup']);
   });
 
   test(

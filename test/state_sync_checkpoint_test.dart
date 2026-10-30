@@ -110,6 +110,18 @@ void main() {
     expect(result.stdout, isNot(contains('OPENWALLA_STATE_SAVED')));
   });
 
+  test(
+    'standard save and scheduled saves propagate failures past final exit',
+    () async {
+      for (final action in ['save', 'backup', 'save-if-due']) {
+        final result = await run(
+          'save_state() { return 1; }; save_if_due() { return 1; }; set -- $action; $dispatch',
+        );
+        expect(result.exitCode, isNot(0), reason: action);
+      }
+    },
+  );
+
   test('acknowledgement is emitted only after successful checkpoint', () async {
     final result = await run(
       'save_state() { echo SAVED; }; set -- save-for-reboot; $dispatch',
