@@ -81,34 +81,39 @@ class _SmartQueueScreenState extends ConsumerState<SmartQueueScreen> {
 
   void _update(OpenwrtSqmQueue queue) => setState(() => _queue = queue);
 
-  Future<void> _save() async {
+  Future<void> _save({bool? enabled}) async {
     final queue = _queue;
-    if (queue == null) return;
+    if (queue == null || _isSaving) return;
+    final disablingExisting = enabled == false && queue.section.isNotEmpty;
     final selected = _interfaces
         .where((item) => item.name == _selectedInterface)
         .firstOrNull;
-    if (selected?.device == null) {
+    if (!disablingExisting && selected?.device == null) {
       context.showToastError('Select an available WAN interface');
       return;
     }
     setState(() => _isSaving = true);
     try {
-      final currentInterfaces = await ref
-          .read(appStateProvider)
-          .fetchSqmWanInterfaces(context: context);
-      if (!mounted) return;
-      final current = currentInterfaces
-          .where((item) => item.name == _selectedInterface)
-          .firstOrNull;
-      if (current?.device == null) {
-        throw StateError(
-          'The selected WAN interface is unavailable. Refresh and try again.',
-        );
+      var device = queue.interfaceName;
+      if (!disablingExisting) {
+        final currentInterfaces = await ref
+            .read(appStateProvider)
+            .fetchSqmWanInterfaces(context: context);
+        if (!mounted) return;
+        final current = currentInterfaces
+            .where((item) => item.name == _selectedInterface)
+            .firstOrNull;
+        if (current?.device == null) {
+          throw StateError(
+            'The selected WAN interface is unavailable. Refresh and try again.',
+          );
+        }
+        device = current!.device!;
       }
       final resolvedQueue = OpenwrtSqmQueue(
         section: queue.section,
-        enabled: queue.enabled,
-        interfaceName: current!.device!,
+        enabled: enabled ?? queue.enabled,
+        interfaceName: device,
         downloadKbps: queue.downloadKbps,
         uploadKbps: queue.uploadKbps,
         qdisc: queue.qdisc,
@@ -118,11 +123,18 @@ class _SmartQueueScreenState extends ConsumerState<SmartQueueScreen> {
       );
       await ref.read(appStateProvider).saveSqmQueue(resolvedQueue);
       if (!mounted) return;
-      context.showToastSuccess('Smart Queue settings saved');
+      context.showToastSuccess(
+        enabled == null
+            ? 'Smart Queue settings saved'
+            : enabled
+            ? 'Smart Queue enabled'
+            : 'Smart Queue disabled',
+      );
       await _load();
     } catch (e) {
       if (!mounted) return;
       context.showToastError('Could not save SQM settings', subtitle: '$e');
+      if (enabled != null) await _load();
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -197,6 +209,7 @@ class _SmartQueueScreenState extends ConsumerState<SmartQueueScreen> {
       onInterfaceChanged: (name) => setState(() => _selectedInterface = name),
       isSaving: _isSaving,
       onChanged: _update,
+      onEnabledChanged: (enabled) => _save(enabled: enabled),
       onSave: _save,
     );
   }
@@ -209,6 +222,7 @@ class _SqmEditor extends StatelessWidget {
   final ValueChanged<String?> onInterfaceChanged;
   final bool isSaving;
   final ValueChanged<OpenwrtSqmQueue> onChanged;
+  final ValueChanged<bool> onEnabledChanged;
   final VoidCallback onSave;
 
   const _SqmEditor({
@@ -218,11 +232,11 @@ class _SqmEditor extends StatelessWidget {
     required this.onInterfaceChanged,
     required this.isSaving,
     required this.onChanged,
+    required this.onEnabledChanged,
     required this.onSave,
   });
 
   OpenwrtSqmQueue _copy({
-    bool? enabled,
     int? downloadKbps,
     int? uploadKbps,
     String? qdisc,
@@ -230,7 +244,7 @@ class _SqmEditor extends StatelessWidget {
   }) {
     return OpenwrtSqmQueue(
       section: queue.section,
-      enabled: enabled ?? queue.enabled,
+      enabled: queue.enabled,
       interfaceName: queue.interfaceName,
       downloadKbps: downloadKbps ?? queue.downloadKbps,
       uploadKbps: uploadKbps ?? queue.uploadKbps,
@@ -281,9 +295,7 @@ class _SqmEditor extends StatelessWidget {
               title: const Text('Smart Queue'),
               subtitle: Text(queue.enabled ? 'Enabled' : 'Disabled'),
               value: queue.enabled,
-              onChanged: isSaving
-                  ? null
-                  : (value) => onChanged(_copy(enabled: value)),
+              onChanged: isSaving ? null : onEnabledChanged,
             ),
           ),
           const SizedBox(height: 20),

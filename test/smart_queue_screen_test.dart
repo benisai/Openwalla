@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,18 +12,23 @@ class _SqmState extends ChangeNotifier implements AppState {
     SqmWanInterface(name: 'wan', device: 'eth1'),
     SqmWanInterface(name: 'wwan', device: 'phy0-sta0'),
   ];
-  OpenwrtSqmQueue queue = const OpenwrtSqmQueue(
-    section: 'queue',
-    enabled: true,
-    interfaceName: 'eth1',
-    downloadKbps: 85000,
-    uploadKbps: 10000,
-    qdisc: 'cake',
-    script: 'piece_of_cake.qos',
-    debugLogging: true,
-    verbosity: '7',
-  );
+  _SqmState({bool enabled = true})
+    : queue = OpenwrtSqmQueue(
+        section: 'queue',
+        enabled: enabled,
+        interfaceName: 'eth1',
+        downloadKbps: 85000,
+        uploadKbps: 10000,
+        qdisc: 'cake',
+        script: 'piece_of_cake.qos',
+        debugLogging: true,
+        verbosity: '7',
+      );
+  OpenwrtSqmQueue queue;
   OpenwrtSqmQueue? saved;
+  bool failSave = false;
+  int saves = 0;
+  Completer<void>? gate;
 
   @override
   Future<OpenwrtFeatureStatus> getOpenwrtFeatureStatus(
@@ -44,6 +50,9 @@ class _SqmState extends ChangeNotifier implements AppState {
   }) async => interfaces;
   @override
   Future<void> saveSqmQueue(OpenwrtSqmQueue next) async {
+    saves++;
+    if (gate != null) await gate!.future;
+    if (failSave) throw StateError('SQM restart failed');
     saved = next;
     queue = next;
   }
@@ -139,4 +148,68 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets(
+    'enable switch applies immediately and prevents duplicate saves',
+    (tester) async {
+      final state = _SqmState(enabled: false)..gate = Completer<void>();
+      await mount(tester, state);
+      await tester.ensureVisible(find.byType(SwitchListTile));
+      await tester.tap(find.byType(SwitchListTile));
+      await tester.pump();
+      expect(state.saves, 1);
+      expect(
+        tester.widget<SwitchListTile>(find.byType(SwitchListTile)).onChanged,
+        isNull,
+      );
+      expect(
+        tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+        isFalse,
+      );
+      state.gate!.complete();
+      await tester.pumpAndSettle();
+      expect(state.saved?.enabled, isTrue);
+      expect(state.saved?.interfaceName, 'eth1');
+      expect(
+        tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+        isTrue,
+      );
+      expect(state.saves, 1);
+    },
+  );
+
+  testWidgets('disable applies even if the old WAN device is unavailable', (
+    tester,
+  ) async {
+    final state = _SqmState()..interfaces = [];
+    await mount(tester, state);
+    await tester.ensureVisible(find.byType(SwitchListTile));
+    await tester.tap(find.byType(SwitchListTile));
+    await tester.pumpAndSettle();
+    expect(state.saved?.enabled, isFalse);
+    expect(state.saved?.interfaceName, 'eth1');
+    expect(
+      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+      isFalse,
+    );
+  });
+
+  testWidgets(
+    'failed enable re-reads settings instead of leaving switch enabled',
+    (tester) async {
+      final state = _SqmState(enabled: false)..failSave = true;
+      await mount(tester, state);
+      await tester.ensureVisible(find.byType(SwitchListTile));
+      await tester.tap(find.byType(SwitchListTile));
+      await tester.pumpAndSettle();
+      expect(state.saves, 1);
+      expect(state.saved, isNull);
+      expect(
+        tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+        isFalse,
+      );
+      expect(find.text('Smart Queue enabled'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

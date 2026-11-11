@@ -8484,7 +8484,7 @@ done | sort -nr | head -n ''' +
       if (section.isEmpty) throw StateError('Unable to create SQM queue');
     }
 
-    await _apiService!.uciSet(
+    final setResult = await _apiService!.uciSet(
       router.ipAddress,
       sysauth,
       router.useHttps,
@@ -8501,18 +8501,41 @@ done | sort -nr | head -n ''' +
         'verbosity': queue.verbosity,
       },
     );
-    await _apiService!.uciCommit(
+    if (!_rpcCallSucceeded(setResult)) {
+      throw StateError('Router rejected the SQM settings.');
+    }
+    final commitResult = await _apiService!.uciCommit(
       router.ipAddress,
       sysauth,
       router.useHttps,
       config: 'sqm',
     );
-    await _apiService!.systemExec(
+    if (!_rpcCallSucceeded(commitResult)) {
+      throw StateError('Router could not commit the SQM settings.');
+    }
+    final applyResult = await _apiService!.call(
       router.ipAddress,
       sysauth,
       router.useHttps,
-      command: '/etc/init.d/sqm restart 2>/dev/null || true',
+      object: 'file',
+      method: 'exec',
+      params: {
+        'command': '/bin/sh',
+        'params': [
+          '-c',
+          '${queue.enabled ? '/etc/init.d/sqm enable && ' : ''}/etc/init.d/sqm restart && echo OPENWALLA_SQM_APPLIED',
+        ],
+      },
+      receiveTimeout: const Duration(seconds: 60),
     );
+    if (!_rpcCallSucceeded(applyResult) ||
+        !_commandOutput(
+          applyResult,
+        ).split('\n').contains('OPENWALLA_SQM_APPLIED')) {
+      throw StateError(
+        'SQM settings were saved, but the router could not apply them. ${_commandOutput(applyResult)}',
+      );
+    }
     notifyListeners();
   }
 
