@@ -98,9 +98,41 @@ Openwalla can install optional router components from **Manage Device > Router S
 
 ## Screenshots
 
-| Login | Dashboard | Clients | Interfaces |
-|-------|-----------|---------|------------|
-| <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/flutter_02.png" width="200"/> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/flutter_01.png" width="200"/> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/flutter_03.png" width="200"/> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/flutter_05.png" width="200"/> |
+### Dashboard and Devices
+
+| Dashboard | Dashboard Continued | Devices | Device Details |
+|-----------|---------------------|---------|----------------|
+| <a href="public/screenshots/dashboard.png"><img src="public/screenshots/dashboard.png" alt="Openwalla dashboard" width="200"/></a> | <a href="public/screenshots/dashboard-2.png"><img src="public/screenshots/dashboard-2.png" alt="Additional dashboard panels" width="200"/></a> | <a href="public/screenshots/devices.png"><img src="public/screenshots/devices.png" alt="Connected devices" width="200"/></a> | <a href="public/screenshots/device-details-2.png"><img src="public/screenshots/device-details-2.png" alt="Device details" width="200"/></a> |
+
+### Network and Wi-Fi
+
+| Wi-Fi | Wi-Fi Repeater | Network | Firewall |
+|-------|----------------|---------|----------|
+| <a href="public/screenshots/wifi.png"><img src="public/screenshots/wifi.png" alt="Wi-Fi settings" width="200"/></a> | <a href="public/screenshots/wifi-repeater.png"><img src="public/screenshots/wifi-repeater.png" alt="Wi-Fi repeater connections" width="200"/></a> | <a href="public/screenshots/network.png"><img src="public/screenshots/network.png" alt="Network interfaces" width="200"/></a> | <a href="public/screenshots/network-firewall.png"><img src="public/screenshots/network-firewall.png" alt="Network firewall" width="200"/></a> |
+
+### Traffic and Quarantine
+
+| Statistics | Statistics Continued | Live Throughput | Quarantine |
+|------------|----------------------|-----------------|------------|
+| <a href="public/screenshots/statistics.png"><img src="public/screenshots/statistics.png" alt="Traffic statistics" width="200"/></a> | <a href="public/screenshots/statistics-2.png"><img src="public/screenshots/statistics-2.png" alt="Additional traffic statistics" width="200"/></a> | <a href="public/screenshots/live-throughput.png"><img src="public/screenshots/live-throughput.png" alt="Live network throughput" width="200"/></a> | <a href="public/screenshots/quarantine.png"><img src="public/screenshots/quarantine.png" alt="Quarantined devices" width="200"/></a> |
+
+### System Monitoring
+
+| System Resources | System Resources Continued | Notifications | System Logs |
+|------------------|----------------------------|---------------|-------------|
+| <a href="public/screenshots/system-resouces.png"><img src="public/screenshots/system-resouces.png" alt="System resource usage" width="200"/></a> | <a href="public/screenshots/system-resources-2.png"><img src="public/screenshots/system-resources-2.png" alt="Additional system resource information" width="200"/></a> | <a href="public/screenshots/notifications.png"><img src="public/screenshots/notifications.png" alt="Router notifications" width="200"/></a> | <a href="public/screenshots/system-logs.png"><img src="public/screenshots/system-logs.png" alt="Router system logs" width="200"/></a> |
+
+### Device and App Settings
+
+| Manage Device | Settings | Dashboard Settings | Services |
+|---------------|----------|--------------------|----------|
+| <a href="public/screenshots/manage-device.png"><img src="public/screenshots/manage-device.png" alt="Router management" width="200"/></a> | <a href="public/screenshots/more-settings.png"><img src="public/screenshots/more-settings.png" alt="Openwalla settings" width="200"/></a> | <a href="public/screenshots/dashboard-settings.png"><img src="public/screenshots/dashboard-settings.png" alt="Dashboard customization" width="200"/></a> | <a href="public/screenshots/services.png"><img src="public/screenshots/services.png" alt="Router services" width="200"/></a> |
+
+### DNS and Routing
+
+| DNS | Port Forwarding | Routing | About |
+|-----|-----------------|---------|-------|
+| <a href="public/screenshots/dns.png"><img src="public/screenshots/dns.png" alt="DNS settings" width="200"/></a> | <a href="public/screenshots/port-forwarding.png"><img src="public/screenshots/port-forwarding.png" alt="Port forwarding rules" width="200"/></a> | <a href="public/screenshots/routing.png"><img src="public/screenshots/routing.png" alt="Network routing" width="200"/></a> | <a href="public/screenshots/about.png"><img src="public/screenshots/about.png" alt="About Openwalla" width="200"/></a> |
 
 ---
 
