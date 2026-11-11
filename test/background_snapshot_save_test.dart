@@ -64,6 +64,8 @@ class _Api implements IApiService {
   int probes = 0;
   int boardReads = 0;
   Completer<void>? boardGate;
+  Map<String, dynamic> firewall = {'values': <String, dynamic>{}};
+  bool firewallFails = false;
   @override
   Future<dynamic> call(
     String ipAddress,
@@ -89,6 +91,10 @@ class _Api implements IApiService {
       throw infoFailure!;
     }
     if (object == 'uci') {
+      if (params?['config'] == 'firewall') {
+        if (firewallFails) throw StateError('Firewall unavailable');
+        return firewall;
+      }
       return {
         'values': {
           'ping_monitor': {'target': '1.1.1.1', 'threshold': '200'},
@@ -355,6 +361,69 @@ void main() {
       expect(state.dashboardData, isNotNull);
       expect(state.showingSavedData, isFalse);
       expect(state.dashboardError, isNull);
+    },
+  );
+
+  test(
+    'dashboard quarantine comes from unique enabled firewall MACs and refreshes',
+    () async {
+      api.firewall = {
+        'values': {
+          'one': {
+            '.type': 'rule',
+            'name': 'openwalla_quarantine_one_lan',
+            'src_mac': 'AA:BB:CC:DD:EE:FF',
+          },
+          'two': {
+            '.type': 'rule',
+            'name': 'openwalla_quarantine_one_wan',
+            'src_mac': 'AA:BB:CC:DD:EE:FF',
+          },
+          'manual': {
+            '.type': 'rule',
+            'name': 'owrt_device_block_other',
+            'src_mac': '11:22:33:44:55:66',
+          },
+          'disabled': {
+            '.type': 'rule',
+            'name': 'openwalla_quarantine_disabled',
+            'src_mac': '22:33:44:55:66:77',
+            'enabled': '0',
+          },
+        },
+      };
+      await state.fetchDashboardData();
+      expect(state.dashboardData?['quarantinedMacs'], ['AA:BB:CC:DD:EE:FF']);
+      expect(state.dashboardData?['quarantineRouterKey'], 'router-a:null');
+      cache.gate.complete();
+      await Future.wait(cache.writes);
+      expect((cache.saved['router-a:dashboard'] as Map)['quarantinedMacs'], [
+        'AA:BB:CC:DD:EE:FF',
+      ]);
+      api.firewall = {'values': <String, dynamic>{}};
+      await state.refreshDashboardSummaryCounts();
+      expect(state.dashboardData?['quarantinedMacs'], isEmpty);
+    },
+  );
+
+  test(
+    'failed firewall refresh preserves last known quarantine status',
+    () async {
+      api.firewall = {
+        'values': {
+          'one': {
+            '.type': 'rule',
+            'name': 'openwalla_quarantine_one',
+            'src_mac': 'AA:BB:CC:DD:EE:FF',
+          },
+        },
+      };
+      await state.fetchDashboardData();
+      api.firewallFails = true;
+      await state.refreshDashboardSummaryCounts();
+      expect(state.dashboardData?['quarantinedMacs'], ['AA:BB:CC:DD:EE:FF']);
+      await state.fetchDashboardData();
+      expect(state.dashboardData?['quarantinedMacs'], ['AA:BB:CC:DD:EE:FF']);
     },
   );
 }

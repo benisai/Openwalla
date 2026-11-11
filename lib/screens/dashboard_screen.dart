@@ -8,6 +8,7 @@ import 'package:openwalla/main.dart';
 import 'package:openwalla/models/system_resource_metrics.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
 import 'package:openwalla/widgets/offline_snapshot_banner.dart';
+import 'package:openwalla/widgets/dashboard_quarantine_banner.dart';
 import 'package:openwalla/widgets/luci_animation_system.dart';
 import 'package:openwalla/models/dashboard_preferences.dart';
 import 'package:openwalla/screens/adblock_screen.dart';
@@ -1876,7 +1877,33 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
           ),
         ],
       ),
-      body: Stack(children: [_buildBody(appState)]),
+      body: Column(
+        children: [
+          DashboardQuarantineBanner(
+            noticeState: appState.quarantineNotices,
+            routerKey: '${selected?.id}:${selected?.fingerprint}',
+            statusKnown:
+                appState.dashboardData?['quarantineRouterKey'] ==
+                '${selected?.id}:${selected?.fingerprint}',
+            quarantinedMacs:
+                appState.dashboardData?['quarantineRouterKey'] ==
+                    '${selected?.id}:${selected?.fingerprint}'
+                ? (appState.dashboardData?['quarantinedMacs'] as List? ??
+                          const [])
+                      .whereType<String>()
+                      .toSet()
+                : const {},
+            onView: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const QuarantineScreen()),
+              );
+              if (!mounted) return;
+              await _refreshSummaryCounts();
+            },
+          ),
+          Expanded(child: _buildBody(appState)),
+        ],
+      ),
     );
     if (!appState.showingSavedData) return dashboard;
     return SafeArea(

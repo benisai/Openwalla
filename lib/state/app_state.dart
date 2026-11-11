@@ -17,6 +17,7 @@ import 'package:openwalla/services/router_system_settings_service.dart';
 import 'package:openwalla/services/vlan_discovery_service.dart';
 import 'package:openwalla/services/throughput_service.dart';
 import 'package:openwalla/models/client.dart';
+import 'package:openwalla/models/quarantine_notice_state.dart';
 import 'package:openwalla/models/ddns_info.dart';
 import 'package:openwalla/models/router.dart' as model;
 import 'package:openwalla/models/wifi_scan_result.dart';
@@ -40,6 +41,7 @@ import 'package:openwalla/services/client_discovery_service.dart';
 import 'package:openwalla/services/router_snapshot_cache.dart';
 import 'package:openwalla/services/page_preload_cache.dart';
 import 'package:openwalla/services/netify_flow_storage.dart';
+import 'package:openwalla/services/sqm_wan_interfaces.dart';
 import 'package:openwalla/services/router_access_guard.dart';
 import 'package:openwalla/services/wifi_sharing_cache.dart';
 
@@ -2337,6 +2339,8 @@ class AppState extends ChangeNotifier {
         'notificationCount',
         'deviceCount',
         'rulesCount',
+        'quarantinedMacs',
+        'quarantineRouterKey',
         '_lastUpdated',
       ])
         key: _dashboardData![key],
@@ -2376,6 +2380,7 @@ class AppState extends ChangeNotifier {
   final Set<String> _parentalPausedMacs = {};
 
   List<Client> get clients => List.unmodifiable(_clients);
+  final quarantineNotices = QuarantineNoticeState();
 
   final _devicePageCache = PagePreloadCache<List<Client>>();
   final _notificationPageCache =
@@ -5019,6 +5024,7 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
   }
 
   Future<void> logout({bool skipNextAutoLogin = true}) async {
+    quarantineNotices.clear();
     _invalidateDashboardRequests();
     _automaticConnectionLost = false;
     _dashboardUsingSavedData = false;
@@ -5420,6 +5426,7 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
       final notificationCountFuture = fetchNotificationCount();
       final rulesCountFuture = fetchFirewallRuleCount();
       final deviceRecordsFuture = fetchDeviceRecords();
+      final quarantineFuture = fetchDeviceFirewallStateForSelectedRouter();
       final associatedMacsFuture = _apiService!
           .fetchAllAssociatedWirelessMacsWithContext(
             ipAddress: ip,
@@ -5519,12 +5526,14 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
         associatedMacsFuture,
         deviceRecordsFuture,
         pingSettingsFuture,
+        quarantineFuture,
       ]);
       final wirelessRaw = optionalResults[0];
       final uciWirelessRaw = optionalResults[1];
       final conntrackData = optionalResults[2] as Map<String, int>;
       final pingSamples = optionalResults[3] as List<PingMonitorSample>;
       final pingSettings = optionalResults[9] as NetworkMonitorSettings;
+      final quarantine = optionalResults[10] as DeviceFirewallState;
       final flowSummary = optionalResults[4] as OpenwallaFlowSummary;
       final notificationCount = optionalResults[5] as int;
       final rulesCount = optionalResults[6] as int;
@@ -5668,6 +5677,15 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
           associatedMacs,
         ),
         'rulesCount': rulesCount,
+        if (quarantine.available) ...{
+          'quarantinedMacs': quarantine.quarantinedMacs.toList()..sort(),
+          'quarantineRouterKey':
+              '${requestedRouter.id}:${requestedRouter.fingerprint}',
+        } else if (_dashboardData?['quarantineRouterKey'] ==
+            '${requestedRouter.id}:${requestedRouter.fingerprint}') ...{
+          'quarantinedMacs': _dashboardData!['quarantinedMacs'],
+          'quarantineRouterKey': _dashboardData!['quarantineRouterKey'],
+        },
         '_lastUpdated':
             DateTime.now().millisecondsSinceEpoch, // Force UI updates
       };
@@ -8361,6 +8379,52 @@ done | sort -nr | head -n ''' +
     ];
   }
 
+  Future<List<SqmWanInterface>> fetchSqmWanInterfaces({
+    BuildContext? context,
+  }) async {
+    if (_reviewerModeEnabled) {
+      return const [SqmWanInterface(name: 'wan', device: 'eth1')];
+    }
+    final router = selectedRouter;
+    final token = _authService?.sysauth;
+    if (router == null || token == null || _apiService == null) return const [];
+    final results = await Future.wait([
+      _apiService!.call(
+        router.ipAddress,
+        token,
+        router.useHttps,
+        object: 'uci',
+        method: 'get',
+        params: {'config': 'network'},
+        context: context,
+      ),
+      _apiService!.call(
+        router.ipAddress,
+        token,
+        router.useHttps,
+        object: 'uci',
+        method: 'get',
+        params: {'config': 'firewall'},
+        context: context,
+      ),
+      _apiService!.call(
+        router.ipAddress,
+        token,
+        router.useHttps,
+        object: 'network.interface',
+        method: 'dump',
+        params: {},
+        context: context,
+      ),
+    ]);
+    final dump = _extractRpcData(results[2]);
+    return parseSqmWanInterfaces(
+      network: _extractUciValues(results[0]),
+      firewall: _extractUciValues(results[1]),
+      interfaceDump: dump is Map ? dump : const {},
+    );
+  }
+
   Future<List<OpenwrtSqmQueue>> fetchSqmQueues({BuildContext? context}) async {
     if (_reviewerModeEnabled) return _mockSqmQueues();
 
@@ -10221,6 +10285,7 @@ done | sort -nr | head -n ''' +
   }
 
   Future<void> refreshDashboardSummaryCounts({BuildContext? context}) async {
+    if (_offlineViewing || _automaticConnectionLost) return;
     if (_reviewerModeEnabled) {
       if (_dashboardData != null) {
         final selectedFlowProvider =
@@ -10257,10 +10322,12 @@ done | sort -nr | head -n ''' +
     final sysauth = _authService?.sysauth;
     if (router == null || sysauth == null || _apiService == null) return;
 
+    final generation = _dashboardGeneration;
     int? deviceCount;
     final notificationCountFuture = fetchNotificationCount(context: context);
     final rulesCountFuture = fetchFirewallRuleCount();
     final deviceRecordsFuture = fetchDeviceRecords(context: context);
+    final quarantineFuture = fetchDeviceFirewallStateForSelectedRouter();
     final flowSummaryFuture = _dashboardPreferences.showFlowsCard
         ? fetchOpenwallaFlowSummary(
             provider: _dashboardPreferences.flowMode == DashboardFlowMode.simple
@@ -10315,12 +10382,22 @@ done | sort -nr | head -n ''' +
     final notificationCount = await notificationCountFuture;
     final rulesCount = await rulesCountFuture;
     final flowSummary = await flowSummaryFuture;
+    final quarantine = await quarantineFuture;
+    if (generation != _dashboardGeneration ||
+        selectedRouter?.id != router.id ||
+        selectedRouter?.fingerprint != router.fingerprint) {
+      return;
+    }
     if (_dashboardData != null) {
       _dashboardData = {
         ..._dashboardData!,
         if (deviceCount != null) 'deviceCount': deviceCount,
         'notificationCount': notificationCount,
         'rulesCount': rulesCount,
+        if (quarantine.available) ...{
+          'quarantinedMacs': quarantine.quarantinedMacs.toList()..sort(),
+          'quarantineRouterKey': '${router.id}:${router.fingerprint}',
+        },
         if (flowSummary != null) ...{
           'flowProvider': flowSummary.provider,
           'flowSummary': flowSummary,

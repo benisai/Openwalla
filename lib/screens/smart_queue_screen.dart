@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/main.dart';
 import 'package:openwalla/state/app_state.dart';
+import 'package:openwalla/services/sqm_wan_interfaces.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
 import 'package:openwalla/widgets/luci_toast.dart';
 import 'package:openwalla/widgets/openwrt_feature_gate.dart';
@@ -15,7 +16,8 @@ class SmartQueueScreen extends ConsumerStatefulWidget {
 
 class _SmartQueueScreenState extends ConsumerState<SmartQueueScreen> {
   OpenwrtSqmQueue? _queue;
-  List<String> _interfaces = const ['eth1', 'wan'];
+  List<SqmWanInterface> _interfaces = const [];
+  String? _selectedInterface;
   bool _isLoading = true;
   bool _isSaving = false;
   bool _hasStartedLoad = false;
@@ -35,18 +37,28 @@ class _SmartQueueScreenState extends ConsumerState<SmartQueueScreen> {
       final appState = ref.read(appStateProvider);
       final results = await Future.wait([
         appState.fetchSqmQueues(context: context),
-        appState.fetchVnstatInterfaceNames(context: context),
+        appState.fetchSqmWanInterfaces(context: context),
       ]);
       if (!mounted) return;
       final queues = results[0] as List<OpenwrtSqmQueue>;
-      final interfaces = results[1] as List<String>;
+      final interfaces = results[1] as List<SqmWanInterface>;
+      final current = queues.firstOrNull;
+      final selected = current == null
+          ? interfaces.where((item) => item.device != null).firstOrNull
+          : interfaces
+                .where(
+                  (item) =>
+                      item.name == current.interfaceName ||
+                      item.device == current.interfaceName,
+                )
+                .firstOrNull;
       setState(() {
         _queue =
-            queues.firstOrNull ??
+            current ??
             OpenwrtSqmQueue(
               section: '',
               enabled: false,
-              interfaceName: interfaces.firstOrNull ?? 'eth1',
+              interfaceName: selected?.device ?? '',
               downloadKbps: 0,
               uploadKbps: 0,
               qdisc: 'cake',
@@ -54,10 +66,8 @@ class _SmartQueueScreenState extends ConsumerState<SmartQueueScreen> {
               debugLogging: false,
               verbosity: '5',
             );
-        _interfaces = interfaces.isEmpty ? _interfaces : interfaces;
-        if (!_interfaces.contains(_queue!.interfaceName)) {
-          _interfaces = [..._interfaces, _queue!.interfaceName];
-        }
+        _interfaces = interfaces;
+        _selectedInterface = selected?.name;
         _isLoading = false;
       });
     } catch (_) {
@@ -74,16 +84,47 @@ class _SmartQueueScreenState extends ConsumerState<SmartQueueScreen> {
   Future<void> _save() async {
     final queue = _queue;
     if (queue == null) return;
+    final selected = _interfaces
+        .where((item) => item.name == _selectedInterface)
+        .firstOrNull;
+    if (selected?.device == null) {
+      context.showToastError('Select an available WAN interface');
+      return;
+    }
     setState(() => _isSaving = true);
     try {
-      await ref.read(appStateProvider).saveSqmQueue(queue);
+      final currentInterfaces = await ref
+          .read(appStateProvider)
+          .fetchSqmWanInterfaces(context: context);
+      if (!mounted) return;
+      final current = currentInterfaces
+          .where((item) => item.name == _selectedInterface)
+          .firstOrNull;
+      if (current?.device == null) {
+        throw StateError(
+          'The selected WAN interface is unavailable. Refresh and try again.',
+        );
+      }
+      final resolvedQueue = OpenwrtSqmQueue(
+        section: queue.section,
+        enabled: queue.enabled,
+        interfaceName: current!.device!,
+        downloadKbps: queue.downloadKbps,
+        uploadKbps: queue.uploadKbps,
+        qdisc: queue.qdisc,
+        script: queue.script,
+        debugLogging: queue.debugLogging,
+        verbosity: queue.verbosity,
+      );
+      await ref.read(appStateProvider).saveSqmQueue(resolvedQueue);
       if (!mounted) return;
       context.showToastSuccess('Smart Queue settings saved');
       await _load();
     } catch (e) {
       if (!mounted) return;
       context.showToastError('Could not save SQM settings', subtitle: '$e');
-      setState(() => _isSaving = false);
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -152,6 +193,8 @@ class _SmartQueueScreenState extends ConsumerState<SmartQueueScreen> {
     return _SqmEditor(
       queue: queue,
       interfaces: _interfaces,
+      selectedInterface: _selectedInterface,
+      onInterfaceChanged: (name) => setState(() => _selectedInterface = name),
       isSaving: _isSaving,
       onChanged: _update,
       onSave: _save,
@@ -161,7 +204,9 @@ class _SmartQueueScreenState extends ConsumerState<SmartQueueScreen> {
 
 class _SqmEditor extends StatelessWidget {
   final OpenwrtSqmQueue queue;
-  final List<String> interfaces;
+  final List<SqmWanInterface> interfaces;
+  final String? selectedInterface;
+  final ValueChanged<String?> onInterfaceChanged;
   final bool isSaving;
   final ValueChanged<OpenwrtSqmQueue> onChanged;
   final VoidCallback onSave;
@@ -169,6 +214,8 @@ class _SqmEditor extends StatelessWidget {
   const _SqmEditor({
     required this.queue,
     required this.interfaces,
+    required this.selectedInterface,
+    required this.onInterfaceChanged,
     required this.isSaving,
     required this.onChanged,
     required this.onSave,
@@ -176,24 +223,21 @@ class _SqmEditor extends StatelessWidget {
 
   OpenwrtSqmQueue _copy({
     bool? enabled,
-    String? interfaceName,
     int? downloadKbps,
     int? uploadKbps,
     String? qdisc,
     String? script,
-    bool? debugLogging,
-    String? verbosity,
   }) {
     return OpenwrtSqmQueue(
       section: queue.section,
       enabled: enabled ?? queue.enabled,
-      interfaceName: interfaceName ?? queue.interfaceName,
+      interfaceName: queue.interfaceName,
       downloadKbps: downloadKbps ?? queue.downloadKbps,
       uploadKbps: uploadKbps ?? queue.uploadKbps,
       qdisc: qdisc ?? queue.qdisc,
       script: script ?? queue.script,
-      debugLogging: debugLogging ?? queue.debugLogging,
-      verbosity: verbosity ?? queue.verbosity,
+      debugLogging: queue.debugLogging,
+      verbosity: queue.verbosity,
     );
   }
 
@@ -213,13 +257,13 @@ class _SqmEditor extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            decoration: BoxDecoration(
-              color: queue.enabled
-                  ? colorScheme.primary.withValues(alpha: 0.09)
-                  : colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+          Material(
+            color: queue.enabled
+                ? colorScheme.primary.withValues(alpha: 0.09)
+                : colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+            shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(
+              side: BorderSide(
                 color:
                     (queue.enabled
                             ? colorScheme.primary
@@ -253,23 +297,34 @@ class _SqmEditor extends StatelessWidget {
             child: Column(
               children: [
                 DropdownButtonFormField<String>(
-                  initialValue: queue.interfaceName,
+                  key: ValueKey(selectedInterface),
+                  initialValue: selectedInterface,
+                  isExpanded: true,
                   borderRadius: BorderRadius.circular(8),
                   dropdownColor: colorScheme.surfaceContainerHigh,
                   iconEnabledColor: colorScheme.primary,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Network Interface',
-                    prefixIcon: Icon(Icons.lan_outlined),
+                    hintText: interfaces.isEmpty
+                        ? 'No WAN interfaces found'
+                        : 'Select WAN interface',
+                    prefixIcon: const Icon(Icons.lan_outlined),
                   ),
                   items: interfaces
                       .map(
-                        (name) =>
-                            DropdownMenuItem(value: name, child: Text(name)),
+                        (item) => DropdownMenuItem(
+                          value: item.name,
+                          enabled: item.device != null,
+                          child: Text(
+                            item.device == null
+                                ? '${item.label} (unavailable)'
+                                : item.label,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       )
                       .toList(),
-                  onChanged: isSaving
-                      ? null
-                      : (value) => onChanged(_copy(interfaceName: value)),
+                  onChanged: isSaving ? null : onInterfaceChanged,
                 ),
                 const SizedBox(height: 12),
                 _NumberField(
@@ -302,6 +357,7 @@ class _SqmEditor extends StatelessWidget {
               children: [
                 DropdownButtonFormField<String>(
                   initialValue: queue.qdisc,
+                  isExpanded: true,
                   borderRadius: BorderRadius.circular(8),
                   dropdownColor: colorScheme.surfaceContainerHigh,
                   iconEnabledColor: colorScheme.primary,
@@ -311,8 +367,10 @@ class _SqmEditor extends StatelessWidget {
                   ),
                   items: const ['cake', 'fq_codel', 'codel', 'sfq', 'pie']
                       .map(
-                        (name) =>
-                            DropdownMenuItem(value: name, child: Text(name)),
+                        (name) => DropdownMenuItem(
+                          value: name,
+                          child: Text(name, overflow: TextOverflow.ellipsis),
+                        ),
                       )
                       .toList(),
                   onChanged: isSaving
@@ -322,6 +380,7 @@ class _SqmEditor extends StatelessWidget {
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: queue.script,
+                  isExpanded: true,
                   borderRadius: BorderRadius.circular(8),
                   dropdownColor: colorScheme.surfaceContainerHigh,
                   iconEnabledColor: colorScheme.primary,
@@ -340,7 +399,10 @@ class _SqmEditor extends StatelessWidget {
                           .map(
                             (name) => DropdownMenuItem(
                               value: name,
-                              child: Text(name),
+                              child: Text(
+                                name,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           )
                           .toList(),
@@ -351,54 +413,20 @@ class _SqmEditor extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 20),
-          const _SqmSectionLabel(
-            icon: Icons.bug_report_outlined,
-            title: 'Diagnostics',
-            subtitle: 'Optional logging for troubleshooting SQM.',
-          ),
-          const SizedBox(height: 10),
-          _SqmFieldGroup(
-            child: Column(
-              children: [
-                SwitchListTile.adaptive(
-                  contentPadding: EdgeInsets.zero,
-                  secondary: const Icon(Icons.terminal_rounded),
-                  title: const Text('Debug Logging'),
-                  subtitle: const Text('Write detailed SQM events to the log'),
-                  value: queue.debugLogging,
-                  onChanged: isSaving
-                      ? null
-                      : (value) => onChanged(_copy(debugLogging: value)),
-                ),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  initialValue: queue.verbosity,
-                  borderRadius: BorderRadius.circular(8),
-                  dropdownColor: colorScheme.surfaceContainerHigh,
-                  iconEnabledColor: colorScheme.primary,
-                  decoration: const InputDecoration(
-                    labelText: 'Log Verbosity',
-                    prefixIcon: Icon(Icons.format_list_numbered_rounded),
-                  ),
-                  items: const ['0', '1', '2', '3', '4', '5', '6', '7', '8']
-                      .map(
-                        (name) =>
-                            DropdownMenuItem(value: name, child: Text(name)),
-                      )
-                      .toList(),
-                  onChanged: isSaving
-                      ? null
-                      : (value) => onChanged(_copy(verbosity: value)),
-                ),
-              ],
-            ),
-          ),
           const SizedBox(height: 18),
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: isSaving ? null : onSave,
+              onPressed:
+                  isSaving ||
+                      selectedInterface == null ||
+                      !interfaces.any(
+                        (item) =>
+                            item.name == selectedInterface &&
+                            item.device != null,
+                      )
+                  ? null
+                  : onSave,
               icon: isSaving
                   ? const SizedBox(
                       height: 18,
