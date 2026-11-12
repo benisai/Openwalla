@@ -232,6 +232,7 @@ GPL v3.0. See [LICENSE](LICENSE).
 ---
 
 ## Acknowledgments
+- Forked from [cogwheel0/luci-mobile](https://github.com/cogwheel0/luci-mobile)
 - OpenWrt community for LuCI
 - Flutter team
 - [OpenWrtManager](https://github.com/hagaygo/OpenWrtManager) inspiration
