@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/main.dart';
 import 'package:openwalla/state/app_state.dart';
+import 'package:openwalla/screens/port_forward_screen.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
 import 'package:openwalla/widgets/luci_toast.dart';
 
@@ -137,69 +138,14 @@ class _RulesScreenState extends ConsumerState<RulesScreen> {
     );
   }
 
-  void _showPortForwardDetails(OpenwrtPortForward forward) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (sheetContext) => _PortForwardDetailsSheet(
-        forward: forward,
-        onDelete: () {
-          Navigator.of(sheetContext).pop();
-          _deletePortForward(forward);
-        },
+  Future<void> _showPortForwardDetails(OpenwrtPortForward forward) async {
+    final routerIp = ref.read(appStateProvider).selectedRouter?.ipAddress ?? '';
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => PortForwardScreen(forward: forward, routerIp: routerIp),
       ),
     );
-  }
-
-  Future<void> _deletePortForward(OpenwrtPortForward forward) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        icon: Icon(
-          Icons.delete_outline_rounded,
-          color: Theme.of(context).colorScheme.error,
-        ),
-        title: const Text('Delete Port Forward?'),
-        content: Text(
-          'Delete "${forward.name}" from the router? This cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-              foregroundColor: Theme.of(context).colorScheme.onError,
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    try {
-      await ref.read(appStateProvider).deletePortForward(forward);
-      if (!mounted) return;
-      await _loadRules();
-      if (!mounted) return;
-      context.showToastSuccess(
-        'Port forward deleted',
-        subtitle: forward.name,
-        actionKey: 'port-forward-delete',
-      );
-    } catch (e) {
-      if (!mounted) return;
-      context.showToastError(
-        'Port forward could not be deleted',
-        subtitle: e.toString().replaceFirst('Bad state: ', ''),
-        actionKey: 'port-forward-delete',
-      );
-    }
+    if (changed == true && mounted) await _loadRules();
   }
 
   String _formatCount(int value) {
@@ -959,114 +905,6 @@ class _RuleDetailsSheet extends StatelessWidget {
                   ),
                 ),
               ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PortForwardDetailsSheet extends StatelessWidget {
-  final OpenwrtPortForward forward;
-  final VoidCallback onDelete;
-
-  const _PortForwardDetailsSheet({
-    required this.forward,
-    required this.onDelete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final statusColor = forward.enabled
-        ? const Color(0xFF20CF70)
-        : colorScheme.onSurfaceVariant;
-
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              forward.name,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: colorScheme.onSurface,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _RuleBadge(label: 'PORT FORWARD', color: colorScheme.primary),
-                _RuleBadge(
-                  label: forward.enabled ? 'Enabled' : 'Disabled',
-                  color: statusColor,
-                  filled: false,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Container(
-              decoration: BoxDecoration(
-                color: colorScheme.surface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: colorScheme.outlineVariant.withValues(alpha: 0.42),
-                ),
-              ),
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                children: [
-                  _RuleDetailRow(label: 'Source Zone', value: forward.source),
-                  _RuleDetailRow(
-                    label: 'External Port',
-                    value: forward.wanPort,
-                  ),
-                  _RuleDetailRow(label: 'Protocol', value: forward.protocol),
-                  _RuleDetailRow(
-                    label: 'Destination',
-                    value: forward.destinationZone,
-                  ),
-                  _RuleDetailRow(
-                    label: 'Destination IP',
-                    value: forward.destinationIp,
-                  ),
-                  _RuleDetailRow(
-                    label: 'Internal Port',
-                    value: forward.destinationPort,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Manage this rule from Network > Port Forwarding.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0,
-              ),
-            ),
-            const SizedBox(height: 18),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: onDelete,
-                icon: const Icon(Icons.delete_outline_rounded),
-                label: const Text('Delete Port Forward'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: colorScheme.error,
-                  side: BorderSide(
-                    color: colorScheme.error.withValues(alpha: 0.65),
-                  ),
-                ),
-              ),
             ),
           ],
         ),

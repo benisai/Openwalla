@@ -7559,6 +7559,7 @@ done | sort -nr | head -n ''' +
     required String destinationZone,
     required String destinationIp,
     required String internalPort,
+    bool enabled = true,
   }) async {
     if (_reviewerModeEnabled) {
       notifyListeners();
@@ -7599,6 +7600,7 @@ done | sort -nr | head -n ''' +
         'dest_ip': destinationIp.trim(),
         'dest_port': internalPort.trim(),
         'target': 'DNAT',
+        'enabled': enabled ? '1' : '0',
       },
     );
     if (!_rpcCallSucceeded(setResult)) {
@@ -7626,6 +7628,7 @@ done | sort -nr | head -n ''' +
     required String destinationZone,
     required String destinationIp,
     required String internalPort,
+    bool? enabled,
   }) async {
     if (_reviewerModeEnabled) {
       notifyListeners();
@@ -7653,6 +7656,10 @@ done | sort -nr | head -n ''' +
         'dest_ip': destinationIp.trim(),
         'dest_port': internalPort.trim(),
         'target': 'DNAT',
+        if (enabled != null) ...{
+          'enabled': enabled ? '1' : '0',
+          'disabled': '0',
+        },
       },
     );
     if (!_rpcCallSucceeded(setResult)) {
