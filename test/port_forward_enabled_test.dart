@@ -24,6 +24,8 @@ class _Auth implements IAuthService {
 class _Api implements IApiService {
   Map<String, String>? values;
   final actions = <String>[];
+  bool rejectSet = false;
+  bool rejectCommit = false;
   @override
   Future<dynamic> uciSet(
     String ipAddress,
@@ -36,7 +38,7 @@ class _Api implements IApiService {
   }) async {
     this.values = values;
     actions.add('set');
-    return [0];
+    return [rejectSet ? 1 : 0];
   }
 
   @override
@@ -48,7 +50,7 @@ class _Api implements IApiService {
     BuildContext? context,
   }) async {
     actions.add('commit');
-    return [0];
+    return [rejectCommit ? 1 : 0];
   }
 
   @override
@@ -113,6 +115,33 @@ void main() {
     await state.initialized;
   });
   tearDown(() => state.dispose());
+
+  for (final enabled in [true, false]) {
+    test(
+      'immediate toggle writes only flags ($enabled) then commits/applies',
+      () async {
+        await state.setPortForwardEnabled(forward, enabled);
+        expect(api.values, {'enabled': enabled ? '1' : '0', 'disabled': '0'});
+        expect(api.actions, ['set', 'commit', 'apply']);
+      },
+    );
+  }
+  test('rejected toggle does not commit or apply', () async {
+    api.rejectSet = true;
+    await expectLater(
+      state.setPortForwardEnabled(forward, true),
+      throwsStateError,
+    );
+    expect(api.actions, ['set']);
+  });
+  test('failed toggle commit does not apply', () async {
+    api.rejectCommit = true;
+    await expectLater(
+      state.setPortForwardEnabled(forward, true),
+      throwsStateError,
+    );
+    expect(api.actions, ['set', 'commit']);
+  });
 
   test(
     'new disabled rule persists the flag and port ranges, then commits/applies',

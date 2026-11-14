@@ -7678,6 +7678,43 @@ done | sort -nr | head -n ''' +
     notifyListeners();
   }
 
+  Future<void> setPortForwardEnabled(
+    OpenwrtPortForward forward,
+    bool enabled,
+  ) async {
+    if (_reviewerModeEnabled) {
+      notifyListeners();
+      return;
+    }
+    final router = _routerService?.selectedRouter;
+    final sysauth = _authService?.sysauth;
+    if (router == null || sysauth == null || _apiService == null) {
+      throw StateError('No selected router connection is available');
+    }
+    final result = await _apiService!.uciSet(
+      router.ipAddress,
+      sysauth,
+      router.useHttps,
+      config: 'firewall',
+      section: forward.section,
+      values: {'enabled': enabled ? '1' : '0', 'disabled': '0'},
+    );
+    if (!_rpcCallSucceeded(result)) {
+      throw StateError('The router rejected the port forward update.');
+    }
+    final commit = await _apiService!.uciCommit(
+      router.ipAddress,
+      sysauth,
+      router.useHttps,
+      config: 'firewall',
+    );
+    if (!_rpcCallSucceeded(commit)) {
+      throw StateError('The router could not commit the port forward update.');
+    }
+    await _applyFirewallChangesNativeFirst(router, sysauth);
+    notifyListeners();
+  }
+
   Future<void> deletePortForward(OpenwrtPortForward forward) async {
     if (_reviewerModeEnabled) {
       notifyListeners();

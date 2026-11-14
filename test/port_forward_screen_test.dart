@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openwalla/main.dart';
+import 'package:openwalla/models/client.dart';
+import 'package:openwalla/models/router.dart' as model;
 import 'package:openwalla/screens/port_forward_screen.dart';
 import 'package:openwalla/state/app_state.dart';
 
@@ -25,11 +27,26 @@ class _ForwardState extends ChangeNotifier implements AppState {
   bool fail = false;
   Completer<void>? gate;
   int writes = 0;
+  bool failDiscovery = false;
+  bool? closedResult;
+  List<Client> devices = [];
 
   @override
-  Future<List<OpenwrtFirewallZone>> fetchFirewallZones({
-    BuildContext? context,
-  }) async => [];
+  model.Router? get selectedRouter => null;
+  @override
+  Future<List<Client>> loadDevicesPage({
+    bool aggregate = false,
+    bool force = false,
+  }) async {
+    if (failDiscovery) throw StateError('Offline');
+    return devices;
+  }
+
+  @override
+  Future<void> setPortForwardEnabled(
+    OpenwrtPortForward forward,
+    bool enabled,
+  ) => record({'section': forward.section, 'enabled': enabled});
   Future<void> record(Map<String, dynamic> values) async {
     writes++;
     if (gate != null) await gate!.future;
@@ -107,14 +124,15 @@ void main() {
           home: Builder(
             builder: (context) => Scaffold(
               body: TextButton(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<bool>(
-                    builder: (_) => PortForwardScreen(
-                      forward: forward,
-                      routerIp: '192.168.1.1',
+                onPressed: () async =>
+                    state.closedResult = await Navigator.of(context).push<bool>(
+                      MaterialPageRoute<bool>(
+                        builder: (_) => PortForwardScreen(
+                          forward: forward,
+                          routerIp: '192.168.1.1',
+                        ),
+                      ),
                     ),
-                  ),
-                ),
                 child: const Text('Open editor'),
               ),
             ),
@@ -138,6 +156,24 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Future<void> reveal(
+    WidgetTester tester,
+    Finder finder, {
+    double delta = 200,
+  }) async {
+    await tester.scrollUntilVisible(
+      finder,
+      delta,
+      scrollable: find
+          .descendant(
+            of: find.byType(PortForwardScreen),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+  }
+
   testWidgets(
     'creates a range forward on a full page with equal internal ports by default',
     (tester) async {
@@ -157,32 +193,162 @@ void main() {
     },
   );
 
+  testWidgets('toggle saves immediately without saving other pending edits', (
+    tester,
+  ) async {
+    final state = _ForwardState();
+    await mount(tester, state, forward: existingForward);
+    expect(
+      tester
+          .widget<TextFormField>(find.byKey(const ValueKey('internal-port')))
+          .controller
+          ?.text,
+      '443',
+    );
+    await enter(tester, 'internal-port', '8443');
+    await tester.ensureVisible(find.text('UDP').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('UDP').last);
+    await tester.pumpAndSettle();
+    final toggle = find.widgetWithText(SwitchListTile, 'Port forward');
+    await reveal(tester, toggle);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(state.saved, {'section': 'rule1', 'enabled': false});
+    expect(find.byType(PortForwardScreen), findsOneWidget);
+    await save(tester);
+    expect(state.saved?['internal'], '8443');
+    expect(state.saved?['external'], '4859');
+    expect(state.saved?['protocol'], 'udp');
+    expect(state.saved?['enabled'], isFalse);
+    expect(state.saved?['section'], 'rule1');
+  });
+
   testWidgets(
-    'edits internal port, protocol and enabled flag without saving prematurely',
+    'destination picker fills router or device and remains editable',
     (tester) async {
-      final state = _ForwardState();
+      final state = _ForwardState()
+        ..devices = [
+          Client(
+            ipAddress: '192.168.1.163',
+            macAddress: 'aa',
+            hostname: 'Pixel-9a',
+          ),
+          Client(
+            ipAddress: '192.168.1.163',
+            macAddress: 'aa',
+            hostname: 'Pixel-9a',
+          ),
+          Client(ipAddress: '', macAddress: 'bb', hostname: 'No address'),
+        ];
       await mount(tester, state, forward: existingForward);
+      expect(find.text('Advanced'), findsNothing);
+      await tester.ensureVisible(find.byTooltip('Choose device'));
+      await tester.tap(find.byTooltip('Choose device'));
+      await tester.pumpAndSettle();
+      expect(find.text('Pixel-9a'), findsOneWidget);
+      expect(find.text('No address'), findsNothing);
+      await tester.tap(find.text('Pixel-9a'));
+      await tester.pumpAndSettle();
       expect(
         tester
-            .widget<TextFormField>(find.byKey(const ValueKey('internal-port')))
-            .controller
-            ?.text,
-        '443',
+            .widget<TextFormField>(find.byKey(const ValueKey('destination-ip')))
+            .controller!
+            .text,
+        '192.168.1.163',
       );
-      await enter(tester, 'internal-port', '8443');
-      await tester.ensureVisible(find.text('UDP').last);
-      await tester.tap(find.text('UDP').last);
+      await tester.tap(find.byTooltip('Choose device'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Router'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextFormField>(find.byKey(const ValueKey('destination-ip')))
+            .controller!
+            .text,
+        '192.168.1.1',
+      );
+      await enter(tester, 'destination-ip', '192.168.1.99');
+      await save(tester);
+      expect(state.saved?['ip'], '192.168.1.99');
+    },
+  );
+
+  testWidgets(
+    'device discovery failure leaves manual destination entry working',
+    (tester) async {
+      final state = _ForwardState()..failDiscovery = true;
+      await mount(tester, state, forward: existingForward);
+      await enter(tester, 'destination-ip', '192.168.1.99');
+      await save(tester);
+      expect(state.saved?['ip'], '192.168.1.99');
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('failed immediate toggle keeps its old state and edits', (
+    tester,
+  ) async {
+    final state = _ForwardState()..fail = true;
+    await mount(tester, state, forward: existingForward);
+    await enter(tester, 'port-name', 'Pending name');
+    final toggle = find.widgetWithText(SwitchListTile, 'Port forward');
+    await reveal(tester, toggle);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+    expect(state.saved, isNull);
+    expect(find.byType(PortForwardScreen), findsOneWidget);
+    await reveal(tester, find.byKey(const ValueKey('port-name')), delta: -200);
+    expect(
+      tester
+          .widget<TextFormField>(find.byKey(const ValueKey('port-name')))
+          .controller!
+          .text,
+      'Pending name',
+    );
+  });
+
+  testWidgets('new rule switch validates before auto-saving creation', (
+    tester,
+  ) async {
+    final state = _ForwardState();
+    await mount(tester, state);
+    final toggle = find.widgetWithText(SwitchListTile, 'Port forward');
+    await reveal(tester, toggle);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(state.writes, 0);
+    await reveal(tester, find.byKey(const ValueKey('port-name')), delta: -200);
+    await enter(tester, 'port-name', 'New disabled');
+    await enter(tester, 'external-port', '443');
+    await enter(tester, 'destination-ip', '192.168.1.20');
+    await reveal(tester, toggle);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(state.saved?['enabled'], isFalse);
+    expect(state.saved?['new'], isTrue);
+  });
+
+  testWidgets(
+    'pending toggle locks controls and closing returns refresh result',
+    (tester) async {
+      final state = _ForwardState()..gate = Completer<void>();
+      await mount(tester, state, forward: existingForward);
       final toggle = find.widgetWithText(SwitchListTile, 'Port forward');
-      await tester.ensureVisible(toggle);
+      await reveal(tester, toggle);
       await tester.tap(toggle);
       await tester.pump();
-      expect(state.saved, isNull);
-      await save(tester);
-      expect(state.saved?['internal'], '8443');
-      expect(state.saved?['external'], '4859');
-      expect(state.saved?['protocol'], 'udp');
-      expect(state.saved?['enabled'], isFalse);
-      expect(state.saved?['section'], 'rule1');
+      expect(state.writes, 1);
+      expect(tester.widget<SwitchListTile>(toggle).onChanged, isNull);
+      state.gate!.complete();
+      await tester.pumpAndSettle();
+      expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.byType(PortForwardScreen), findsNothing);
+      expect(find.text('Discard Changes?'), findsNothing);
+      expect(state.closedResult, isTrue);
     },
   );
 

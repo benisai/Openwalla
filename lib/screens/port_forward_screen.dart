@@ -30,7 +30,8 @@ class _PortForwardScreenState extends ConsumerState<PortForwardScreen> {
   bool _enabled = true;
   bool _dirty = false;
   bool _busy = false;
-  List<String> _zoneNames = const [];
+  bool _applied = false;
+  Map<String, String> _destinations = const {};
 
   @override
   void initState() {
@@ -44,10 +45,7 @@ class _PortForwardScreenState extends ConsumerState<PortForwardScreen> {
     if (rule != null) {
       _enabled = rule.enabled;
       _source = rule.source;
-      _destination =
-          rule.destinationZone == 'lan' && rule.destinationIp == widget.routerIp
-          ? 'router'
-          : rule.destinationZone;
+      _destination = rule.destinationZone;
       final protocols =
           rule.protocol
               .toLowerCase()
@@ -64,17 +62,39 @@ class _PortForwardScreenState extends ConsumerState<PortForwardScreen> {
     for (final controller in [_name, _external, _internal, _address]) {
       controller.addListener(_changed);
     }
-    _loadZones();
+    _loadDestinations();
   }
 
-  Future<void> _loadZones() async {
+  String? get _routerAddress {
+    final raw = widget.routerIp.trim();
+    if (InternetAddress.tryParse(raw) != null) return raw;
+    final host = Uri.tryParse(raw.contains('://') ? raw : 'http://$raw')?.host;
+    return host != null && InternetAddress.tryParse(host) != null ? host : null;
+  }
+
+  Future<void> _loadDestinations() async {
     try {
-      final zones = await ref.read(appStateProvider).fetchFirewallZones();
-      if (mounted) {
-        setState(() => _zoneNames = zones.map((zone) => zone.name).toList());
+      final state = ref.read(appStateProvider);
+      final routerId = state.selectedRouter?.id;
+      final devices = await state.loadDevicesPage();
+      if (mounted && state.selectedRouter?.id == routerId) {
+        final entries = <String, String>{};
+        final sorted = devices.toList()
+          ..sort(
+            (a, b) => a.displayName.toLowerCase().compareTo(
+              b.displayName.toLowerCase(),
+            ),
+          );
+        for (final device in sorted) {
+          final ip = device.ipAddress.trim();
+          if (InternetAddress.tryParse(ip) != null && ip != _routerAddress) {
+            entries.putIfAbsent(ip, () => device.displayName);
+          }
+        }
+        setState(() => _destinations = entries);
       }
     } catch (_) {
-      // Keep standard and existing zones available if discovery is unavailable.
+      // Manual entry and the router option do not depend on device discovery.
     }
   }
 
@@ -107,7 +127,7 @@ class _PortForwardScreenState extends ConsumerState<PortForwardScreen> {
     return null;
   }
 
-  Future<void> _save() async {
+  Future<void> _save({bool? enabled}) async {
     if (_busy || !_form.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
     setState(() => _busy = true);
@@ -116,19 +136,17 @@ class _PortForwardScreenState extends ConsumerState<PortForwardScreen> {
       final internal = _differentPort
           ? _port(_internal.text)
           : _port(_external.text);
-      final address = _destination == 'router'
-          ? widget.routerIp
-          : _address.text.trim();
+      final address = _address.text.trim();
       if (widget.forward == null) {
         await state.addPortForward(
           name: _name.text,
           sourceZone: _source,
           externalPort: _port(_external.text),
           protocol: _protocol,
-          destinationZone: _destination == 'router' ? 'lan' : _destination,
+          destinationZone: _destination,
           destinationIp: address,
           internalPort: internal,
-          enabled: _enabled,
+          enabled: enabled ?? _enabled,
         );
       } else {
         await state.updatePortForward(
@@ -137,10 +155,10 @@ class _PortForwardScreenState extends ConsumerState<PortForwardScreen> {
           sourceZone: _source,
           externalPort: _port(_external.text),
           protocol: _protocol,
-          destinationZone: _destination == 'router' ? 'lan' : _destination,
+          destinationZone: _destination,
           destinationIp: address,
           internalPort: internal,
-          enabled: _enabled,
+          enabled: enabled ?? _enabled,
         );
       }
       if (!mounted) return;
@@ -156,6 +174,38 @@ class _PortForwardScreenState extends ConsumerState<PortForwardScreen> {
           'Port forward could not be saved',
           subtitle: error.toString().replaceFirst('Bad state: ', ''),
           actionKey: 'port-forward-save',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _toggleEnabled(bool value) async {
+    if (_busy) return;
+    final rule = widget.forward;
+    if (rule == null) {
+      await _save(enabled: value);
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await ref.read(appStateProvider).setPortForwardEnabled(rule, value);
+      if (!mounted) return;
+      setState(() {
+        _enabled = value;
+        _applied = true;
+      });
+      context.showToastSuccess(
+        value ? 'Port forward enabled' : 'Port forward disabled',
+        actionKey: 'port-forward-toggle',
+      );
+    } catch (error) {
+      if (mounted) {
+        context.showToastError(
+          'Port forward could not be updated',
+          subtitle: error.toString().replaceFirst('Bad state: ', ''),
+          actionKey: 'port-forward-toggle',
         );
       }
     } finally {
@@ -196,7 +246,7 @@ class _PortForwardScreenState extends ConsumerState<PortForwardScreen> {
         )) {
       return;
     }
-    if (mounted) Navigator.of(context).pop(false);
+    if (mounted) Navigator.of(context).pop(_applied);
   }
 
   Future<void> _delete() async {
@@ -239,7 +289,7 @@ class _PortForwardScreenState extends ConsumerState<PortForwardScreen> {
     required String key,
     String? Function(String?)? validator,
     TextInputType? keyboard,
-    bool readOnly = false,
+    Widget? suffix,
   }) => Padding(
     padding: const EdgeInsets.only(bottom: 18),
     child: Column(
@@ -258,11 +308,11 @@ class _PortForwardScreenState extends ConsumerState<PortForwardScreen> {
           key: ValueKey(key),
           controller: controller,
           enabled: !_busy,
-          readOnly: readOnly,
           validator: validator,
           keyboardType: keyboard,
           textInputAction: TextInputAction.next,
           decoration: InputDecoration(
+            suffixIcon: suffix,
             filled: true,
             fillColor: Theme.of(context).colorScheme.surfaceContainerHigh,
             errorMaxLines: 3,
@@ -287,51 +337,11 @@ class _PortForwardScreenState extends ConsumerState<PortForwardScreen> {
     child: child,
   );
 
-  Widget _zone(
-    String label,
-    String value,
-    ValueChanged<String> onChanged, {
-    bool router = false,
-  }) => DropdownButtonFormField<String>(
-    initialValue: value,
-    isExpanded: true,
-    decoration: InputDecoration(labelText: label),
-    items:
-        <String>{
-              'wan',
-              'lan',
-              ..._zoneNames,
-              value,
-              if (router && widget.routerIp.isNotEmpty) 'router',
-            }
-            .where((name) => name.isNotEmpty)
-            .map(
-              (name) => DropdownMenuItem(
-                value: name,
-                child: Text(
-                  name == 'router' ? 'Router' : name.toUpperCase(),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            )
-            .toList(),
-    onChanged: _busy
-        ? null
-        : (next) {
-            if (next != null) {
-              setState(() {
-                onChanged(next);
-                _dirty = true;
-              });
-            }
-          },
-  );
-
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return PopScope<bool>(
-      canPop: !_dirty && !_busy,
+      canPop: !_dirty && !_busy && !_applied,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) _back();
       },
@@ -419,15 +429,38 @@ class _PortForwardScreenState extends ConsumerState<PortForwardScreen> {
                       _address,
                       key: 'destination-ip',
                       keyboard: TextInputType.text,
-                      readOnly: _destination == 'router',
+                      suffix: PopupMenuButton<String>(
+                        tooltip: 'Choose device',
+                        enabled: !_busy,
+                        icon: const Icon(Icons.arrow_drop_down),
+                        onSelected: (ip) => _address.text = ip,
+                        itemBuilder: (_) => [
+                          for (final entry in <String, String>{
+                            if (_routerAddress != null)
+                              _routerAddress!: 'Router',
+                            ..._destinations,
+                          }.entries)
+                            PopupMenuItem(
+                              value: entry.key,
+                              child: ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(
+                                  entry.value,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                subtitle: Text(entry.key),
+                              ),
+                            ),
+                          if (_routerAddress == null && _destinations.isEmpty)
+                            const PopupMenuItem<String>(
+                              enabled: false,
+                              child: Text('No devices available'),
+                            ),
+                        ],
+                      ),
                       validator: (value) =>
-                          InternetAddress.tryParse(
-                                (_destination == 'router'
-                                        ? widget.routerIp
-                                        : value ?? '')
-                                    .trim(),
-                              ) ==
-                              null
+                          InternetAddress.tryParse((value ?? '').trim()) == null
                           ? 'Enter a valid IP address'
                           : null,
                     ),
@@ -480,36 +513,10 @@ class _PortForwardScreenState extends ConsumerState<PortForwardScreen> {
                       SwitchListTile.adaptive(
                         title: const Text('Port forward'),
                         value: _enabled,
-                        onChanged: _busy
-                            ? null
-                            : (value) => setState(() {
-                                _enabled = value;
-                                _dirty = true;
-                              }),
+                        onChanged: _busy ? null : _toggleEnabled,
                       ),
                     ),
                     const SizedBox(height: 12),
-                    ExpansionTile(
-                      title: const Text('Advanced'),
-                      tilePadding: const EdgeInsets.symmetric(horizontal: 10),
-                      initiallyExpanded:
-                          _source != 'wan' || _destination != 'lan',
-                      children: [
-                        _zone(
-                          'Source Zone',
-                          _source,
-                          (value) => _source = value,
-                        ),
-                        const SizedBox(height: 12),
-                        _zone('Destination Zone', _destination, (value) {
-                          _destination = value;
-                          if (value == 'router') {
-                            _address.text = widget.routerIp;
-                          }
-                        }, router: true),
-                        const SizedBox(height: 18),
-                      ],
-                    ),
                     if (widget.forward != null) ...[
                       const SizedBox(height: 12),
                       FilledButton.icon(
