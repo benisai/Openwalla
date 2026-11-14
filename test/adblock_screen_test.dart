@@ -107,9 +107,11 @@ void main() {
   });
 
   testWidgets(
-    'three sections in order with feeds initially collapsed and no service panel',
+    'controls stay ordered with collapsed feeds, status labels and no service panel',
     (tester) async {
       await mount(tester, _AdblockState());
+      expect(find.text('Enabled'), findsNWidgets(2));
+      expect(find.text('Disabled'), findsOneWidget);
       expect(
         tester.getTopLeft(find.text('Block Ads')).dy,
         lessThan(tester.getTopLeft(find.text('Feeds')).dy),
@@ -137,6 +139,18 @@ void main() {
       expect(find.text('AdGuard'), findsNothing);
     },
   );
+
+  testWidgets('Reports retains its dimensions when enabled or disabled', (
+    tester,
+  ) async {
+    final state = _AdblockState();
+    await mount(tester, state);
+    final before = tester.getSize(toggle('adblock-reports'));
+    await tester.tap(toggle('adblock-reports-enabled'));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(toggle('adblock-reports')), before);
+    expect(tester.widget<ListTile>(toggle('adblock-reports')).onTap, isNull);
+  });
 
   testWidgets(
     'Block Ads immediately saves service state and preserves hidden settings',
