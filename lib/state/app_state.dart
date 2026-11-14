@@ -9026,9 +9026,9 @@ done | sort -nr | head -n ''' +
             'command -v tcpdump >/dev/null 2>&1 && '
                 'command -v timeout >/dev/null 2>&1 && '
                 'command -v jsonfilter >/dev/null 2>&1 && '
-                '[ -x /usr/bin/Openwalla-5min-run.sh ] && '
-                'grep -q OPENWALLA_ADBLOCK_REPORT /usr/bin/Openwalla-5min-run.sh && '
-                'grep -q OPENWALLA_5MIN_RUN /etc/crontabs/root && '
+                '[ -x /usr/bin/Openwalla-1min-run.sh ] && '
+                'grep -q OPENWALLA_ADBLOCK_REPORT /usr/bin/Openwalla-1min-run.sh && '
+                'grep -q OPENWALLA_1MIN_RUN /etc/crontabs/root && '
                 'mkdir -p /tmp/openwalla/adblock-report && echo OPENWALLA_REPORT_READY',
           ],
         },

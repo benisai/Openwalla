@@ -74,6 +74,7 @@ void main() {
     _AdblockState state, {
     ThemeMode mode = ThemeMode.dark,
   }) async {
+    addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
     await tester.pumpWidget(
       ProviderScope(
         overrides: [appStateProvider.overrideWith((ref) => state)],

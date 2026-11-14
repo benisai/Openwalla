@@ -73,6 +73,7 @@ void main() {
   });
 
   Future<void> mount(WidgetTester tester, _State state) async {
+    addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
     await tester.pumpWidget(
       ProviderScope(
         overrides: [appStateProvider.overrideWith((ref) => state)],
@@ -118,6 +119,18 @@ void main() {
     await mount(tester, _State()..report = null);
     expect(find.text('Waiting for the first DNS report.'), findsOneWidget);
     expect(find.text('Report unavailable'), findsNothing);
+  });
+  testWidgets('waiting page automatically picks up a new cached report', (
+    tester,
+  ) async {
+    final state = _State()..report = null;
+    await mount(tester, state);
+    state.report = AdblockReport.parse(sample());
+    await tester.pump(const Duration(minutes: 1));
+    await tester.pumpAndSettle();
+    expect(state.reads, 2);
+    expect(find.text('example.com'), findsOneWidget);
+    expect(find.text('Waiting for the first DNS report.'), findsNothing);
   });
   testWidgets('large text fits a small screen', (tester) async {
     tester.view.physicalSize = const Size(320, 740);

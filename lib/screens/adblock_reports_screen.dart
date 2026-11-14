@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/main.dart';
@@ -17,11 +19,21 @@ class _AdblockReportsScreenState extends ConsumerState<AdblockReportsScreen> {
   AdblockReport? _report;
   String? _error;
   bool _loading = true;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     Future.microtask(_load);
+    _refreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      final lifecycle = WidgetsBinding.instance.lifecycleState;
+      if (mounted &&
+          !_loading &&
+          ModalRoute.of(context)?.isCurrent == true &&
+          (lifecycle == null || lifecycle == AppLifecycleState.resumed)) {
+        unawaited(_load());
+      }
+    });
   }
 
   Future<void> _load() async {
@@ -47,6 +59,7 @@ class _AdblockReportsScreenState extends ConsumerState<AdblockReportsScreen> {
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _search.dispose();
     super.dispose();
   }

@@ -181,6 +181,8 @@ void main() {
         '/tmp/openwalla/adblock-report',
       );
       expect(api.writes.first['adb_repchunkcnt'], '5');
+      expect(api.commands.first, contains('Openwalla-1min-run.sh'));
+      expect(api.commands.first, contains('OPENWALLA_1MIN_RUN'));
       expect(api.writes.first['adb_repchunksize'], '1');
       expect(api.writes.first['adb_represolve'], '0');
       expect(api.writes.first['adb_map'], '0');

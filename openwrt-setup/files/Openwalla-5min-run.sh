@@ -76,42 +76,6 @@ check_netify() {
 	fi
 }
 
-# OPENWALLA_ADBLOCK_REPORT: capability checked by the app before enabling reports.
-update_adblock_report() (
-	local enabled reporting cores tmp json snapshot total
-	[ -x "$INIT_DIR/adblock" ] || return 0
-	enabled="$(uci -q get adblock.global.adb_enabled 2>/dev/null)"
-	reporting="$(uci -q get adblock.global.adb_report 2>/dev/null)"
-	[ "$enabled" = 1 ] && [ "$reporting" = 1 ] || return 0
-	command -v tcpdump >/dev/null 2>&1 && command -v jsonfilter >/dev/null 2>&1 || return 0
-	command -v timeout >/dev/null 2>&1 || { echo '[adblock-report] timeout unavailable; skipping.'; return 0; }
-	cores="$(awk '/^processor/ {n++} END {print n+0}' "$PROC_DIR/cpuinfo" 2>/dev/null)"
-	[ "${cores:-0}" -gt 0 ] || cores=1
-	if [ -r "$PROC_DIR/loadavg" ] && awk -v n="$cores" '{exit !($1 > n)}' "$PROC_DIR/loadavg"; then
-		echo '[adblock-report] Router busy; keeping last report.'
-		return 0
-	fi
-	if [ -r "$PROC_DIR/meminfo" ] && awk '/^MemAvailable:/ {found=1; available=$2} END {exit !(found && available < 16384)}' "$PROC_DIR/meminfo"; then
-		echo '[adblock-report] Low memory; keeping last report.'
-		return 0
-	fi
-	tmp="$(mktemp -d "$RUNTIME_DIR/.adblock-report.XXXXXX")" || return 1
-	trap 'rm -rf "$tmp"' EXIT
-	trap 'exit 1' INT TERM
-	# A bounded native report reads the rotating DNS-only capture, not live traffic.
-	set -- "$INIT_DIR/adblock" report gen 10 1000
-	if command -v nice >/dev/null 2>&1; then set -- nice -n 10 "$@"; fi
-	timeout 90 "$@" >/dev/null 2>&1 || { echo '[adblock-report] Generation failed; keeping last report.'; return 1; }
-	json="$tmp/report.json"
-	timeout 15 "$INIT_DIR/adblock" report json >"$json" 2>/dev/null || return 1
-	[ -s "$json" ] && [ "$(wc -c <"$json")" -le 2097152 ] || return 0
-	total="$(jsonfilter -i "$json" -e '@[0].total' 2>/dev/null)" || return 1
-	case "$total" in ''|*[!0-9]*) echo '[adblock-report] No valid report available yet.'; return 0 ;; esac
-	snapshot="$tmp/snapshot.json"
-	{ printf '{"generated_at":%s,"data":' "$(date +%s)"; cat "$json"; printf '}\n'; } >"$snapshot" || return 1
-	mv -f "$snapshot" "$RUNTIME_DIR/adblock-report.json" || return 1
-	echo '[adblock-report] Cached report updated.'
-)
 
 install_cron() {
 	local tmp
@@ -135,7 +99,6 @@ run_all() {
 	trap 'exit 1' INT TERM
 	check_netify
 	result=$?
-	update_adblock_report || result=1
 	rmdir "$LOCK_DIR" 2>/dev/null || true
 	trap - EXIT INT TERM
 	return "$result"
