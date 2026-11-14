@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:openwalla/main.dart';
+import 'package:openwalla/screens/adblock_reports_screen.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
 import 'package:openwalla/widgets/luci_toast.dart';
@@ -95,7 +96,10 @@ class _AdblockScreenState extends ConsumerState<AdblockScreen> {
     });
   }
 
-  Future<void> _save(OpenwrtAdblockSettings settings) async {
+  Future<void> _save(
+    OpenwrtAdblockSettings settings, {
+    bool reports = false,
+  }) async {
     if (_isSaving) return;
     _feedSaveTimer?.cancel();
     final savingFeeds = _feedSaveStatus == 'Saving...';
@@ -104,7 +108,12 @@ class _AdblockScreenState extends ConsumerState<AdblockScreen> {
       _isSaving = true;
     });
     try {
-      await ref.read(appStateProvider).saveAdblockSettings(settings);
+      final state = ref.read(appStateProvider);
+      if (reports) {
+        await state.setAdblockReportsEnabled(settings);
+      } else {
+        await state.saveAdblockSettings(settings);
+      }
       if (!mounted) return;
       setState(() {
         _savedSettings = settings;
@@ -253,6 +262,42 @@ class _AdblockScreenState extends ConsumerState<AdblockScreen> {
           onChanged: _isSaving
               ? null
               : (value) => _save(settings.copyWith(safeSearch: value)),
+        ),
+        const Divider(height: 1),
+        ListTile(
+          key: const ValueKey('adblock-reports'),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 8,
+          ),
+          leading: Icon(Icons.analytics_outlined, color: colors.primary),
+          title: const Text('Reports'),
+          onTap: _isSaving || !settings.reportEnabled
+              ? null
+              : () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const AdblockReportsScreen(),
+                    ),
+                  );
+                },
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Switch.adaptive(
+                key: const ValueKey('adblock-reports-enabled'),
+                value: settings.reportEnabled,
+                onChanged: _isSaving
+                    ? null
+                    : (value) => _save(
+                        settings.copyWith(reportEnabled: value),
+                        reports: true,
+                      ),
+              ),
+              if (settings.reportEnabled)
+                const Icon(Icons.chevron_right_rounded),
+            ],
+          ),
         ),
       ],
     );

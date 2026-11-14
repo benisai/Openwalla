@@ -26,6 +26,7 @@
 				"/tmp/openwalla/openwalla-device-bandwidth.sqlite": ["read"],
 				"/tmp/openwalla/openwalla-notifications.sqlite": ["read"],
 				"/tmp/openwalla/openwalla-parental.sqlite": ["read"],
+				"/tmp/openwalla/adblock-report.json": ["read"],
 				"/tmp/firmware.bin": ["read"],
 				"/tmp/backup.tar.gz": ["read"]
 			},

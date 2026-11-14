@@ -19,6 +19,10 @@ void main() {
       expect(openwalla['read'], isA<Map<String, dynamic>>());
       final read = openwalla['read'] as Map<String, dynamic>;
       expect(read['uci'], contains('system'));
+      expect(
+        (read['file'] as Map)['/tmp/openwalla/adblock-report.json'],
+        contains('read'),
+      );
       expect((read['ubus'] as Map)['luci'], contains('getTimezones'));
       expect((read['ubus'] as Map)['luci-rpc'], contains('getBoardJSON'));
       expect((write['ubus'] as Map)['uci'], contains('apply'));

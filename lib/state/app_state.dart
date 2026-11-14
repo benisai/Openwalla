@@ -17,6 +17,7 @@ import 'package:openwalla/services/router_system_settings_service.dart';
 import 'package:openwalla/services/vlan_discovery_service.dart';
 import 'package:openwalla/services/throughput_service.dart';
 import 'package:openwalla/models/client.dart';
+import 'package:openwalla/models/adblock_report.dart';
 import 'package:openwalla/models/quarantine_notice_state.dart';
 import 'package:openwalla/models/ddns_info.dart';
 import 'package:openwalla/models/router.dart' as model;
@@ -8978,6 +8979,88 @@ done | sort -nr | head -n ''' +
     }
   }
 
+  Future<AdblockReport?> fetchAdblockReport() async {
+    final router = selectedRouter;
+    final sysauth = _authService?.sysauth;
+    if (router == null || sysauth == null || _apiService == null) {
+      throw StateError('No selected router connection is available');
+    }
+    final result = await _apiService!.call(
+      router.ipAddress,
+      sysauth,
+      router.useHttps,
+      object: 'file',
+      method: 'read',
+      params: {'path': adblockReportPath},
+    );
+    // ubus status 4 is NOT_FOUND; other failures must not look like an empty report.
+    if (result is List && result.isNotEmpty && result.first == 4) return null;
+    if (!_rpcCallSucceeded(result)) {
+      throw StateError(
+        'Could not read the AdBlock report. Check the router connection and update the Openwalla ACL.',
+      );
+    }
+    final source = _commandOutput(result).trim();
+    if (source.isEmpty) return null;
+    return AdblockReport.parse(source);
+  }
+
+  Future<void> setAdblockReportsEnabled(OpenwrtAdblockSettings settings) async {
+    if (_reviewerModeEnabled) return;
+    final router = selectedRouter;
+    final sysauth = _authService?.sysauth;
+    if (router == null || sysauth == null || _apiService == null) {
+      throw StateError('No selected router connection is available');
+    }
+    if (settings.reportEnabled) {
+      final check = await _apiService!.call(
+        router.ipAddress,
+        sysauth,
+        router.useHttps,
+        object: 'file',
+        method: 'exec',
+        params: {
+          'command': '/bin/sh',
+          'params': [
+            '-c',
+            'command -v tcpdump >/dev/null 2>&1 && '
+                'command -v timeout >/dev/null 2>&1 && '
+                'command -v jsonfilter >/dev/null 2>&1 && '
+                '[ -x /usr/bin/Openwalla-5min-run.sh ] && '
+                'grep -q OPENWALLA_ADBLOCK_REPORT /usr/bin/Openwalla-5min-run.sh && '
+                'grep -q OPENWALLA_5MIN_RUN /etc/crontabs/root && '
+                'mkdir -p /tmp/openwalla/adblock-report && echo OPENWALLA_REPORT_READY',
+          ],
+        },
+      );
+      if (!_commandOutput(check).contains('OPENWALLA_REPORT_READY')) {
+        throw StateError(
+          'Update AdBlock in Router Setup to install tcpdump-mini and the reporting runner.',
+        );
+      }
+      final result = await _apiService!.uciSet(
+        router.ipAddress,
+        sysauth,
+        router.useHttps,
+        config: 'adblock',
+        section: settings.section,
+        values: {
+          'adb_reportdir': '/tmp/openwalla/adblock-report',
+          'adb_repchunkcnt': '5',
+          'adb_repchunksize': '1',
+          'adb_repport': '53',
+          'adb_replisten': '53',
+          'adb_represolve': '0',
+          'adb_map': '0',
+        },
+      );
+      if (!_rpcCallSucceeded(result)) {
+        throw StateError('The router rejected report settings.');
+      }
+    }
+    await saveAdblockSettings(settings);
+  }
+
   Future<void> saveAdblockSettings(OpenwrtAdblockSettings settings) async {
     if (_reviewerModeEnabled) {
       notifyListeners();
@@ -9012,7 +9095,7 @@ done | sort -nr | head -n ''' +
       section = _extractAddedSection(addResult) ?? section;
     }
 
-    await _apiService!.uciSet(
+    final setResult = await _apiService!.uciSet(
       router.ipAddress,
       sysauth,
       router.useHttps,
@@ -9030,34 +9113,59 @@ done | sort -nr | head -n ''' +
             : settings.dnsBackend.trim(),
       },
     );
+    if (!_rpcCallSucceeded(setResult)) {
+      throw StateError('The router rejected AdBlock settings.');
+    }
     final feedCommands = <String>[
-      'uci -q delete adblock.$section.adb_feed',
+      'set -e',
+      'uci -q delete adblock.$section.adb_feed || true',
       for (final feed in settings.selectedFeeds)
         if (RegExp(r'^[A-Za-z0-9_+-]+$').hasMatch(feed))
           "uci add_list adblock.$section.adb_feed='$feed'",
     ];
-    await _apiService!.systemExec(
+    final feedResult = await _apiService!.call(
       router.ipAddress,
       sysauth,
       router.useHttps,
-      command: feedCommands.join('; '),
+      object: 'file',
+      method: 'exec',
+      params: {
+        'command': '/bin/sh',
+        'params': ['-c', feedCommands.join('; ')],
+      },
     );
-    await _apiService!.uciCommit(
+    if (!_rpcCallSucceeded(feedResult)) {
+      throw StateError('The router could not update AdBlock feeds.');
+    }
+    final commitResult = await _apiService!.uciCommit(
       router.ipAddress,
       sysauth,
       router.useHttps,
       config: 'adblock',
     );
+    if (!_rpcCallSucceeded(commitResult)) {
+      throw StateError('The router could not commit AdBlock settings.');
+    }
 
     final command = settings.enabled
-        ? '/etc/init.d/adblock enable 2>/dev/null; /etc/init.d/adblock reload 2>/dev/null || /etc/init.d/adblock restart 2>/dev/null || true'
-        : '/etc/init.d/adblock stop 2>/dev/null; /etc/init.d/adblock disable 2>/dev/null || true';
-    await _apiService!.systemExec(
+        ? '/etc/init.d/adblock enable 2>/dev/null && { /etc/init.d/adblock reload 2>/dev/null || /etc/init.d/adblock restart 2>/dev/null; }'
+        : '/etc/init.d/adblock stop 2>/dev/null && /etc/init.d/adblock disable 2>/dev/null';
+    final serviceResult = await _apiService!.call(
       router.ipAddress,
       sysauth,
       router.useHttps,
-      command: command,
+      object: 'file',
+      method: 'exec',
+      params: {
+        'command': '/bin/sh',
+        'params': ['-c', command],
+      },
     );
+    if (!_rpcCallSucceeded(serviceResult)) {
+      throw StateError(
+        'The router could not apply the AdBlock service settings.',
+      );
+    }
     notifyListeners();
   }
 

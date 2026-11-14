@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openwalla/main.dart';
+import 'package:openwalla/models/adblock_report.dart';
+import 'package:openwalla/screens/adblock_reports_screen.dart';
 import 'package:openwalla/screens/adblock_screen.dart';
 import 'package:openwalla/state/app_state.dart';
 
@@ -25,6 +27,13 @@ class _AdblockState extends ChangeNotifier implements AppState {
   bool failLoad = false;
   bool installed = true;
   int loads = 0;
+
+  @override
+  Future<void> setAdblockReportsEnabled(OpenwrtAdblockSettings next) =>
+      saveAdblockSettings(next);
+
+  @override
+  Future<AdblockReport?> fetchAdblockReport() async => null;
 
   @override
   Future<OpenwrtFeatureStatus> getOpenwrtFeatureStatus(
@@ -80,6 +89,22 @@ void main() {
   }
 
   Finder toggle(String key) => find.byKey(ValueKey(key));
+
+  testWidgets('Reports toggle saves and enables navigation only when on', (
+    tester,
+  ) async {
+    final state = _AdblockState();
+    state.settings = state.settings.copyWith(reportEnabled: false);
+    await mount(tester, state);
+    expect(tester.widget<ListTile>(toggle('adblock-reports')).onTap, isNull);
+    await tester.tap(toggle('adblock-reports-enabled'));
+    await tester.pumpAndSettle();
+    expect(state.saves.single.reportEnabled, isTrue);
+    await tester.tap(find.text('Reports'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AdblockReportsScreen), findsOneWidget);
+    expect(find.text('Waiting for the first DNS report.'), findsOneWidget);
+  });
 
   testWidgets(
     'three sections in order with feeds initially collapsed and no service panel',
