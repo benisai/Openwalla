@@ -167,22 +167,46 @@ void main() {
       expect(state.saves.single.reportEnabled, isTrue);
       expect(state.saves.single.selectedFeeds, ['adguard', 'custom_feed']);
       expect(state.loads, 1);
+      expect(find.text('Feeds'), findsNothing);
+      expect(find.text('Safe Search'), findsNothing);
+      expect(find.text('Reports'), findsNothing);
       await tester.tap(toggle('adblock-enabled'));
       await tester.pumpAndSettle();
       expect(state.saves.last.enabled, isTrue);
+      expect(find.text('Feeds'), findsOneWidget);
+      expect(find.text('Safe Search'), findsOneWidget);
+      expect(find.text('Reports'), findsOneWidget);
+      expect(state.saves.last.selectedFeeds, ['adguard', 'custom_feed']);
+      expect(state.saves.last.reportEnabled, isTrue);
     },
   );
 
   testWidgets(
-    'Safe Search saves immediately without enabling disabled AdBlock',
+    'initially disabled AdBlock hides dependent controls and keeps their settings',
     (tester) async {
       final state = _AdblockState();
-      state.settings = state.settings.copyWith(enabled: false);
+      state.settings = state.settings.copyWith(
+        enabled: false,
+        safeSearch: true,
+      );
       await mount(tester, state);
-      await tester.tap(toggle('adblock-safesearch'));
+      expect(find.text('Block Ads'), findsOneWidget);
+      expect(find.text('Feeds'), findsNothing);
+      expect(find.text('Safe Search'), findsNothing);
+      expect(find.text('Reports'), findsNothing);
+      expect(state.saves, isEmpty);
+      await tester.tap(toggle('adblock-enabled'));
       await tester.pumpAndSettle();
       expect(state.saves.single.safeSearch, isTrue);
-      expect(state.saves.single.enabled, isFalse);
+      expect(state.saves.single.enabled, isTrue);
+      expect(
+        tester.widget<SwitchListTile>(toggle('adblock-safesearch')).value,
+        isTrue,
+      );
+      expect(
+        tester.widget<Switch>(toggle('adblock-reports-enabled')).value,
+        isTrue,
+      );
     },
   );
 
@@ -193,7 +217,7 @@ void main() {
         ..gate = Completer<void>()
         ..fail = true;
       await mount(tester, state);
-      await tester.tap(toggle('adblock-enabled'));
+      await tester.tap(toggle('adblock-safesearch'));
       await tester.pump();
       expect(
         tester.widget<SwitchListTile>(toggle('adblock-enabled')).onChanged,
@@ -221,6 +245,20 @@ void main() {
       await tester.pumpAndSettle();
     },
   );
+
+  testWidgets('failed disable restores dependent panels', (tester) async {
+    final state = _AdblockState()..fail = true;
+    await mount(tester, state);
+    await tester.tap(toggle('adblock-enabled'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<SwitchListTile>(toggle('adblock-enabled')).value,
+      isTrue,
+    );
+    expect(find.text('Feeds'), findsOneWidget);
+    expect(find.text('Safe Search'), findsOneWidget);
+    expect(find.text('Reports'), findsOneWidget);
+  });
 
   testWidgets('feed changes debounce and keep expansion open after saving', (
     tester,

@@ -219,113 +219,117 @@ class _AdblockScreenState extends ConsumerState<AdblockScreen> {
                 : (value) => _save(settings.copyWith(enabled: value)),
           ),
         ),
-        const SizedBox(height: 12),
-        _controlSurface(
-          ExpansionTile(
-            key: const PageStorageKey('adblock-feeds'),
-            tilePadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 14,
-            ),
-            leading: _statusIcon(
-              Icons.playlist_add_check_rounded,
-              colors.primary,
-            ),
-            title: const Text('Feeds'),
-            subtitle: Text(
-              [
-                '${settings.selectedFeeds.length} selected',
-                if (_feedSaveStatus != null) _feedSaveStatus!,
-              ].join(' - '),
-            ),
-            childrenPadding: const EdgeInsets.only(bottom: 12),
-            shape: const Border(),
-            collapsedShape: const Border(),
-            children: [
-              for (final feed in _adblockFeedOptions)
-                CheckboxListTile(
-                  key: ValueKey('feed-${feed.id}'),
-                  title: Text(
-                    feed.label,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  subtitle: Text(feed.detail),
-                  value: settings.selectedFeeds.contains(feed.id),
-                  onChanged: _isSaving
-                      ? null
-                      : (selected) {
-                          final next = [...settings.selectedFeeds];
-                          if (selected == true) {
-                            next.add(feed.id);
-                          } else {
-                            next.remove(feed.id);
-                          }
-                          _updateFeeds(settings.copyWith(selectedFeeds: next));
-                        },
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        _controlSurface(
-          SwitchListTile.adaptive(
-            key: const ValueKey('adblock-safesearch'),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 14,
-            ),
-            secondary: _statusIcon(Icons.search_rounded, colors.tertiary),
-            title: const Text('Safe Search'),
-            subtitle: _statusText(settings.safeSearch),
-            value: settings.safeSearch,
-            onChanged: _isSaving
-                ? null
-                : (value) => _save(settings.copyWith(safeSearch: value)),
-          ),
-        ),
-        const SizedBox(height: 12),
-        _controlSurface(
-          ListTile(
-            key: const ValueKey('adblock-reports'),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 14,
-            ),
-            leading: _statusIcon(Icons.analytics_outlined, colors.primary),
-            title: const Text('Reports'),
-            subtitle: _statusText(settings.reportEnabled),
-            onTap: _isSaving || !settings.reportEnabled
-                ? null
-                : () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const AdblockReportsScreen(),
-                      ),
-                    );
-                  },
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
+        if (settings.enabled) ...[
+          const SizedBox(height: 12),
+          _controlSurface(
+            ExpansionTile(
+              key: const PageStorageKey('adblock-feeds'),
+              tilePadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
+              leading: _statusIcon(
+                Icons.playlist_add_check_rounded,
+                colors.primary,
+              ),
+              title: const Text('Feeds'),
+              subtitle: Text(
+                [
+                  '${settings.selectedFeeds.length} selected',
+                  if (_feedSaveStatus != null) _feedSaveStatus!,
+                ].join(' - '),
+              ),
+              childrenPadding: const EdgeInsets.only(bottom: 12),
+              shape: const Border(),
+              collapsedShape: const Border(),
               children: [
-                Switch.adaptive(
-                  key: const ValueKey('adblock-reports-enabled'),
-                  value: settings.reportEnabled,
-                  onChanged: _isSaving
-                      ? null
-                      : (value) => _save(
-                          settings.copyWith(reportEnabled: value),
-                          reports: true,
-                        ),
-                ),
-                SizedBox(
-                  width: 24,
-                  child: settings.reportEnabled
-                      ? const Icon(Icons.chevron_right_rounded)
-                      : null,
-                ),
+                for (final feed in _adblockFeedOptions)
+                  CheckboxListTile(
+                    key: ValueKey('feed-${feed.id}'),
+                    title: Text(
+                      feed.label,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    subtitle: Text(feed.detail),
+                    value: settings.selectedFeeds.contains(feed.id),
+                    onChanged: _isSaving
+                        ? null
+                        : (selected) {
+                            final next = [...settings.selectedFeeds];
+                            if (selected == true) {
+                              next.add(feed.id);
+                            } else {
+                              next.remove(feed.id);
+                            }
+                            _updateFeeds(
+                              settings.copyWith(selectedFeeds: next),
+                            );
+                          },
+                  ),
               ],
             ),
           ),
-        ),
+          const SizedBox(height: 12),
+          _controlSurface(
+            SwitchListTile.adaptive(
+              key: const ValueKey('adblock-safesearch'),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
+              secondary: _statusIcon(Icons.search_rounded, colors.tertiary),
+              title: const Text('Safe Search'),
+              subtitle: _statusText(settings.safeSearch),
+              value: settings.safeSearch,
+              onChanged: _isSaving
+                  ? null
+                  : (value) => _save(settings.copyWith(safeSearch: value)),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _controlSurface(
+            ListTile(
+              key: const ValueKey('adblock-reports'),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
+              leading: _statusIcon(Icons.analytics_outlined, colors.primary),
+              title: const Text('Reports'),
+              subtitle: _statusText(settings.reportEnabled),
+              onTap: _isSaving || !settings.reportEnabled
+                  ? null
+                  : () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AdblockReportsScreen(),
+                        ),
+                      );
+                    },
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Switch.adaptive(
+                    key: const ValueKey('adblock-reports-enabled'),
+                    value: settings.reportEnabled,
+                    onChanged: _isSaving
+                        ? null
+                        : (value) => _save(
+                            settings.copyWith(reportEnabled: value),
+                            reports: true,
+                          ),
+                  ),
+                  SizedBox(
+                    width: 24,
+                    child: settings.reportEnabled
+                        ? const Icon(Icons.chevron_right_rounded)
+                        : null,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
