@@ -268,40 +268,42 @@ class _QuarantineScreenState extends ConsumerState<QuarantineScreen> {
           onEnabledChanged: _setEnabled,
           onScanNow: _scanNow,
         ),
-        const SizedBox(height: 20),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Quarantined Devices',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+        if (snapshot.enabled) ...[
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Quarantined Devices',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
               ),
-            ),
-            Text(
-              '${snapshot.devices.length}',
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: Theme.of(context).colorScheme.error,
-                fontWeight: FontWeight.w900,
+              Text(
+                '${snapshot.devices.length}',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: Theme.of(context).colorScheme.error,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        if (snapshot.devices.isEmpty)
-          const _QuarantineEmptyCard()
-        else
-          ...snapshot.devices.map(
-            (client) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _QuarantinedDeviceCard(
-                client: client,
-                working: _working,
-                onRelease: () => _release(client),
-              ),
-            ),
+            ],
           ),
+          const SizedBox(height: 10),
+          if (snapshot.devices.isEmpty)
+            const _QuarantineEmptyCard()
+          else
+            ...snapshot.devices.map(
+              (client) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _QuarantinedDeviceCard(
+                  client: client,
+                  working: _working,
+                  onRelease: () => _release(client),
+                ),
+              ),
+            ),
+        ],
       ],
     );
   }

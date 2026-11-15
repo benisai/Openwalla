@@ -237,100 +237,102 @@ class _GeoBlockingScreenState extends ConsumerState<GeoBlockingScreen> {
             onChanged: _saving ? null : _setEnabled,
           ),
         ),
-        const SizedBox(height: 14),
-        _GeoCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Blocked Countries',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Choose the countries to block in both directions.',
-                style: TextStyle(color: colors.onSurfaceVariant),
-              ),
-              const SizedBox(height: 14),
-              InkWell(
-                onTap: _saving ? null : _chooseCountries,
-                borderRadius: BorderRadius.circular(8),
-                child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Countries',
-                    prefixIcon: Icon(Icons.flag_outlined),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _selectedCountryCodes.isEmpty
-                              ? 'Select countries'
-                              : '${_selectedCountryCodes.length} selected',
-                        ),
-                      ),
-                      const Icon(Icons.arrow_drop_down_rounded),
-                    ],
-                  ),
-                ),
-              ),
-              if (_selectedCountryCodes.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    ..._selectedCountries
-                        .take(8)
-                        .map(
-                          (country) => InputChip(
-                            label: Text('${country.name} (${country.code})'),
-                            onDeleted: _saving
-                                ? null
-                                : () => setState(
-                                    () => _selectedCountryCodes.remove(
-                                      country.code,
-                                    ),
-                                  ),
-                          ),
-                        ),
-                    if (_selectedCountryCodes.length > 8)
-                      Chip(
-                        label: Text(
-                          '+${_selectedCountryCodes.length - 8} more',
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-              const SizedBox(height: 14),
-              FilledButton.icon(
-                onPressed: _saving ? null : _configure,
-                icon: _saving
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.shield_rounded),
-                label: const Text('Apply Blacklist'),
-              ),
-            ],
-          ),
-        ),
-        if (_status.isNotEmpty) ...[
+        if (_enabled) ...[
           const SizedBox(height: 14),
           _GeoCard(
-            child: ExpansionTile(
-              tilePadding: EdgeInsets.zero,
-              childrenPadding: const EdgeInsets.only(bottom: 4),
-              leading: const Icon(Icons.terminal_rounded),
-              title: const Text('Router Status'),
-              subtitle: Text(_routerStatusSummary),
-              children: [_BanIpStatusDetails(status: _status)],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Blocked Countries',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Choose the countries to block in both directions.',
+                  style: TextStyle(color: colors.onSurfaceVariant),
+                ),
+                const SizedBox(height: 14),
+                InkWell(
+                  onTap: _saving ? null : _chooseCountries,
+                  borderRadius: BorderRadius.circular(8),
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Countries',
+                      prefixIcon: Icon(Icons.flag_outlined),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _selectedCountryCodes.isEmpty
+                                ? 'Select countries'
+                                : '${_selectedCountryCodes.length} selected',
+                          ),
+                        ),
+                        const Icon(Icons.arrow_drop_down_rounded),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_selectedCountryCodes.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      ..._selectedCountries
+                          .take(8)
+                          .map(
+                            (country) => InputChip(
+                              label: Text('${country.name} (${country.code})'),
+                              onDeleted: _saving
+                                  ? null
+                                  : () => setState(
+                                      () => _selectedCountryCodes.remove(
+                                        country.code,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                      if (_selectedCountryCodes.length > 8)
+                        Chip(
+                          label: Text(
+                            '+${_selectedCountryCodes.length - 8} more',
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 14),
+                FilledButton.icon(
+                  onPressed: _saving ? null : _configure,
+                  icon: _saving
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.shield_rounded),
+                  label: const Text('Apply Blacklist'),
+                ),
+              ],
             ),
           ),
+          if (_status.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            _GeoCard(
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(bottom: 4),
+                leading: const Icon(Icons.terminal_rounded),
+                title: const Text('Router Status'),
+                subtitle: Text(_routerStatusSummary),
+                children: [_BanIpStatusDetails(status: _status)],
+              ),
+            ),
+          ],
         ],
       ],
     );
