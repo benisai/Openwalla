@@ -200,8 +200,9 @@ class _MonthlySummaryCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          Wrap(
+            spacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.end,
             children: [
               Text(
                 _formatUsageTotal(usedBytes),
@@ -212,7 +213,6 @@ class _MonthlySummaryCard extends StatelessWidget {
                   height: 0.95,
                 ),
               ),
-              const SizedBox(width: 8),
               Padding(
                 padding: const EdgeInsets.only(bottom: 3),
                 child: Text(
@@ -357,82 +357,171 @@ class _DailyBars extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final labelEvery = samples.length > 28 ? 5 : 4;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: List.generate(samples.length, (index) {
-        final sample = samples[index];
-        final total = sample.downloadBytes + sample.uploadBytes;
-        final totalFactor = maxTotal > 0
-            ? (total / maxTotal).clamp(0.08, 1.0)
-            : 0.0;
-        final barHeight = 204 * totalFactor;
-        final downloadHeight = total > 0
-            ? (barHeight * (sample.downloadBytes / total)).clamp(4.0, barHeight)
-            : 0.0;
-        final uploadHeight = total > 0
-            ? (barHeight * (sample.uploadBytes / total)).clamp(
-                sample.uploadBytes > 0 ? 4.0 : 0.0,
-                barHeight,
-              )
-            : 0.0;
-        final day = sample.day;
-        final showLabel =
-            day == 1 || day == samples.length || day % labelEvery == 0;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: List.generate(samples.length, (index) {
+            final sample = samples[index];
+            final total = sample.downloadBytes + sample.uploadBytes;
+            final totalFactor = maxTotal > 0
+                ? (total / maxTotal).clamp(0.08, 1.0)
+                : 0.0;
+            final barHeight = 204 * totalFactor;
+            final downloadHeight = total > 0
+                ? (barHeight * (sample.downloadBytes / total)).clamp(
+                    4.0,
+                    barHeight,
+                  )
+                : 0.0;
+            final uploadHeight = total > 0
+                ? (barHeight * (sample.uploadBytes / total)).clamp(
+                    sample.uploadBytes > 0 ? 4.0 : 0.0,
+                    barHeight,
+                  )
+                : 0.0;
 
-        return Expanded(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              SizedBox(
-                height: 210,
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Container(
-                    width: 7,
+            return Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  SizedBox(
                     height: 210,
-                    alignment: Alignment.bottomCenter,
-                    decoration: BoxDecoration(
-                      color: colorScheme.surfaceContainerHighest.withValues(
-                        alpha: 0.42,
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: Container(
+                        width: 7,
+                        height: 210,
+                        alignment: Alignment.bottomCenter,
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest.withValues(
+                            alpha: 0.42,
+                          ),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: sample.hasData
+                            ? Column(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  Container(
+                                    height: uploadHeight,
+                                    color: MonthlyUsageScreen._orange,
+                                  ),
+                                  Container(
+                                    height: downloadHeight,
+                                    color: MonthlyUsageScreen._cyan,
+                                  ),
+                                ],
+                              )
+                            : null,
                       ),
-                      borderRadius: BorderRadius.circular(3),
                     ),
-                    clipBehavior: Clip.antiAlias,
-                    child: sample.hasData
-                        ? Column(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              Container(
-                                height: uploadHeight,
-                                color: MonthlyUsageScreen._orange,
-                              ),
-                              Container(
-                                height: downloadHeight,
-                                color: MonthlyUsageScreen._cyan,
-                              ),
-                            ],
-                          )
-                        : null,
+                  ),
+                ],
+              ),
+            );
+          }),
+        ),
+        const SizedBox(height: 8),
+        MonthlyUsageDayAxis(days: samples.length),
+      ],
+    );
+  }
+}
+
+class MonthlyUsageDayAxis extends StatelessWidget {
+  const MonthlyUsageDayAxis({super.key, required this.days});
+
+  final int days;
+
+  @override
+  Widget build(BuildContext context) {
+    if (days < 1) return const SizedBox.shrink();
+    final style = Theme.of(context).textTheme.bodySmall?.copyWith(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0,
+    );
+    final direction = Directionality.of(context);
+    final scaler = MediaQuery.textScalerOf(context);
+    final labels = <int>{
+      1,
+      7,
+      14,
+      21,
+      days,
+    }.where((day) => day <= days).toList();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        double height = 0;
+        final positions = <({int day, double left, double width})>[];
+        for (final day in labels) {
+          final painter = TextPainter(
+            text: TextSpan(text: '$day', style: style),
+            textDirection: direction,
+            textScaler: scaler,
+            maxLines: 1,
+          )..layout();
+          final width = (painter.width.ceilToDouble() + 2).clamp(
+            0.0,
+            constraints.maxWidth,
+          );
+          if (painter.height > height) height = painter.height.ceilToDouble();
+          painter.dispose();
+          final fraction = (day - 0.5) / days;
+          final center =
+              constraints.maxWidth *
+              (direction == TextDirection.rtl ? 1 - fraction : fraction);
+          positions.add((
+            day: day,
+            left: (center - width / 2).clamp(0.0, constraints.maxWidth - width),
+            width: width,
+          ));
+        }
+        positions.sort((a, b) => a.left.compareTo(b.left));
+        final visible = [positions.first];
+        final last = positions.last;
+        if (positions.length > 1) {
+          // Keep the endpoint labels, thinning intermediate ticks for large text.
+          if (visible.first.left + visible.first.width + 2 > last.left) {
+            visible.clear();
+          } else {
+            for (final position
+                in positions.skip(1).take(positions.length - 2)) {
+              if (position.left >= visible.last.left + visible.last.width + 2 &&
+                  position.left + position.width + 2 <= last.left) {
+                visible.add(position);
+              }
+            }
+          }
+          visible.add(last);
+        }
+        return SizedBox(
+          key: const ValueKey('monthly-day-axis'),
+          height: height,
+          child: Stack(
+            children: [
+              for (final position in visible)
+                Positioned(
+                  left: position.left,
+                  top: 0,
+                  width: position.width,
+                  child: Text(
+                    '${position.day}',
+                    key: ValueKey('monthly-day-label-${position.day}'),
+                    style: style,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    softWrap: false,
                   ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                showLabel ? day.toString() : '',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0,
-                ),
-                maxLines: 1,
-              ),
             ],
           ),
         );
-      }),
+      },
     );
   }
 }
