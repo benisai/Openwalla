@@ -1,4 +1,4 @@
-import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,41 +8,39 @@ import 'package:openwalla/models/adblock_report.dart';
 import 'package:openwalla/screens/adblock_reports_screen.dart';
 import 'package:openwalla/state/app_state.dart';
 
-String sample({bool legacy = false}) => jsonEncode({
-  'generated_at': 1794592800,
-  'data': [
-    {
-      'total': '20',
-      'blocked': '3',
-      'start_date': '2026-11-13',
-      'start_time': '09:00:00',
-      'end_date': '2026-11-13',
-      'end_time': '09:05:00',
-      'requests': [
-        {
-          'domain': 'example.com',
-          'client': '192.168.1.20',
-          'rc': 'OK',
-          'date': '2026-11-13',
-          'time': '09:04:00',
-          if (!legacy) 'type': 'A',
-          if (!legacy) 'iface': 'br-lan',
-        },
-        {'domain': 'ads.example.net', 'client': '192.168.1.30', 'rc': 'NX'},
-      ],
-    },
-  ],
-});
+String sample({String search = ''}) => search.isEmpty
+    ? 'S|20|20|1|100|1794592800\nR|5|100|192.168.1.20|aa:bb:cc:dd:ee:ff|Pixel|ads.example.com|A|example.com\nR|4|99|192.168.1.30|||ads.other.net|AAAA|other.net'
+    : search == 'nothing'
+    ? 'S|20|0|1|100|1794592800'
+    : 'S|20|1|1|100|1794592800\nR|4|99|192.168.1.30|||ads.other.net|AAAA|other.net';
 
 class _State extends ChangeNotifier implements AppState {
-  AdblockReport? report = AdblockReport.parse(sample());
   bool fail = false;
+  bool empty = false;
+  bool paginate = false;
   int reads = 0;
+  final cursors = <int?>[];
+  Completer<AdblockReport?>? gate;
   @override
-  Future<AdblockReport?> fetchAdblockReport() async {
+  Future<AdblockReport?> fetchAdblockReport({
+    String search = '',
+    int? beforeId,
+    int limit = 200,
+  }) async {
     reads++;
+    cursors.add(beforeId);
     if (fail) throw StateError('Disconnected');
-    return report;
+    if (gate != null) return gate!.future;
+    if (empty) return AdblockReport.parse('S|0|0|0|0|0');
+    if (paginate && beforeId == null) {
+      return AdblockReport.parse(sample(), limit: 1);
+    }
+    if (paginate && beforeId != null) {
+      return AdblockReport.parse(
+        'S|20|20|1|100|1794592800\nR|4|99|192.168.1.30|||ads.other.net|AAAA|other.net',
+      );
+    }
+    return AdblockReport.parse(sample(search: search));
   }
 
   @override
@@ -50,23 +48,24 @@ class _State extends ChangeNotifier implements AppState {
 }
 
 void main() {
-  test('parses both report shapes and case-insensitive searches', () {
-    for (final legacy in [false, true]) {
-      final report = AdblockReport.parse(sample(legacy: legacy));
-      expect(report.total, 20);
-      expect(report.blocked, 3);
-      expect(report.requests.length, 2);
-      expect(report.requests.first.matches('EXAMPLE.COM'), isTrue);
-      expect(report.requests.first.matches('192.168.1.20'), isTrue);
-      expect(report.requests.last.matches('NXDOMAIN'), isTrue);
-    }
+  test('parses database identities and paginated results', () {
+    final report = AdblockReport.parse(sample(), limit: 1);
+    expect(report.total, 20);
+    expect(report.hasMore, isTrue);
+    expect(report.nextId, 5);
+    expect(report.requests.single.deviceLabel, 'Pixel');
+    expect(report.requests.single.matchedRule, 'example.com');
+    expect(
+      AdblockReport.parse(sample()).requests.last.deviceLabel,
+      '192.168.1.30',
+    );
   });
-  test('rejects malformed caches rather than reporting zero traffic', () {
+  test('rejects malformed responses rather than reporting zero traffic', () {
     for (final value in [
       'broken',
       '{}',
-      '{"generated_at":1,"data":[]}',
-      '{"generated_at":1,"data":{"total":1,"requests":42}}',
+      'S|invalid|0|0|0|0',
+      'S|1|1|0|0|0\nR|1',
     ]) {
       expect(() => AdblockReport.parse(value), throwsFormatException);
     }
@@ -83,27 +82,29 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets(
-    'renders cached queries and searches without extra router reads',
-    (tester) async {
-      final state = _State();
-      await mount(tester, state);
-      expect(find.text('example.com'), findsOneWidget);
-      expect(find.text('ads.example.net'), findsOneWidget);
-      await tester.enterText(find.byType(TextField), '192.168.1.30');
-      await tester.pump();
-      expect(find.text('example.com'), findsNothing);
-      expect(find.text('ads.example.net'), findsOneWidget);
-      expect(state.reads, 1);
-      await tester.enterText(find.byType(TextField), 'nothing');
-      await tester.pump();
-      expect(find.text('No matching queries'), findsOneWidget);
-      await tester.tap(find.byTooltip('Clear search'));
-      await tester.pump();
-      expect(find.text('example.com'), findsOneWidget);
-    },
-  );
-  testWidgets('failed refresh retains the report and reports an error', (
+  testWidgets('renders device identity and debounces server-side search', (
+    tester,
+  ) async {
+    final state = _State();
+    await mount(tester, state);
+    expect(find.text('ads.example.com'), findsOneWidget);
+    expect(find.textContaining('Pixel'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '192.168.1.30');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(find.text('ads.example.com'), findsNothing);
+    expect(find.text('ads.other.net'), findsOneWidget);
+    expect(state.reads, 2);
+    await tester.enterText(find.byType(TextField), 'nothing');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(find.text('No matching queries'), findsOneWidget);
+    await tester.tap(find.byTooltip('Clear search'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(find.text('ads.example.com'), findsOneWidget);
+  });
+  testWidgets('failed refresh retains the rows and reports an error', (
     tester,
   ) async {
     final state = _State();
@@ -111,26 +112,47 @@ void main() {
     state.fail = true;
     await tester.tap(find.byTooltip('Refresh reports'));
     await tester.pumpAndSettle();
-    expect(find.text('example.com'), findsOneWidget);
+    expect(find.text('ads.example.com'), findsOneWidget);
     expect(find.textContaining('Could not read reports.'), findsOneWidget);
-    expect(state.reads, 2);
   });
-  testWidgets('no cache yet is distinct from a failure', (tester) async {
-    await mount(tester, _State()..report = null);
-    expect(find.text('Waiting for the first DNS report.'), findsOneWidget);
-    expect(find.text('Report unavailable'), findsNothing);
-  });
-  testWidgets('waiting page automatically picks up a new cached report', (
-    tester,
-  ) async {
-    final state = _State()..report = null;
+  testWidgets(
+    'empty database is distinct from a failure and polls for new rows',
+    (tester) async {
+      final state = _State()..empty = true;
+      await mount(tester, state);
+      expect(find.text('No blocked DNS queries recorded yet.'), findsOneWidget);
+      state.empty = false;
+      await tester.pump(const Duration(minutes: 1));
+      await tester.pumpAndSettle();
+      expect(state.reads, 2);
+      expect(find.text('ads.example.com'), findsOneWidget);
+    },
+  );
+  testWidgets('loads another page using the last database ID', (tester) async {
+    final state = _State()..paginate = true;
     await mount(tester, state);
-    state.report = AdblockReport.parse(sample());
-    await tester.pump(const Duration(minutes: 1));
+    await tester.tap(find.text('Load more'));
     await tester.pumpAndSettle();
-    expect(state.reads, 2);
-    expect(find.text('example.com'), findsOneWidget);
-    expect(find.text('Waiting for the first DNS report.'), findsNothing);
+    expect(state.cursors, [null, 5]);
+    expect(find.text('ads.other.net'), findsOneWidget);
+    expect(find.text('ads.example.com'), findsOneWidget);
+    expect(find.text('Load more'), findsNothing);
+  });
+  testWidgets('stale response cannot overwrite a newer search', (tester) async {
+    final state = _State();
+    await mount(tester, state);
+    state.gate = Completer<AdblockReport?>();
+    await tester.tap(find.byTooltip('Refresh reports'));
+    await tester.pump();
+    final old = state.gate!;
+    state.gate = null;
+    await tester.enterText(find.byType(TextField), 'nothing');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    old.complete(AdblockReport.parse(sample()));
+    await tester.pumpAndSettle();
+    expect(find.text('ads.example.com'), findsNothing);
+    expect(find.text('No matching queries'), findsOneWidget);
   });
   testWidgets('large text fits a small screen', (tester) async {
     tester.view.physicalSize = const Size(320, 740);

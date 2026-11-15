@@ -650,6 +650,11 @@ uninstall_feature() {
 		remove_pkg_if_installed wireguard-tools
 		;;
 	adblock)
+		if [ -x /usr/bin/openwalla-adblock-reports ]; then
+			/usr/bin/openwalla-adblock-reports configure 0 || return 1
+		fi
+		stop_disable_service openwalla-adblock-reports
+		rm -f /usr/bin/openwalla-adblock-reports /usr/libexec/openwalla-adblock-reports.awk /etc/init.d/openwalla-adblock-reports
 		stop_disable_service adblock
 		uci -q delete openwalla.features.adblock >/dev/null 2>&1 || true
 		remove_pkg_if_installed luci-app-adblock

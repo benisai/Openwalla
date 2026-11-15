@@ -26,7 +26,7 @@
 				"/tmp/openwalla/openwalla-device-bandwidth.sqlite": ["read"],
 				"/tmp/openwalla/openwalla-notifications.sqlite": ["read"],
 				"/tmp/openwalla/openwalla-parental.sqlite": ["read"],
-				"/tmp/openwalla/adblock-report.json": ["read"],
+				"/tmp/openwalla/openwalla-adblock.sqlite": ["read"],
 				"/tmp/firmware.bin": ["read"],
 				"/tmp/backup.tar.gz": ["read"]
 			},
@@ -64,6 +64,8 @@
 				"/etc/init.d/openwalla-state-sync": ["exec"],
 				"/etc/init.d/dnsmasq": ["exec"],
 				"/etc/init.d/adblock": ["exec"],
+				"/usr/bin/openwalla-adblock-reports": ["exec"],
+				"/etc/init.d/openwalla-adblock-reports": ["exec"],
 				"/etc/init.d/banip": ["exec"],
 				"/etc/init.d/qos": ["exec"],
 				"/etc/init.d/pbr": ["exec"],

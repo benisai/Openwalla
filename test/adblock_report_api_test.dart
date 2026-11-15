@@ -2,7 +2,6 @@ import 'package:flutter/material.dart' hide Router;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openwalla/models/router.dart';
-import 'package:openwalla/models/adblock_report.dart';
 import 'package:openwalla/services/interfaces/api_service_interface.dart';
 import 'package:openwalla/services/interfaces/auth_service_interface.dart';
 import 'package:openwalla/services/router_service.dart';
@@ -25,11 +24,9 @@ class _Auth implements IAuthService {
 class _Api implements IApiService {
   dynamic readResult = [
     0,
-    {
-      'data':
-          '{"generated_at":1,"data":[{"total":"5","blocked":"1","requests":[]}]}',
-    },
+    {'code': 0, 'stdout': 'S|5|5|0|0|0'},
   ];
+  final helperArgs = <List>[];
   bool ready = true;
   bool rejectSet = false;
   bool failService = false;
@@ -51,13 +48,18 @@ class _Api implements IApiService {
   }) async {
     calls.add('$object.$method');
     if (object == 'file') {
-      if (method == 'exec') {
-        expect(params?['command'], '/bin/sh');
-        return execute((params?['params'] as List).last as String);
+      expect(method, 'exec');
+      if (params?['command'] == '/usr/bin/openwalla-adblock-reports') {
+        final args = params?['params'] as List;
+        helperArgs.add(args);
+        if (args.first == 'query') return readResult;
+        return [
+          0,
+          {'code': ready ? 0 : 1},
+        ];
       }
-      expect(method, 'read');
-      expect(params, {'path': adblockReportPath});
-      return readResult;
+      expect(params?['command'], '/bin/sh');
+      return execute((params?['params'] as List).last as String);
     }
     return [0];
   }
@@ -145,26 +147,48 @@ void main() {
   });
   tearDown(() => state.dispose());
 
-  test('reads only cached JSON, never invokes report generation', () async {
-    expect((await state.fetchAdblockReport())!.total, 5);
-    expect(api.calls, ['file.read']);
-    expect(api.commands, isEmpty);
-  });
   test(
-    'missing cache returns no report; denied or corrupt cache throws',
+    'queries SQLite with argv search and cursor, never report generation',
     () async {
-      api.readResult = [4];
-      expect(await state.fetchAdblockReport(), isNull);
-      api.readResult = [6];
-      await expectLater(state.fetchAdblockReport(), throwsStateError);
-      api.readResult = [
-        0,
-        {'data': 'bad json'},
-      ];
-      await expectLater(state.fetchAdblockReport(), throwsFormatException);
+      expect(
+        (await state.fetchAdblockReport(
+          search: "`test`'; drop",
+          beforeId: 12,
+        ))!.total,
+        5,
+      );
+      expect(api.helperArgs.single, [
+        'query',
+        '--search',
+        "`test`'; drop",
+        '--before',
+        '12',
+        '--limit',
+        '201',
+      ]);
+      expect(api.calls, ['file.exec']);
+      expect(api.commands, isEmpty);
     },
   );
-  test('missing capture or runner dependency prevents enabling', () async {
+  test('missing helper, denied or corrupt result is an error', () async {
+    for (final result in [
+      [4],
+      [6],
+      [
+        0,
+        {'code': 1, 'stderr': 'missing'},
+      ],
+    ]) {
+      api.readResult = result;
+      await expectLater(state.fetchAdblockReport(), throwsStateError);
+    }
+    api.readResult = [
+      0,
+      {'code': 0, 'stdout': 'broken'},
+    ];
+    await expectLater(state.fetchAdblockReport(), throwsFormatException);
+  });
+  test('missing collector prevents enabling before changing AdBlock', () async {
     api.ready = false;
     await expectLater(
       state.setAdblockReportsEnabled(settings),
@@ -173,56 +197,50 @@ void main() {
     expect(api.writes, isEmpty);
   });
   test(
-    'enabling configures bounded capture without reverse lookup or maps',
+    'enabling uses collector settings, never tcpdump or report gen',
     () async {
       await state.setAdblockReportsEnabled(settings);
+      expect(api.helperArgs.single, ['check']);
+      expect(api.writes.single['adb_report'], '0');
+      expect(api.writes.single['adb_enabled'], '1');
       expect(
-        api.writes.first['adb_reportdir'],
-        '/tmp/openwalla/adblock-report',
+        api.commands.last,
+        contains('openwalla-adblock-reports configure 1'),
       );
-      expect(api.writes.first['adb_repchunkcnt'], '5');
-      expect(api.commands.first, contains('Openwalla-1min-run.sh'));
-      expect(api.commands.first, contains('OPENWALLA_1MIN_RUN'));
-      expect(api.writes.first['adb_repchunksize'], '1');
-      expect(api.writes.first['adb_represolve'], '0');
-      expect(api.writes.first['adb_map'], '0');
-      expect(api.writes.last['adb_report'], '1');
-      expect(api.writes.last['adb_enabled'], '1');
+      expect(api.commands.join(), isNot(contains('tcpdump')));
       expect(api.calls, contains('uci.commit'));
-      expect(api.commands.last, contains('adblock reload'));
     },
   );
   test(
-    'disabling works without capture dependency and preserves ad blocking',
+    'normal AdBlock works with reports off and no helper installed',
     () async {
       api.ready = false;
       await state.setAdblockReportsEnabled(
         settings.copyWith(reportEnabled: false),
       );
+      expect(api.helperArgs, isEmpty);
       expect(api.writes.single['adb_report'], '0');
       expect(api.writes.single['adb_enabled'], '1');
-      expect(api.commands, isNot(contains(contains('OPENWALLA_REPORT_READY'))));
-    },
-  );
-  test(
-    'router rejecting report config is an error, not false success',
-    () async {
-      api.rejectSet = true;
-      await expectLater(
-        state.setAdblockReportsEnabled(settings),
-        throwsStateError,
+      expect(
+        api.commands.last,
+        contains('if [ -x /usr/bin/openwalla-adblock-reports ]'),
       );
-      expect(api.calls, isNot(contains('uci.commit')));
+      expect(api.commands.last, contains('configure 0'));
     },
   );
-  test(
-    'feed command failure aborts before commit or service restart',
-    () async {
-      api.failFeed = true;
-      await expectLater(state.saveAdblockSettings(settings), throwsStateError);
-      expect(api.calls, isNot(contains('uci.commit')));
-    },
-  );
+  test('router rejecting config aborts', () async {
+    api.rejectSet = true;
+    await expectLater(
+      state.setAdblockReportsEnabled(settings),
+      throwsStateError,
+    );
+    expect(api.calls, isNot(contains('uci.commit')));
+  });
+  test('feed command failure aborts before commit', () async {
+    api.failFeed = true;
+    await expectLater(state.saveAdblockSettings(settings), throwsStateError);
+    expect(api.calls, isNot(contains('uci.commit')));
+  });
   test('nonzero service result does not report success', () async {
     api.failService = true;
     await expectLater(state.saveAdblockSettings(settings), throwsStateError);

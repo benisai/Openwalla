@@ -8969,12 +8969,25 @@ done | sort -nr | head -n ''' +
           serviceStatus: statusText,
         );
       }
+      final reportConfig = await _apiService!.call(
+        router.ipAddress,
+        sysauth,
+        router.useHttps,
+        object: 'uci',
+        method: 'get',
+        params: {'config': 'openwalla'},
+      );
+      final reportEnabled =
+          _extractUciValues(
+            reportConfig,
+          )['adblock_reports']?['enabled']?.toString() ==
+          '1';
       return OpenwrtAdblockSettings.fromUciSection(
         entry.key,
         entry.value,
         installed: installed,
         serviceStatus: statusText,
-      );
+      ).copyWith(reportEnabled: reportEnabled);
     } catch (e, stack) {
       Logger.warning('Optional AdBlock config fetch failed: $e');
       Logger.debug('Optional AdBlock config stack: $stack');
@@ -8992,87 +9005,47 @@ done | sort -nr | head -n ''' +
     }
   }
 
-  Future<AdblockReport?> fetchAdblockReport() async {
+  Future<AdblockReport?> fetchAdblockReport({
+    String search = '',
+    int? beforeId,
+    int limit = 200,
+  }) async {
     final router = selectedRouter;
     final sysauth = _authService?.sysauth;
     if (router == null || sysauth == null || _apiService == null) {
       throw StateError('No selected router connection is available');
+    }
+    if (limit < 1 || limit > 500 || (beforeId != null && beforeId <= 0)) {
+      throw ArgumentError('Invalid report page bounds');
     }
     final result = await _apiService!.call(
       router.ipAddress,
       sysauth,
       router.useHttps,
       object: 'file',
-      method: 'read',
-      params: {'path': adblockReportPath},
+      method: 'exec',
+      params: {
+        'command': '/usr/bin/openwalla-adblock-reports',
+        'params': [
+          'query',
+          '--search',
+          search,
+          if (beforeId != null) ...['--before', '$beforeId'],
+          '--limit',
+          '${limit + 1}',
+        ],
+      },
     );
-    // ubus status 4 is NOT_FOUND; other failures must not look like an empty report.
-    if (result is List && result.isNotEmpty && result.first == 4) return null;
     if (!_rpcCallSucceeded(result)) {
       throw StateError(
-        'Could not read the AdBlock report. Check the router connection and update the Openwalla ACL.',
+        'Could not read reports. Update AdBlock in Router Setup and check the connection.',
       );
     }
-    final source = _commandOutput(result).trim();
-    if (source.isEmpty) return null;
-    return AdblockReport.parse(source);
+    return AdblockReport.parse(_commandOutput(result), limit: limit);
   }
 
-  Future<void> setAdblockReportsEnabled(OpenwrtAdblockSettings settings) async {
-    if (_reviewerModeEnabled) return;
-    final router = selectedRouter;
-    final sysauth = _authService?.sysauth;
-    if (router == null || sysauth == null || _apiService == null) {
-      throw StateError('No selected router connection is available');
-    }
-    if (settings.reportEnabled) {
-      final check = await _apiService!.call(
-        router.ipAddress,
-        sysauth,
-        router.useHttps,
-        object: 'file',
-        method: 'exec',
-        params: {
-          'command': '/bin/sh',
-          'params': [
-            '-c',
-            'command -v tcpdump >/dev/null 2>&1 && '
-                'command -v timeout >/dev/null 2>&1 && '
-                'command -v jsonfilter >/dev/null 2>&1 && '
-                '[ -x /usr/bin/Openwalla-1min-run.sh ] && '
-                'grep -q OPENWALLA_ADBLOCK_REPORT /usr/bin/Openwalla-1min-run.sh && '
-                'grep -q OPENWALLA_1MIN_RUN /etc/crontabs/root && '
-                'mkdir -p /tmp/openwalla/adblock-report && echo OPENWALLA_REPORT_READY',
-          ],
-        },
-      );
-      if (!_commandOutput(check).contains('OPENWALLA_REPORT_READY')) {
-        throw StateError(
-          'Update AdBlock in Router Setup to install tcpdump-mini and the reporting runner.',
-        );
-      }
-      final result = await _apiService!.uciSet(
-        router.ipAddress,
-        sysauth,
-        router.useHttps,
-        config: 'adblock',
-        section: settings.section,
-        values: {
-          'adb_reportdir': '/tmp/openwalla/adblock-report',
-          'adb_repchunkcnt': '5',
-          'adb_repchunksize': '1',
-          'adb_repport': '53',
-          'adb_replisten': '53',
-          'adb_represolve': '0',
-          'adb_map': '0',
-        },
-      );
-      if (!_rpcCallSucceeded(result)) {
-        throw StateError('The router rejected report settings.');
-      }
-    }
-    await saveAdblockSettings(settings);
-  }
+  Future<void> setAdblockReportsEnabled(OpenwrtAdblockSettings settings) =>
+      saveAdblockSettings(settings);
 
   Future<void> saveAdblockSettings(OpenwrtAdblockSettings settings) async {
     if (_reviewerModeEnabled) {
@@ -9087,6 +9060,24 @@ done | sort -nr | head -n ''' +
     }
 
     var section = settings.section.trim().isEmpty ? 'global' : settings.section;
+    if (settings.enabled && settings.reportEnabled) {
+      final check = await _apiService!.call(
+        router.ipAddress,
+        sysauth,
+        router.useHttps,
+        object: 'file',
+        method: 'exec',
+        params: {
+          'command': '/usr/bin/openwalla-adblock-reports',
+          'params': ['check'],
+        },
+      );
+      if (!_rpcCallSucceeded(check)) {
+        throw StateError(
+          'Update AdBlock in Router Setup to install reporting. Reports require dnsmasq.',
+        );
+      }
+    }
     try {
       await _apiService!.call(
         router.ipAddress,
@@ -9117,7 +9108,7 @@ done | sort -nr | head -n ''' +
       values: {
         'adb_enabled': settings.enabled ? '1' : '0',
         'adb_safesearch': settings.safeSearch ? '1' : '0',
-        'adb_report': settings.reportEnabled ? '1' : '0',
+        'adb_report': '0',
         'adb_trigger': settings.triggerInterface.trim().isEmpty
             ? 'wan'
             : settings.triggerInterface.trim(),
@@ -9177,6 +9168,26 @@ done | sort -nr | head -n ''' +
     if (!_rpcCallSucceeded(serviceResult)) {
       throw StateError(
         'The router could not apply the AdBlock service settings.',
+      );
+    }
+    final reportsResult = await _apiService!.call(
+      router.ipAddress,
+      sysauth,
+      router.useHttps,
+      object: 'file',
+      method: 'exec',
+      params: {
+        'command': '/bin/sh',
+        'params': [
+          '-c',
+          'if [ -x /usr/bin/openwalla-adblock-reports ]; then '
+              '/usr/bin/openwalla-adblock-reports configure ${settings.reportEnabled ? '1' : '0'}; fi',
+        ],
+      },
+    );
+    if (!_rpcCallSucceeded(reportsResult)) {
+      throw StateError(
+        'AdBlock was saved, but DNS reporting could not be applied.',
       );
     }
     notifyListeners();

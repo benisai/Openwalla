@@ -202,6 +202,9 @@ files/openwalla-devices-collector.init|/etc/init.d/openwalla-devices-collector|0
 files/oui/openwalla-mac-vendors.txt|/usr/share/openwalla/openwalla-mac-vendors.txt|0644|
 files/Openwalla-1hr-run.sh|/usr/bin/Openwalla-1hr-run.sh|0755|
 files/Openwalla-1min-run.sh|/usr/bin/Openwalla-1min-run.sh|0755|
+files/openwalla-adblock-reports.sh|/usr/bin/openwalla-adblock-reports|0755|openwalla-adblock-reports
+files/openwalla-adblock-reports.awk|/usr/libexec/openwalla-adblock-reports.awk|0644|openwalla-adblock-reports
+files/openwalla-adblock-reports.init|/etc/init.d/openwalla-adblock-reports|0755|openwalla-adblock-reports
 files/Openwalla-5min-run.sh|/usr/bin/Openwalla-5min-run.sh|0755|
 files/openwalla-devices-ping.sh|/usr/bin/openwalla-devices-ping|0755|
 files/openwalla-device-bandwidth-collector.sh|/usr/bin/openwalla-device-bandwidth-collector|0755|openwalla-device-bandwidth-collector

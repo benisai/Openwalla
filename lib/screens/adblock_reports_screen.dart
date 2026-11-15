@@ -16,19 +16,33 @@ class AdblockReportsScreen extends ConsumerStatefulWidget {
 
 class _AdblockReportsScreenState extends ConsumerState<AdblockReportsScreen> {
   final _search = TextEditingController();
+  final _scroll = ScrollController();
+  final _rows = <AdblockDnsRequest>[];
   AdblockReport? _report;
   String? _error;
   bool _loading = true;
+  int _generation = 0;
   Timer? _refreshTimer;
+  Timer? _searchTimer;
 
   @override
   void initState() {
     super.initState();
     Future.microtask(_load);
+    _scroll.addListener(() {
+      if (_scroll.position.extentAfter < 300 &&
+          !_loading &&
+          _error == null &&
+          _report?.hasMore == true) {
+        unawaited(_load(more: true));
+      }
+    });
     _refreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       final lifecycle = WidgetsBinding.instance.lifecycleState;
       if (mounted &&
           !_loading &&
+          _rows.length <= 200 &&
+          (!_scroll.hasClients || _scroll.offset < 100) &&
           ModalRoute.of(context)?.isCurrent == true &&
           (lifecycle == null || lifecycle == AppLifecycleState.resumed)) {
         unawaited(_load());
@@ -36,31 +50,58 @@ class _AdblockReportsScreenState extends ConsumerState<AdblockReportsScreen> {
     });
   }
 
-  Future<void> _load() async {
+  void _searchChanged() {
+    _searchTimer?.cancel();
+    _generation++;
+    setState(() {
+      _rows.clear();
+      _report = null;
+      _loading = true;
+      _error = null;
+    });
+    _searchTimer = Timer(const Duration(milliseconds: 350), _load);
+  }
+
+  Future<void> _load({bool more = false}) async {
     if (!mounted) return;
+    final generation = ++_generation;
+    final before = more ? _report?.nextId : null;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final report = await ref.read(appStateProvider).fetchAdblockReport();
-      if (mounted) setState(() => _report = report);
+      final report = await ref
+          .read(appStateProvider)
+          .fetchAdblockReport(search: _search.text.trim(), beforeId: before);
+      if (mounted && generation == _generation) {
+        setState(() {
+          if (!more) _rows.clear();
+          _rows.addAll(report?.requests ?? []);
+          _report = report;
+        });
+      }
     } catch (_) {
-      if (mounted) {
+      if (mounted && generation == _generation) {
         setState(
           () => _error =
-              'Could not read reports. Check the router connection and Openwalla ACL.',
+              'Could not read reports. Check the connection or update AdBlock in Router Setup.',
         );
       }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && generation == _generation) {
+        setState(() => _loading = false);
+      }
     }
   }
 
   @override
   void dispose() {
+    _generation++;
     _refreshTimer?.cancel();
+    _searchTimer?.cancel();
     _search.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -68,11 +109,6 @@ class _AdblockReportsScreenState extends ConsumerState<AdblockReportsScreen> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final report = _report;
-    final rows =
-        report?.requests
-            .where((row) => row.matches(_search.text.trim()))
-            .toList() ??
-        <AdblockDnsRequest>[];
     return Scaffold(
       appBar: LuciAppBar(
         title: 'AdBlock Reports',
@@ -94,18 +130,23 @@ class _AdblockReportsScreenState extends ConsumerState<AdblockReportsScreen> {
               padding: const EdgeInsets.all(16),
               child: TextField(
                 controller: _search,
+                maxLength: 256,
                 decoration: InputDecoration(
-                  hintText: 'Search reports',
+                  counterText: '',
+                  hintText: 'Search domains or devices',
                   prefixIcon: const Icon(Icons.search_rounded),
                   suffixIcon: _search.text.isEmpty
                       ? null
                       : IconButton(
                           tooltip: 'Clear search',
                           icon: const Icon(Icons.close_rounded),
-                          onPressed: () => setState(_search.clear),
+                          onPressed: () {
+                            _search.clear();
+                            _searchChanged();
+                          },
                         ),
                 ),
-                onChanged: (_) => setState(() {}),
+                onChanged: (_) => _searchChanged(),
               ),
             ),
             SizedBox(
@@ -125,36 +166,28 @@ class _AdblockReportsScreenState extends ConsumerState<AdblockReportsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Wrap(
-                      spacing: 24,
-                      runSpacing: 12,
-                      children: [
-                        _count('Queries', report.total),
-                        _count('NXDOMAIN', report.blocked),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
                     Text(
-                      'Updated ${report.generatedAt.toLocal().toString().split('.').first}',
+                      '${report.total} blocked queries',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    Text(
+                      '${_rows.length} of ${report.matching} matches',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
-                    if (report.start.isNotEmpty && report.end.isNotEmpty)
+                    if (report.heartbeat == null ||
+                        DateTime.now().difference(report.heartbeat!).inMinutes >
+                            2)
                       Text(
-                        '${report.start} - ${report.end}',
-                        style: Theme.of(context).textTheme.bodySmall,
+                        'Collection is not active',
+                        style: TextStyle(color: colors.onSurfaceVariant),
                       ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '${rows.length} of ${report.requests.length} recent queries',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
                   ],
                 ),
               ),
             Expanded(
               child: RefreshIndicator(
                 onRefresh: _loading ? () async {} : _load,
-                child: rows.isEmpty
+                child: _rows.isEmpty
                     ? ListView(
                         physics: const AlwaysScrollableScrollPhysics(),
                         children: [
@@ -165,24 +198,39 @@ class _AdblockReportsScreenState extends ConsumerState<AdblockReportsScreen> {
                                   ? 'Loading reports...'
                                   : _error != null && report == null
                                   ? 'Report unavailable'
-                                  : report == null
-                                  ? 'Waiting for the first DNS report.'
                                   : _search.text.trim().isNotEmpty
                                   ? 'No matching queries'
-                                  : 'No DNS queries in this report',
+                                  : 'No blocked DNS queries recorded yet.',
                               textAlign: TextAlign.center,
                             ),
                           ),
                         ],
                       )
                     : ListView.separated(
+                        controller: _scroll,
                         physics: const AlwaysScrollableScrollPhysics(),
-                        itemCount: rows.length,
+                        itemCount:
+                            _rows.length + (report?.hasMore == true ? 1 : 0),
                         separatorBuilder: (_, _) =>
                             const Divider(height: 1, indent: 16, endIndent: 16),
                         itemBuilder: (_, index) {
-                          final row = rows[index];
+                          if (index == _rows.length) {
+                            return TextButton.icon(
+                              onPressed: _loading
+                                  ? null
+                                  : () => _load(more: true),
+                              icon: const Icon(Icons.expand_more_rounded),
+                              label: Text(
+                                _loading ? 'Loading...' : 'Load more',
+                              ),
+                            );
+                          }
+                          final row = _rows[index];
                           return ListTile(
+                            leading: Icon(
+                              Icons.block_rounded,
+                              color: colors.error,
+                            ),
                             title: Text(
                               row.domain,
                               maxLines: 2,
@@ -190,25 +238,12 @@ class _AdblockReportsScreenState extends ConsumerState<AdblockReportsScreen> {
                             ),
                             subtitle: Text(
                               [
-                                row.client,
-                                [
-                                  row.date,
-                                  row.time,
-                                ].where((text) => text.isNotEmpty).join(' '),
-                                [
-                                  row.resultLabel,
-                                  row.type,
-                                  row.interface,
-                                ].where((text) => text.isNotEmpty).join(' - '),
-                              ].where((text) => text.isNotEmpty).join('\n'),
-                            ),
-                            leading: Icon(
-                              row.result == 'OK'
-                                  ? Icons.check_circle_outline_rounded
-                                  : Icons.info_outline_rounded,
-                              color: row.result == 'OK'
-                                  ? colors.primary
-                                  : colors.onSurfaceVariant,
+                                row.deviceLabel,
+                                if (row.deviceName.isNotEmpty) row.client,
+                                if (row.mac.isNotEmpty) row.mac,
+                                '${row.timestamp.toLocal().toString().split('.').first} - ${row.type}',
+                                'AdBlock rule: ${row.matchedRule}',
+                              ].join('\n'),
                             ),
                           );
                         },
@@ -220,12 +255,4 @@ class _AdblockReportsScreenState extends ConsumerState<AdblockReportsScreen> {
       ),
     );
   }
-
-  Widget _count(String label, int value) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text('$value', style: Theme.of(context).textTheme.titleLarge),
-      Text(label),
-    ],
-  );
 }

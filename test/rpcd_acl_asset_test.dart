@@ -20,7 +20,7 @@ void main() {
       final read = openwalla['read'] as Map<String, dynamic>;
       expect(read['uci'], contains('system'));
       expect(
-        (read['file'] as Map)['/tmp/openwalla/adblock-report.json'],
+        (read['file'] as Map)['/tmp/openwalla/openwalla-adblock.sqlite'],
         contains('read'),
       );
       expect((read['ubus'] as Map)['luci'], contains('getTimezones'));

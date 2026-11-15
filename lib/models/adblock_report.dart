@@ -1,90 +1,69 @@
-import 'dart:convert';
-
-const adblockReportPath = '/tmp/openwalla/adblock-report.json';
-
 class AdblockDnsRequest {
-  final String domain;
+  final int id;
+  final DateTime timestamp;
   final String client;
-  final String date;
-  final String time;
+  final String mac;
+  final String deviceName;
+  final String domain;
   final String type;
-  final String interface;
-  final String result;
+  final String matchedRule;
 
-  AdblockDnsRequest.fromJson(Map data)
-    : domain = '${data['domain'] ?? ''}',
-      client = '${data['client'] ?? ''}',
-      date = '${data['date'] ?? ''}',
-      time = '${data['time'] ?? ''}',
-      type = '${data['type'] ?? ''}',
-      interface = '${data['iface'] ?? ''}',
-      result = '${data['rc'] ?? ''}';
+  AdblockDnsRequest._(List<String> fields)
+    : id = int.parse(fields[1]),
+      timestamp = DateTime.fromMillisecondsSinceEpoch(
+        int.parse(fields[2]) * 1000,
+      ),
+      client = fields[3],
+      mac = fields[4],
+      deviceName = fields[5],
+      domain = fields[6],
+      type = fields[7],
+      matchedRule = fields[8];
 
-  String get resultLabel => switch (result) {
-    'OK' => 'Allowed',
-    'NX' => 'NXDOMAIN',
-    'SF' => 'Failed',
-    _ => result,
-  };
-
-  bool matches(String search) => [
-    domain,
-    client,
-    date,
-    time,
-    type,
-    interface,
-    result,
-    resultLabel,
-  ].any((value) => value.toLowerCase().contains(search.toLowerCase()));
+  String get deviceLabel => deviceName.isEmpty ? client : deviceName;
 }
 
 class AdblockReport {
-  final DateTime generatedAt;
   final int total;
-  final int blocked;
-  final String start;
-  final String end;
+  final int matching;
+  final DateTime? heartbeat;
   final List<AdblockDnsRequest> requests;
+  final bool hasMore;
+  int? get nextId => requests.isEmpty ? null : requests.last.id;
 
   AdblockReport._(
-    this.generatedAt,
     this.total,
-    this.blocked,
-    this.start,
-    this.end,
+    this.matching,
+    this.heartbeat,
     this.requests,
+    this.hasMore,
   );
 
-  factory AdblockReport.parse(String source) {
-    final envelope = jsonDecode(source);
-    if (envelope is! Map || envelope['generated_at'] is! num) {
-      throw const FormatException('Invalid AdBlock report cache');
+  factory AdblockReport.parse(String source, {int limit = 200}) {
+    final lines = source.trim().split('\n');
+    final summary = lines.first.split('|');
+    if (summary.length != 6 || summary[0] != 'S') {
+      throw const FormatException('Invalid SQLite report response');
     }
-    final payload = envelope['data'];
-    final data = payload is List && payload.isNotEmpty
-        ? payload.first
-        : payload;
-    if (data is! Map || !data.containsKey('total')) {
-      throw const FormatException('Invalid AdBlock report data');
-    }
-    int count(String key) => int.tryParse('${data[key]}') ?? 0;
-    final rows = data['requests'];
-    if (rows != null && rows is! List) {
-      throw const FormatException('Invalid DNS requests');
+    final total = int.parse(summary[1]);
+    final matching = int.parse(summary[2]);
+    final heartbeat = int.parse(summary[5]);
+    final rows = <AdblockDnsRequest>[];
+    for (final line in lines.skip(1)) {
+      final fields = line.split('|');
+      if (fields.length != 9 || fields[0] != 'R') {
+        throw const FormatException('Invalid SQLite report row');
+      }
+      rows.add(AdblockDnsRequest._(fields));
     }
     return AdblockReport._(
-      DateTime.fromMillisecondsSinceEpoch(
-        (envelope['generated_at'] as num).toInt() * 1000,
-      ),
-      count('total'),
-      count('blocked'),
-      '${data['start_date'] ?? ''} ${data['start_time'] ?? ''}'.trim(),
-      '${data['end_date'] ?? ''} ${data['end_time'] ?? ''}'.trim(),
-      [
-        for (final row in rows as List? ?? [])
-          if (row is Map) AdblockDnsRequest.fromJson(row),
-      ],
+      total,
+      matching,
+      heartbeat == 0
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(heartbeat * 1000),
+      rows.take(limit).toList(),
+      rows.length > limit,
     );
   }
 }

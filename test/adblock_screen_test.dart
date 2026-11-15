@@ -33,7 +33,11 @@ class _AdblockState extends ChangeNotifier implements AppState {
       saveAdblockSettings(next);
 
   @override
-  Future<AdblockReport?> fetchAdblockReport() async => null;
+  Future<AdblockReport?> fetchAdblockReport({
+    String search = '',
+    int? beforeId,
+    int limit = 200,
+  }) async => null;
 
   @override
   Future<OpenwrtFeatureStatus> getOpenwrtFeatureStatus(
@@ -137,7 +141,7 @@ void main() {
     await tester.tap(find.text('Reports'));
     await tester.pumpAndSettle();
     expect(find.byType(AdblockReportsScreen), findsOneWidget);
-    expect(find.text('Waiting for the first DNS report.'), findsOneWidget);
+    expect(find.text('No blocked DNS queries recorded yet.'), findsOneWidget);
   });
 
   testWidgets(

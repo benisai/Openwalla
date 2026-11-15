@@ -55,7 +55,7 @@ shared helper fetches each required file from `openwrt-setup/files/` with
 Available installers:
 
 - `install-standard-apps.sh` - uhttpd-mod-ubus, nlbwmon, vnstat2, sqlite, conntrack, and qrencode
-- `install-adblock.sh` - OpenWrt adblock and LuCI adblock packages
+- `install-adblock.sh` - OpenWrt adblock, LuCI adblock, SQLite and optional DNS reports
 - `install-qos-scripts.sh` - Smart Queue/SQM package support
 - `install-banip.sh` - banIP package and country-blocking support
 - `install-pbr.sh` - PBR package support
