@@ -91,6 +91,39 @@ void main() {
 
   Finder toggle(String key) => find.byKey(ValueKey(key));
 
+  testWidgets('uses the original surface and compact theme-accent icons', (
+    tester,
+  ) async {
+    await mount(tester, _AdblockState());
+    final context = tester.element(toggle('adblock-enabled'));
+    final colors = Theme.of(context).colorScheme;
+    for (final iconData in [
+      Icons.shield_outlined,
+      Icons.playlist_add_check_rounded,
+      Icons.search_rounded,
+      Icons.analytics_outlined,
+    ]) {
+      final icon = tester.widget<Icon>(find.byIcon(iconData));
+      expect(icon.color, colors.primary);
+      expect(icon.size, 22);
+    }
+    final surface = tester
+        .widgetList<Material>(
+          find.ancestor(
+            of: toggle('adblock-enabled'),
+            matching: find.byType(Material),
+          ),
+        )
+        .firstWhere((material) => material.shape is RoundedRectangleBorder);
+    expect(surface.color, colors.surface);
+    await tester.tap(find.text('Feeds'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<CheckboxListTile>(toggle('feed-adguard')).selected,
+      isTrue,
+    );
+  });
+
   testWidgets('Reports toggle saves and enables navigation only when on', (
     tester,
   ) async {

@@ -203,14 +203,9 @@ class _AdblockScreenState extends ConsumerState<AdblockScreen> {
             key: const ValueKey('adblock-enabled'),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
-              vertical: 14,
+              vertical: 8,
             ),
-            secondary: _statusIcon(
-              Icons.shield_outlined,
-              settings.enabled
-                  ? const Color(0xFF20CF70)
-                  : colors.onSurfaceVariant,
-            ),
+            secondary: _statusIcon(Icons.shield_outlined),
             title: const Text('Block Ads'),
             subtitle: _statusText(settings.enabled),
             value: settings.enabled,
@@ -226,12 +221,9 @@ class _AdblockScreenState extends ConsumerState<AdblockScreen> {
               key: const PageStorageKey('adblock-feeds'),
               tilePadding: const EdgeInsets.symmetric(
                 horizontal: 16,
-                vertical: 14,
+                vertical: 8,
               ),
-              leading: _statusIcon(
-                Icons.playlist_add_check_rounded,
-                colors.primary,
-              ),
+              leading: _statusIcon(Icons.playlist_add_check_rounded),
               title: const Text('Feeds'),
               subtitle: Text(
                 [
@@ -246,9 +238,13 @@ class _AdblockScreenState extends ConsumerState<AdblockScreen> {
                 for (final feed in _adblockFeedOptions)
                   CheckboxListTile(
                     key: ValueKey('feed-${feed.id}'),
+                    selected: settings.selectedFeeds.contains(feed.id),
+                    selectedTileColor: colors.primary.withValues(alpha: 0.08),
                     title: Text(
                       feed.label,
-                      style: Theme.of(context).textTheme.bodyMedium,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     subtitle: Text(feed.detail),
                     value: settings.selectedFeeds.contains(feed.id),
@@ -275,9 +271,9 @@ class _AdblockScreenState extends ConsumerState<AdblockScreen> {
               key: const ValueKey('adblock-safesearch'),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 16,
-                vertical: 14,
+                vertical: 8,
               ),
-              secondary: _statusIcon(Icons.search_rounded, colors.tertiary),
+              secondary: _statusIcon(Icons.search_rounded),
               title: const Text('Safe Search'),
               subtitle: _statusText(settings.safeSearch),
               value: settings.safeSearch,
@@ -292,9 +288,9 @@ class _AdblockScreenState extends ConsumerState<AdblockScreen> {
               key: const ValueKey('adblock-reports'),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 16,
-                vertical: 14,
+                vertical: 8,
               ),
-              leading: _statusIcon(Icons.analytics_outlined, colors.primary),
+              leading: _statusIcon(Icons.analytics_outlined),
               title: const Text('Reports'),
               subtitle: _statusText(settings.reportEnabled),
               onTap: _isSaving || !settings.reportEnabled
@@ -337,17 +333,17 @@ class _AdblockScreenState extends ConsumerState<AdblockScreen> {
   Widget _controlSurface(Widget child) {
     final colors = Theme.of(context).colorScheme;
     return Material(
-      color: colors.surfaceContainer,
+      color: colors.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.5)),
+        side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.42)),
       ),
       clipBehavior: Clip.antiAlias,
       child: ListTileTheme(
         data: ListTileTheme.of(context).copyWith(
           titleTextStyle: Theme.of(context).textTheme.titleMedium?.copyWith(
             color: colors.onSurface,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w900,
           ),
           subtitleTextStyle: Theme.of(
             context,
@@ -358,23 +354,13 @@ class _AdblockScreenState extends ConsumerState<AdblockScreen> {
     );
   }
 
-  Widget _statusIcon(IconData icon, Color color) => Container(
-    width: 44,
-    height: 44,
-    alignment: Alignment.center,
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.12),
-      borderRadius: BorderRadius.circular(8),
-    ),
-    child: Icon(icon, color: color, size: 24),
-  );
+  Widget _statusIcon(IconData icon) =>
+      Icon(icon, color: Theme.of(context).colorScheme.primary, size: 22);
 
   Widget _statusText(bool enabled) => Text(
     enabled ? 'Enabled' : 'Disabled',
     style: TextStyle(
-      color: enabled
-          ? const Color(0xFF20CF70)
-          : Theme.of(context).colorScheme.onSurfaceVariant,
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
       fontWeight: FontWeight.w700,
     ),
   );
