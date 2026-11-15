@@ -63,7 +63,7 @@ class _MonthlyUsageScreenState extends ConsumerState<MonthlyUsageScreen> {
         (sum, sample) => sum + sample.uploadBytes,
       );
       return _MonthlyDailyUsage(
-        day: index + 1,
+        date: day,
         downloadBytes: downloadBytes,
         uploadBytes: uploadBytes,
         hasData: matches.isNotEmpty,
@@ -126,13 +126,14 @@ class _MonthlyUsageScreenState extends ConsumerState<MonthlyUsageScreen> {
 }
 
 class _MonthlyDailyUsage {
-  final int day;
+  final DateTime date;
+  int get day => date.day;
   final int downloadBytes;
   final int uploadBytes;
   final bool hasData;
 
   const _MonthlyDailyUsage({
-    required this.day,
+    required this.date,
     required this.downloadBytes,
     required this.uploadBytes,
     required this.hasData,
@@ -242,16 +243,6 @@ class _MonthlySummaryCard extends StatelessWidget {
       ),
     );
   }
-
-  String _formatUsageTotal(int bytes) {
-    if (bytes <= 0) return '0 B';
-    final mb = bytes / (1024 * 1024);
-    if (mb < 1024) return '${mb.toStringAsFixed(mb >= 10 ? 0 : 1)} MB';
-    final gb = mb / 1024;
-    if (gb >= 100) return '${gb.toStringAsFixed(0)} GB';
-    if (gb >= 10) return '${gb.toStringAsFixed(1)} GB';
-    return '${gb.toStringAsFixed(2)} GB';
-  }
 }
 
 class _DailyUsageChartCard extends StatelessWidget {
@@ -336,16 +327,6 @@ class _UsageAxis extends StatelessWidget {
       ),
     );
   }
-
-  String _formatUsageTotal(int bytes) {
-    if (bytes <= 0) return '0 B';
-    final mb = bytes / (1024 * 1024);
-    if (mb < 1024) return '${mb.toStringAsFixed(mb >= 10 ? 0 : 1)} MB';
-    final gb = mb / 1024;
-    if (gb >= 100) return '${gb.toStringAsFixed(0)} GB';
-    if (gb >= 10) return '${gb.toStringAsFixed(1)} GB';
-    return '${gb.toStringAsFixed(2)} GB';
-  }
 }
 
 class _DailyBars extends StatelessWidget {
@@ -383,44 +364,67 @@ class _DailyBars extends StatelessWidget {
                   )
                 : 0.0;
 
+            final dateLabel =
+                '${MaterialLocalizations.of(context).formatShortMonthDay(sample.date)}, ${sample.date.year}';
             return Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  SizedBox(
-                    height: 210,
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Container(
-                        width: 7,
-                        height: 210,
+              child: Tooltip(
+                key: ValueKey('monthly-usage-bar-${sample.day}'),
+                message: sample.hasData
+                    ? '$dateLabel\nTotal ${_formatUsageTotal(total)}\nDown ${_formatUsageTotal(sample.downloadBytes)}  Up ${_formatUsageTotal(sample.uploadBytes)}'
+                    : '$dateLabel\nNo usage data',
+                triggerMode: TooltipTriggerMode.tap,
+                showDuration: const Duration(seconds: 5),
+                preferBelow: false,
+                constraints: const BoxConstraints(maxWidth: 180),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                textStyle: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: colorScheme.onSurface,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  height: 1.28,
+                  letterSpacing: 0,
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    SizedBox(
+                      height: 210,
+                      child: Align(
                         alignment: Alignment.bottomCenter,
-                        decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest.withValues(
-                            alpha: 0.42,
+                        child: Container(
+                          width: 7,
+                          height: 210,
+                          alignment: Alignment.bottomCenter,
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceContainerHighest
+                                .withValues(alpha: 0.42),
+                            borderRadius: BorderRadius.circular(3),
                           ),
-                          borderRadius: BorderRadius.circular(3),
+                          clipBehavior: Clip.antiAlias,
+                          child: sample.hasData
+                              ? Column(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    Container(
+                                      height: uploadHeight,
+                                      color: MonthlyUsageScreen._orange,
+                                    ),
+                                    Container(
+                                      height: downloadHeight,
+                                      color: MonthlyUsageScreen._cyan,
+                                    ),
+                                  ],
+                                )
+                              : null,
                         ),
-                        clipBehavior: Clip.antiAlias,
-                        child: sample.hasData
-                            ? Column(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  Container(
-                                    height: uploadHeight,
-                                    color: MonthlyUsageScreen._orange,
-                                  ),
-                                  Container(
-                                    height: downloadHeight,
-                                    color: MonthlyUsageScreen._cyan,
-                                  ),
-                                ],
-                              )
-                            : null,
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             );
           }),
@@ -524,4 +528,14 @@ class MonthlyUsageDayAxis extends StatelessWidget {
       },
     );
   }
+}
+
+String _formatUsageTotal(int bytes) {
+  if (bytes <= 0) return '0 B';
+  final mb = bytes / (1024 * 1024);
+  if (mb < 1024) return '${mb.toStringAsFixed(mb >= 10 ? 0 : 1)} MB';
+  final gb = mb / 1024;
+  if (gb >= 100) return '${gb.toStringAsFixed(0)} GB';
+  if (gb >= 10) return '${gb.toStringAsFixed(1)} GB';
+  return '${gb.toStringAsFixed(2)} GB';
 }
