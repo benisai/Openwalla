@@ -3407,12 +3407,25 @@ class AppState extends ChangeNotifier {
 
   Future<bool> hasStatisticsSupport({BuildContext? context}) async {
     if (_reviewerModeEnabled) return true;
-    return _routerCommandSucceeds(
-      'if command -v vnstat >/dev/null 2>&1 && '
-      '(command -v nlbw >/dev/null 2>&1 || command -v nlbwmon >/dev/null 2>&1); '
-      'then echo OK; else exit 1; fi',
-      context: context,
-    );
+    if (_offlineViewing) {
+      return await readSnapshotSection('statistics-support') == true;
+    }
+    final router = selectedRouter;
+    try {
+      final supported = await _routerCommandSucceeds(
+        'if command -v vnstat >/dev/null 2>&1 && '
+        '(command -v nlbw >/dev/null 2>&1 || command -v nlbwmon >/dev/null 2>&1); '
+        'then echo OK; else exit 1; fi',
+        context: context,
+        throwOnError: true,
+      );
+      if (supported && router != null) {
+        unawaited(_saveSnapshotSection(router, 'statistics-support', true));
+      }
+      return supported;
+    } catch (_) {
+      return await readSnapshotSection('statistics-support') == true;
+    }
   }
 
   Future<bool> hasParentalControlsSupport({BuildContext? context}) async {
@@ -11639,6 +11652,24 @@ done | sort -nr | head -n ''' +
 
     final router = _routerService?.selectedRouter;
     final sysauth = _authService?.sysauth;
+    final section = 'statistics-top-devices:$safeLimit';
+    Future<List<NlbwDeviceUsage>> savedRows() async {
+      final saved = await readSnapshotSection(section);
+      if (saved is! List) return const [];
+      return saved
+          .whereType<Map>()
+          .map(
+            (row) => NlbwDeviceUsage(
+              mac: row['mac']?.toString() ?? '',
+              label: row['label']?.toString() ?? 'Unknown device',
+              downloadBytes: int.tryParse('${row['downloadBytes']}') ?? 0,
+              uploadBytes: int.tryParse('${row['uploadBytes']}') ?? 0,
+            ),
+          )
+          .toList();
+    }
+
+    if (_offlineViewing) return savedRows();
     if (router == null || sysauth == null || _apiService == null) {
       return const [];
     }
@@ -11667,8 +11698,8 @@ done | sort -nr | head -n ''' +
         },
         context: context,
       );
-      final rows = _parseNlbwDeviceUsage(_commandOutput(result));
-      if (rows.isEmpty) return rows;
+      final rows = _parseNlbwDeviceUsage(_snapshotCommandOutput(result));
+      if (rows.isEmpty) return savedRows();
       final deviceNames = await fetchDeviceNameMaps();
       final namesByMac = <String, String>{...deviceNames.$1};
       final dhcpLeases =
@@ -11682,7 +11713,7 @@ done | sort -nr | head -n ''' +
           namesByMac.putIfAbsent(mac, () => hostname);
         }
       }
-      return rows.map((row) {
+      final namedRows = rows.map((row) {
         final name = namesByMac[_normalizeMacAddress(row.mac)];
         return NlbwDeviceUsage(
           mac: row.mac,
@@ -11691,10 +11722,22 @@ done | sort -nr | head -n ''' +
           uploadBytes: row.uploadBytes,
         );
       }).toList();
+      unawaited(
+        _saveSnapshotSection(router, section, [
+          for (final row in namedRows)
+            {
+              'mac': row.mac,
+              'label': row.label,
+              'downloadBytes': row.downloadBytes,
+              'uploadBytes': row.uploadBytes,
+            },
+        ]),
+      );
+      return namedRows;
     } catch (e, stack) {
       Logger.warning('Optional nlbw top devices fetch failed: $e');
       Logger.debug('Optional nlbw top devices stack: $stack');
-      return const [];
+      return savedRows();
     }
   }
 
@@ -11725,6 +11768,23 @@ done | sort -nr | head -n ''' +
 
     final router = _routerService?.selectedRouter;
     final sysauth = _authService?.sysauth;
+    final section = 'statistics-protocols:$safeLimit';
+    Future<List<NlbwProtocolUsage>> savedRows() async {
+      final saved = await readSnapshotSection(section);
+      if (saved is! List) return const [];
+      return saved
+          .whereType<Map>()
+          .map(
+            (row) => NlbwProtocolUsage(
+              protocol: row['protocol']?.toString() ?? '',
+              downloadBytes: int.tryParse('${row['downloadBytes']}') ?? 0,
+              uploadBytes: int.tryParse('${row['uploadBytes']}') ?? 0,
+            ),
+          )
+          .toList();
+    }
+
+    if (_offlineViewing) return savedRows();
     if (router == null || sysauth == null || _apiService == null) {
       return const [];
     }
@@ -11758,15 +11818,27 @@ done | sort -nr | head -n ''' +
           },
           context: context,
         );
-        final rows = _parseNlbwProtocolUsage(_commandOutput(result));
-        if (rows.isNotEmpty) return rows;
+        final rows = _parseNlbwProtocolUsage(_snapshotCommandOutput(result));
+        if (rows.isNotEmpty) {
+          unawaited(
+            _saveSnapshotSection(router, section, [
+              for (final row in rows)
+                {
+                  'protocol': row.protocol,
+                  'downloadBytes': row.downloadBytes,
+                  'uploadBytes': row.uploadBytes,
+                },
+            ]),
+          );
+          return rows;
+        }
       } catch (e, stack) {
         Logger.debug('Optional nlbw protocol group $group failed: $e');
         Logger.debug('Optional nlbw protocol stack: $stack');
       }
     }
 
-    return const [];
+    return savedRows();
   }
 
   List<NlbwDeviceUsage> _parseNlbwDeviceUsage(String output) {
@@ -12288,8 +12360,28 @@ done | sort -nr | head -n ''' +
     );
     if (_reviewerModeEnabled) return defaults;
 
+    final router = selectedRouter;
+    final saved = await readSnapshotSection('monthly-usage-settings');
+    final cached = saved is Map
+        ? MonthlyUsageSettings(
+            monthStartDay:
+                (int.tryParse('${saved['monthStartDay']}') ??
+                        defaults.monthStartDay)
+                    .clamp(1, 31),
+            interfaceName:
+                saved['interfaceName']?.toString() ?? defaults.interfaceName,
+            monthlyLimitGb:
+                (int.tryParse('${saved['monthlyLimitGb']}') ??
+                        defaults.monthlyLimitGb)
+                    .clamp(0, 100000),
+          )
+        : defaults;
+    if (_offlineViewing) return cached;
+
     try {
-      final values = await _fetchOpenwallaUciValues(context: context);
+      final values = await _fetchOpenwallaUciValues(
+        context: context?.mounted == true ? context : null,
+      );
       final dashboard = values is Map ? values['dashboard'] : null;
       if (dashboard is Map) {
         final monthStartDay =
@@ -12299,20 +12391,30 @@ done | sort -nr | head -n ''' +
         final monthlyLimitGb =
             int.tryParse(dashboard['monthly_limit_gb']?.toString() ?? '') ??
             defaults.monthlyLimitGb;
-        return MonthlyUsageSettings(
+        final settings = MonthlyUsageSettings(
           monthStartDay: monthStartDay.clamp(1, 31),
           interfaceName: interfaceName?.isNotEmpty == true
               ? interfaceName!
               : defaults.interfaceName,
           monthlyLimitGb: monthlyLimitGb.clamp(0, 100000),
         );
+        if (router != null) {
+          unawaited(
+            _saveSnapshotSection(router, 'monthly-usage-settings', {
+              'monthStartDay': settings.monthStartDay,
+              'interfaceName': settings.interfaceName,
+              'monthlyLimitGb': settings.monthlyLimitGb,
+            }),
+          );
+        }
+        return settings;
       }
     } catch (e, stack) {
       Logger.warning('Failed to fetch monthly usage settings: $e');
       Logger.debug('Monthly usage settings stack: $stack');
     }
 
-    return defaults;
+    return cached;
   }
 
   Future<void> saveMonthlyUsageSettings(
@@ -12345,6 +12447,13 @@ done | sort -nr | head -n ''' +
       sysauth,
       router.useHttps,
       config: 'openwalla',
+    );
+    unawaited(
+      _saveSnapshotSection(router, 'monthly-usage-settings', {
+        'monthStartDay': settings.monthStartDay.clamp(1, 31),
+        'interfaceName': settings.interfaceName,
+        'monthlyLimitGb': settings.monthlyLimitGb.clamp(0, 100000),
+      }),
     );
     clearStatisticsPreload();
   }

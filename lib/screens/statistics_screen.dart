@@ -67,6 +67,9 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   @override
   Widget build(BuildContext context) {
     final appState = ref.read(appStateProvider);
+    final offline = ref.watch(
+      appStateProvider.select((state) => state.offlineViewing),
+    );
     final isInitialDashboardLoading = ref.watch(
       appStateProvider.select(
         (state) => state.isDashboardLoading && state.dashboardData == null,
@@ -93,7 +96,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
           IconButton(
             tooltip: 'Usage settings',
             icon: const Icon(Icons.settings_rounded),
-            onPressed: _openUsageSettings,
+            onPressed: offline ? null : _openUsageSettings,
           ),
         ],
       ),
@@ -188,6 +191,8 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
 
   Future<bool> _statisticsSupport() {
     final appState = ref.read(appStateProvider);
+    // Offline data availability does not depend on a live package probe.
+    if (appState.offlineViewing) return Future.value(true);
     final preload = appState.statisticsPreloadData;
     if (preload != null) {
       _bindPreloadData(preload);
@@ -626,7 +631,11 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                   );
                 }
                 if (rows.isEmpty) {
-                  return _emptyStatText('No nlbwmon device usage yet');
+                  return _emptyStatText(
+                    ref.read(appStateProvider).offlineViewing
+                        ? 'No saved device usage'
+                        : 'No nlbwmon device usage yet',
+                  );
                 }
 
                 final maxBytes = rows.map((row) => row.totalBytes).reduce(max);
@@ -686,7 +695,11 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                   );
                 }
                 if (rows.isEmpty) {
-                  return _emptyStatText('No nlbwmon protocol usage yet');
+                  return _emptyStatText(
+                    ref.read(appStateProvider).offlineViewing
+                        ? 'No saved activity analysis'
+                        : 'No nlbwmon protocol usage yet',
+                  );
                 }
 
                 final totalBytes = rows.fold<int>(
