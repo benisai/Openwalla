@@ -9,6 +9,7 @@ import 'package:openwalla/models/system_resource_metrics.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
 import 'package:openwalla/widgets/offline_snapshot_banner.dart';
 import 'package:openwalla/widgets/dashboard_quarantine_banner.dart';
+import 'package:openwalla/widgets/dashboard_network_panel.dart';
 import 'package:openwalla/widgets/luci_animation_system.dart';
 import 'package:openwalla/models/dashboard_preferences.dart';
 import 'package:openwalla/screens/adblock_screen.dart';
@@ -1983,6 +1984,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                 _buildDashboardFlowsCard(appState),
               ],
               const SizedBox(height: 12),
+              _buildOpenwallaCard(
+                onTap: () => _openNetworkPage(wirelessOnly: false),
+                child: DashboardNetworkPanel(
+                  data: appState.dashboardData!,
+                  onNetwork: () => _openNetworkPage(wirelessOnly: false),
+                  onWifi: () => _openNetworkPage(wirelessOnly: true),
+                ),
+              ),
+              const SizedBox(height: 12),
               _buildDashboardBottomCards(),
               const SizedBox(height: 12),
               // Extra padding to ensure scroll behavior for RefreshIndicator
@@ -2042,6 +2052,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                                 const SizedBox(height: 12),
                                 _buildDashboardFlowsCard(appState),
                               ],
+                              const SizedBox(height: 12),
+                              _buildOpenwallaCard(
+                                onTap: () =>
+                                    _openNetworkPage(wirelessOnly: false),
+                                child: DashboardNetworkPanel(
+                                  data: appState.dashboardData!,
+                                  onNetwork: () =>
+                                      _openNetworkPage(wirelessOnly: false),
+                                  onWifi: () =>
+                                      _openNetworkPage(wirelessOnly: true),
+                                ),
+                              ),
                               const SizedBox(height: 12),
                               _buildDashboardBottomCards(),
                               const SizedBox(height: 24),
