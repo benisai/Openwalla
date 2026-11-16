@@ -3,19 +3,38 @@ import 'package:openwalla/models/dashboard_preferences.dart';
 
 void main() {
   test(
-    'Network is removed from default and previously saved shortcut orders',
+    'Network and Wi-Fi are removed from default and saved shortcut orders',
     () {
       expect(
         DashboardPreferences.defaultShortcutOrder,
         isNot(contains('network')),
       );
       final restored = DashboardPreferences.fromJson({
-        'shortcutOrder': ['network', 'wifi', 'dns'],
+        'shortcutOrder': ['network', 'wifi', 'routes', 'dns'],
       });
       expect(restored.shortcutOrder, isNot(contains('network')));
-      expect(restored.shortcutOrder.take(2), ['wifi', 'dns']);
+      expect(restored.shortcutOrder, isNot(contains('wifi')));
+      expect(restored.shortcutOrder.take(2), ['routes', 'dns']);
     },
   );
+  test('Network panel visibility persists independently of Wi-Fi', () {
+    expect(DashboardPreferences.fromJson({}).showNetworkPanel, isTrue);
+    final hidden = DashboardPreferences().copyWith(
+      showNetworkPanel: false,
+      showWifiShortcut: false,
+    );
+    final restored = DashboardPreferences.fromJson(hidden.toJson());
+    expect(restored.showNetworkPanel, isFalse);
+    expect(restored.showWifiShortcut, isFalse);
+    expect(restored.copyWith(showNetworkPanel: true).showWifiShortcut, isFalse);
+    expect(restored.copyWith(showWifiShortcut: true).showNetworkPanel, isFalse);
+    expect(
+      DashboardPreferences.fromJson({
+        'showWifiShortcut': false,
+      }).showWifiShortcut,
+      isFalse,
+    );
+  });
   for (final count in [3, 6, 9]) {
     test('$count shortcut icons persist through copy and JSON', () {
       final updated = DashboardPreferences().copyWith(

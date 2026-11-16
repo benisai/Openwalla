@@ -596,6 +596,34 @@ class _RouterDashboardSettingsScreenState
           child: Column(
             children: [
               _buildCardVisibilitySwitch(
+                title: 'Network Panel',
+                subtitle: 'Show the network overview on the dashboard',
+                icon: Icons.public_rounded,
+                value: _preferences.showNetworkPanel,
+                onChanged: (value) {
+                  setState(() {
+                    _preferences = _preferences.copyWith(
+                      showNetworkPanel: value,
+                    );
+                  });
+                  _onPreferenceChanged();
+                },
+              ),
+              _buildCardVisibilitySwitch(
+                title: 'Wi-Fi in Network Panel',
+                subtitle: 'Show Wi-Fi in the dashboard Network panel',
+                icon: Icons.wifi_rounded,
+                value: _preferences.showWifiShortcut,
+                onChanged: (value) {
+                  setState(() {
+                    _preferences = _preferences.copyWith(
+                      showWifiShortcut: value,
+                    );
+                  });
+                  _onPreferenceChanged();
+                },
+              ),
+              _buildCardVisibilitySwitch(
                 title: 'Network Performance',
                 subtitle: 'Show the latency timeline card',
                 icon: Icons.timeline_rounded,
@@ -762,20 +790,6 @@ class _RouterDashboardSettingsScreenState
                 controlAffinity: ListTileControlAffinity.leading,
               ),
               const Divider(height: 1),
-              _buildCardVisibilitySwitch(
-                title: 'Wi-Fi Shortcut',
-                subtitle: 'Show the Wi-Fi shortcut on the dashboard',
-                icon: Icons.wifi_rounded,
-                value: _preferences.showWifiShortcut,
-                onChanged: (value) {
-                  setState(() {
-                    _preferences = _preferences.copyWith(
-                      showWifiShortcut: value,
-                    );
-                  });
-                  _onPreferenceChanged();
-                },
-              ),
               _buildCardVisibilitySwitch(
                 title: 'Smart Queue Shortcut',
                 subtitle: 'Show the SQM shortcut on the dashboard',

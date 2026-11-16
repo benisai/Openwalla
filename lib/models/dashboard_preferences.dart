@@ -8,9 +8,11 @@ class DashboardPreferences {
   final String? primaryThroughputInterface;
   final bool showAllThroughput;
   final bool showNetworkPerformanceCard;
+  final bool showNetworkPanel;
   final bool showFlowsCard;
   final bool showTunnelPage;
   final bool showStatisticsTab;
+  // Keep the saved key compatible; this now controls Wi-Fi in the Network panel.
   final bool showWifiShortcut;
   final bool showSmartQueueShortcut;
   final bool showAdblockShortcut;
@@ -40,6 +42,7 @@ class DashboardPreferences {
     this.primaryThroughputInterface,
     this.showAllThroughput = true,
     this.showNetworkPerformanceCard = false,
+    this.showNetworkPanel = true,
     this.showFlowsCard = false,
     this.showTunnelPage = false,
     this.showStatisticsTab = false,
@@ -69,7 +72,6 @@ class DashboardPreferences {
 
   static const defaultShortcutOrder = [
     'dns',
-    'wifi',
     'routes',
     'smart_queue',
     'adblock',
@@ -93,6 +95,7 @@ class DashboardPreferences {
     String? primaryThroughputInterface,
     bool? showAllThroughput,
     bool? showNetworkPerformanceCard,
+    bool? showNetworkPanel,
     bool? showFlowsCard,
     bool? showTunnelPage,
     bool? showStatisticsTab,
@@ -133,6 +136,7 @@ class DashboardPreferences {
       showAllThroughput: showAllThroughput ?? this.showAllThroughput,
       showNetworkPerformanceCard:
           showNetworkPerformanceCard ?? this.showNetworkPerformanceCard,
+      showNetworkPanel: showNetworkPanel ?? this.showNetworkPanel,
       showFlowsCard: showFlowsCard ?? this.showFlowsCard,
       showTunnelPage: showTunnelPage ?? this.showTunnelPage,
       showStatisticsTab: showStatisticsTab ?? this.showStatisticsTab,
@@ -201,6 +205,7 @@ class DashboardPreferences {
     'primaryThroughputInterface': primaryThroughputInterface,
     'showAllThroughput': showAllThroughput,
     'showNetworkPerformanceCard': showNetworkPerformanceCard,
+    'showNetworkPanel': showNetworkPanel,
     'showFlowsCard': showFlowsCard,
     'showTunnelPage': showTunnelPage,
     'showStatisticsTab': showStatisticsTab,
@@ -241,6 +246,7 @@ class DashboardPreferences {
       primaryThroughputInterface: json['primaryThroughputInterface'],
       showAllThroughput: json['showAllThroughput'] ?? true,
       showNetworkPerformanceCard: json['showNetworkPerformanceCard'] ?? false,
+      showNetworkPanel: json['showNetworkPanel'] ?? true,
       showFlowsCard: json['showFlowsCard'] ?? false,
       showTunnelPage: json['showTunnelPage'] == true,
       showStatisticsTab: json['showStatisticsTab'] ?? false,

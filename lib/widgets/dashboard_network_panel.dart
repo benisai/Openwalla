@@ -8,11 +8,13 @@ class DashboardNetworkPanel extends StatelessWidget {
     required this.data,
     required this.onNetwork,
     required this.onWifi,
+    this.showWifi = true,
   });
 
   final Map<String, dynamic> data;
   final VoidCallback onNetwork;
   final VoidCallback onWifi;
+  final bool showWifi;
 
   static const _cyan = Color(0xFF18AEEA);
   static const _green = Color(0xFF20CF70);
@@ -214,23 +216,25 @@ class DashboardNetworkPanel extends StatelessWidget {
             onTap: onNetwork,
           ),
         ),
-        Container(
-          width: 1,
-          height: 32,
-          margin: const EdgeInsets.symmetric(horizontal: 8),
-          color: colors.outlineVariant.withValues(alpha: 0.5),
-        ),
-        Expanded(
-          flex: 2,
-          child: _metric(
-            context,
-            icon: Icons.wifi_rounded,
-            count: _wifiCount,
-            label: 'Wi-Fi',
-            tooltip: 'Active Wi-Fi access points',
-            onTap: onWifi,
+        if (showWifi) ...[
+          Container(
+            width: 1,
+            height: 32,
+            margin: const EdgeInsets.symmetric(horizontal: 8),
+            color: colors.outlineVariant.withValues(alpha: 0.5),
           ),
-        ),
+          Expanded(
+            flex: 2,
+            child: _metric(
+              context,
+              icon: Icons.wifi_rounded,
+              count: _wifiCount,
+              label: 'Wi-Fi',
+              tooltip: 'Active Wi-Fi access points',
+              onTap: onWifi,
+            ),
+          ),
+        ],
       ],
     );
   }

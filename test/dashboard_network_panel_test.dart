@@ -91,6 +91,7 @@ void main() {
     bool dark = true,
     VoidCallback? onNetwork,
     VoidCallback? onWifi,
+    bool showWifi = true,
   }) async {
     tester.view.physicalSize = Size(width, 400);
     tester.view.devicePixelRatio = 1;
@@ -127,6 +128,7 @@ void main() {
                         data: data,
                         onNetwork: onNetwork ?? () {},
                         onWifi: onWifi ?? () {},
+                        showWifi: showWifi,
                       ),
                     ),
                   ),
@@ -170,6 +172,35 @@ void main() {
     expect(network, 2);
     expect(wifi, 1);
   });
+  testWidgets(
+    'hidden Wi-Fi removes its icon and count without hiding Ethernet',
+    (tester) async {
+      await mount(tester, sample(), width: 320, scale: 1.5, showWifi: false);
+      expect(
+        find.byKey(const ValueKey('dashboard-network-Wi-Fi')),
+        findsNothing,
+      );
+      expect(find.byTooltip('Active Wi-Fi access points'), findsNothing);
+      expect(find.byIcon(Icons.wifi_rounded), findsNothing);
+      expect(find.text('4 Networks'), findsOneWidget);
+      expect(find.byKey(const ValueKey('network-port-lan1')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      final path = Platform.environment['NETWORK_PANEL_HIDDEN_SCREENSHOT'];
+      if (path != null) {
+        final boundary =
+            captureKey.currentContext!.findRenderObject()!
+                as RenderRepaintBoundary;
+        await tester.runAsync(() async {
+          final image = await boundary.toImage(pixelRatio: 2);
+          final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+          await File(path).writeAsBytes(bytes!.buffer.asUint8List());
+          image.dispose();
+        });
+      }
+      await mount(tester, sample(), showWifi: true);
+      expect(find.text('2 Wi-Fi'), findsOneWidget);
+    },
+  );
   for (final count in [3, 4, 5, 8]) {
     testWidgets(
       '$count physical ports show at most four icons and an accurate overflow',

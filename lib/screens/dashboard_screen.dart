@@ -1207,14 +1207,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
               );
             },
           ),
-          if (preferences.showWifiShortcut)
-            _DashboardShortcutData(
-              id: 'wifi',
-              label: 'Wi-Fi',
-              icon: Icons.wifi_rounded,
-              color: _shortcutDarkBlue,
-              onTap: () => _openNetworkPage(wirelessOnly: true),
-            ),
           _DashboardShortcutData(
             id: 'routes',
             label: 'Routing',
@@ -1977,15 +1969,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                 _buildDashboardFlowsCard(appState),
               ],
               const SizedBox(height: 12),
-              _buildOpenwallaCard(
-                onTap: () => _openNetworkPage(wirelessOnly: false),
-                child: DashboardNetworkPanel(
-                  data: appState.dashboardData!,
-                  onNetwork: () => _openNetworkPage(wirelessOnly: false),
-                  onWifi: () => _openNetworkPage(wirelessOnly: true),
+              if (preferences.showNetworkPanel) ...[
+                _buildOpenwallaCard(
+                  onTap: () => _openNetworkPage(wirelessOnly: false),
+                  child: DashboardNetworkPanel(
+                    data: appState.dashboardData!,
+                    showWifi: preferences.showWifiShortcut,
+                    onNetwork: () => _openNetworkPage(wirelessOnly: false),
+                    onWifi: () => _openNetworkPage(wirelessOnly: true),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
+                const SizedBox(height: 12),
+              ],
               _buildDashboardBottomCards(),
               const SizedBox(height: 12),
               // Extra padding to ensure scroll behavior for RefreshIndicator
@@ -2046,18 +2041,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                                 _buildDashboardFlowsCard(appState),
                               ],
                               const SizedBox(height: 12),
-                              _buildOpenwallaCard(
-                                onTap: () =>
-                                    _openNetworkPage(wirelessOnly: false),
-                                child: DashboardNetworkPanel(
-                                  data: appState.dashboardData!,
-                                  onNetwork: () =>
+                              if (preferences.showNetworkPanel) ...[
+                                _buildOpenwallaCard(
+                                  onTap: () =>
                                       _openNetworkPage(wirelessOnly: false),
-                                  onWifi: () =>
-                                      _openNetworkPage(wirelessOnly: true),
+                                  child: DashboardNetworkPanel(
+                                    data: appState.dashboardData!,
+                                    showWifi: preferences.showWifiShortcut,
+                                    onNetwork: () =>
+                                        _openNetworkPage(wirelessOnly: false),
+                                    onWifi: () =>
+                                        _openNetworkPage(wirelessOnly: true),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 12),
+                                const SizedBox(height: 12),
+                              ],
                               _buildDashboardBottomCards(),
                               const SizedBox(height: 24),
                             ],
