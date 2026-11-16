@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/main.dart';
+import 'package:openwalla/models/usage_chart_unit.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
 
 class MonthlyUsageScreen extends ConsumerStatefulWidget {
   final String interfaceName;
   final int monthlyLimitGb;
+  final UsageChartUnit chartUnit;
 
   const MonthlyUsageScreen({
     super.key,
     required this.interfaceName,
     this.monthlyLimitGb = 0,
+    this.chartUnit = UsageChartUnit.gb,
   });
 
   static const Color _cyan = Color(0xFF18AEEA);
@@ -107,7 +110,10 @@ class _MonthlyUsageScreenState extends ConsumerState<MonthlyUsageScreen> {
                   progress: _monthlyProgress(monthlyTotal, totalDays),
                 ),
                 const SizedBox(height: 14),
-                _DailyUsageChartCard(samples: samples),
+                _DailyUsageChartCard(
+                  samples: samples,
+                  chartUnit: widget.chartUnit,
+                ),
               ],
             );
           },
@@ -247,8 +253,9 @@ class _MonthlySummaryCard extends StatelessWidget {
 
 class _DailyUsageChartCard extends StatelessWidget {
   final List<_MonthlyDailyUsage> samples;
+  final UsageChartUnit chartUnit;
 
-  const _DailyUsageChartCard({required this.samples});
+  const _DailyUsageChartCard({required this.samples, required this.chartUnit});
 
   @override
   Widget build(BuildContext context) {
@@ -262,13 +269,24 @@ class _DailyUsageChartCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Usage Per Day',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0,
-            ),
+          Wrap(
+            spacing: 16,
+            runSpacing: 4,
+            alignment: WrapAlignment.spaceBetween,
+            children: [
+              Text(
+                'Usage Per Day',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0,
+                ),
+              ),
+              Text(
+                'Values in ${chartUnit.label}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
           ),
           const SizedBox(height: 18),
           SizedBox(
@@ -276,7 +294,7 @@ class _DailyUsageChartCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                _UsageAxis(maxTotal: maxTotal),
+                _UsageAxis(maxTotal: maxTotal, chartUnit: chartUnit),
                 const SizedBox(width: 12),
                 Expanded(
                   child: _DailyBars(samples: samples, maxTotal: maxTotal),
@@ -292,18 +310,19 @@ class _DailyUsageChartCard extends StatelessWidget {
 
 class _UsageAxis extends StatelessWidget {
   final int maxTotal;
+  final UsageChartUnit chartUnit;
 
-  const _UsageAxis({required this.maxTotal});
+  const _UsageAxis({required this.maxTotal, required this.chartUnit});
 
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme.onSurfaceVariant;
     final labels = [
-      _formatUsageTotal(maxTotal),
-      _formatUsageTotal((maxTotal * 0.75).round()),
-      _formatUsageTotal((maxTotal * 0.5).round()),
-      _formatUsageTotal((maxTotal * 0.25).round()),
-      '0 B',
+      chartUnit.format(maxTotal),
+      chartUnit.format((maxTotal * 0.75).round()),
+      chartUnit.format((maxTotal * 0.5).round()),
+      chartUnit.format((maxTotal * 0.25).round()),
+      '0',
     ];
 
     return SizedBox(
@@ -313,13 +332,16 @@ class _UsageAxis extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: labels
             .map(
-              (label) => Text(
-                label,
-                textAlign: TextAlign.right,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: color.withValues(alpha: 0.76),
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0,
+              (label) => FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  textAlign: TextAlign.right,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: color.withValues(alpha: 0.76),
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0,
+                  ),
                 ),
               ),
             )

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart' hide Router;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openwalla/models/router.dart';
+import 'package:openwalla/models/usage_chart_unit.dart';
 import 'package:openwalla/services/interfaces/api_service_interface.dart';
 import 'package:openwalla/services/interfaces/auth_service_interface.dart';
 import 'package:openwalla/services/router_access_guard.dart';
@@ -29,6 +30,7 @@ class _Auth implements IAuthService {
 
 class _Api implements IApiService {
   int calls = 0;
+  Map<String, String>? savedSettings;
   bool fail = false;
   bool toolsMissing = false;
   @override
@@ -54,6 +56,7 @@ class _Api implements IApiService {
               'month_start_day': '5',
               'vnstat_interface': 'wan',
               'monthly_limit_gb': '250',
+              'usage_chart_unit': 'mb',
             },
           },
         },
@@ -102,6 +105,29 @@ class _Api implements IApiService {
       {'code': 0, 'stdout': output},
     ];
   }
+
+  @override
+  Future<dynamic> uciSet(
+    String ip,
+    String auth,
+    bool https, {
+    required String config,
+    required String section,
+    required Map<String, String> values,
+    BuildContext? context,
+  }) async {
+    savedSettings = values;
+    return [0];
+  }
+
+  @override
+  Future<dynamic> uciCommit(
+    String ip,
+    String auth,
+    bool https, {
+    required String config,
+    BuildContext? context,
+  }) async => [0];
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -177,6 +203,7 @@ void main() {
       expect(settings.monthStartDay, 5);
       expect(settings.monthlyLimitGb, 250);
       expect(settings.interfaceName, 'wan');
+      expect(settings.chartUnit, UsageChartUnit.mb);
       final device = (await state.fetchNlbwTopDevices()).single;
       expect(device.label, 'Phone');
       expect(device.totalBytes, 1536);
@@ -193,6 +220,24 @@ void main() {
       expect(api.calls, 0);
     },
   );
+  test('saving units writes UCI and retains the choice offline', () async {
+    await state.saveMonthlyUsageSettings(
+      const MonthlyUsageSettings(
+        monthStartDay: 5,
+        interfaceName: 'wan',
+        monthlyLimitGb: 250,
+        chartUnit: UsageChartUnit.tb,
+      ),
+    );
+    expect(api.savedSettings?['usage_chart_unit'], 'tb');
+    expect(api.savedSettings?['monthly_limit_gb'], '250');
+    await cache.waitForPendingWrites('router-a');
+    expect(await state.openOfflineSnapshot(), isTrue);
+    expect(
+      (await state.fetchMonthlyUsageSettings()).chartUnit,
+      UsageChartUnit.tb,
+    );
+  });
   test(
     'connection failures preserve the last successful Statistics snapshots',
     () async {

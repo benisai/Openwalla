@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/design/luci_design_system.dart';
 import 'package:openwalla/main.dart';
+import 'package:openwalla/models/usage_chart_unit.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
 import 'package:openwalla/widgets/luci_toast.dart';
@@ -21,6 +22,7 @@ class _UsageSettingsScreenState extends ConsumerState<UsageSettingsScreen> {
   final _monthlyLimitController = TextEditingController();
   DateTime _startDate = DateTime.now();
   String _selectedInterface = _defaultInterface;
+  UsageChartUnit _chartUnit = UsageChartUnit.gb;
   bool _isLoading = true;
   bool _isSaving = false;
 
@@ -50,6 +52,7 @@ class _UsageSettingsScreenState extends ConsumerState<UsageSettingsScreen> {
     setState(() {
       _interfaces = interfaces;
       _selectedInterface = selectedInterface;
+      _chartUnit = settings.chartUnit;
       _startDate = DateTime(now.year, now.month, safeDay);
       _monthlyLimitController.text = settings.monthlyLimitGb <= 0
           ? ''
@@ -87,6 +90,7 @@ class _UsageSettingsScreenState extends ConsumerState<UsageSettingsScreen> {
             MonthlyUsageSettings(
               monthStartDay: _startDate.day,
               interfaceName: _selectedInterface,
+              chartUnit: _chartUnit,
               monthlyLimitGb:
                   int.tryParse(_monthlyLimitController.text.trim()) ?? 0,
             ),
@@ -146,9 +150,11 @@ class _UsageSettingsScreenState extends ConsumerState<UsageSettingsScreen> {
                               color: Theme.of(context).colorScheme.primary,
                             ),
                             const SizedBox(width: 10),
-                            Text(
-                              'vnStat Usage Source',
-                              style: LuciTextStyles.cardTitle(context),
+                            Expanded(
+                              child: Text(
+                                'vnStat Usage Source',
+                                style: LuciTextStyles.cardTitle(context),
+                              ),
                             ),
                           ],
                         ),
@@ -218,6 +224,31 @@ class _UsageSettingsScreenState extends ConsumerState<UsageSettingsScreen> {
                             prefixIcon: Icon(Icons.data_usage_rounded),
                             border: OutlineInputBorder(),
                           ),
+                        ),
+                        const SizedBox(height: 14),
+                        DropdownButtonFormField<UsageChartUnit>(
+                          key: const ValueKey('usage-chart-unit'),
+                          isExpanded: true,
+                          initialValue: _chartUnit,
+                          decoration: const InputDecoration(
+                            labelText: 'Chart Units',
+                            prefixIcon: Icon(Icons.straighten_rounded),
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            for (final unit in UsageChartUnit.values)
+                              DropdownMenuItem(
+                                value: unit,
+                                child: Text(unit.label),
+                              ),
+                          ],
+                          onChanged: _isSaving
+                              ? null
+                              : (value) {
+                                  if (value != null) {
+                                    setState(() => _chartUnit = value);
+                                  }
+                                },
                         ),
                       ],
                     ),

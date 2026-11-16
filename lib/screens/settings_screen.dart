@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/main.dart';
+import 'package:openwalla/models/usage_chart_unit.dart';
 import 'package:openwalla/design/luci_design_system.dart';
 import 'package:openwalla/state/app_state.dart';
 import 'package:openwalla/widgets/luci_app_bar.dart';
@@ -766,6 +767,7 @@ class _MonthlyUsageSettingsScreenState
   final _monthlyLimitController = TextEditingController();
   DateTime _startDate = DateTime.now();
   String _selectedInterface = _defaultInterface;
+  UsageChartUnit _chartUnit = UsageChartUnit.gb;
   bool _isLoading = true;
   bool _isSaving = false;
 
@@ -793,6 +795,7 @@ class _MonthlyUsageSettingsScreenState
     setState(() {
       _interfaces = interfaces;
       _selectedInterface = selectedInterface;
+      _chartUnit = settings.chartUnit;
       final now = DateTime.now();
       final safeDay = settings.monthStartDay.clamp(1, 28);
       _startDate = DateTime(now.year, now.month, safeDay);
@@ -834,6 +837,7 @@ class _MonthlyUsageSettingsScreenState
             MonthlyUsageSettings(
               monthStartDay: _startDate.day,
               interfaceName: _selectedInterface,
+              chartUnit: _chartUnit,
               monthlyLimitGb:
                   int.tryParse(_monthlyLimitController.text.trim()) ?? 0,
             ),

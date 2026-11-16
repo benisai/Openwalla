@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openwalla/main.dart';
 import 'package:openwalla/screens/monthly_usage_screen.dart';
+import 'package:openwalla/models/usage_chart_unit.dart';
 import 'package:openwalla/screens/router_setup_screen.dart';
 import 'package:openwalla/screens/usage_settings_screen.dart';
 import 'package:openwalla/state/app_state.dart';
@@ -150,9 +151,13 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                           _buildMonthlyUsageCard(
                             interfaceName,
                             monthlyLimitGb: settings?.monthlyLimitGb ?? 0,
+                            chartUnit: settings?.chartUnit ?? UsageChartUnit.gb,
                           ),
                           const SizedBox(height: 12),
-                          _buildUsageCard(interfaceName),
+                          _buildUsageCard(
+                            interfaceName,
+                            settings?.chartUnit ?? UsageChartUnit.gb,
+                          ),
                           const SizedBox(height: 12),
                           _buildTopDevicesCard(),
                           const SizedBox(height: 12),
@@ -375,10 +380,15 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     }
   }
 
-  void _openUsageSettings() {
-    Navigator.of(context).push(
+  Future<void> _openUsageSettings() async {
+    await Navigator.of(context).push(
       MaterialPageRoute(builder: (context) => const UsageSettingsScreen()),
     );
+    if (!mounted) return;
+    setState(() {
+      _monthlyUsageSettingsFuture = null;
+      _clearPreloadBindings();
+    });
   }
 
   void _backToDashboard() {
@@ -438,7 +448,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     );
   }
 
-  Widget _buildUsageCard(String interfaceName) {
+  Widget _buildUsageCard(String interfaceName, UsageChartUnit chartUnit) {
     return _card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -502,24 +512,37 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
               const SizedBox(width: 8),
               Expanded(
                 flex: 4,
-                child: Text(
-                  _usageSubtitle(_usageRange),
-                  textAlign: TextAlign.right,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurfaceVariant.withValues(alpha: 0.78),
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      _usageSubtitle(_usageRange),
+                      textAlign: TextAlign.right,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.78),
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                    Text(
+                      'Values in ${chartUnit.label}',
+                      key: const ValueKey('usage-chart-unit-label'),
+                      textAlign: TextAlign.right,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          _usageRangePager(interfaceName),
+          _usageRangePager(interfaceName, chartUnit),
         ],
       ),
     );
@@ -528,6 +551,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   Widget _buildMonthlyUsageCard(
     String interfaceName, {
     required int monthlyLimitGb,
+    required UsageChartUnit chartUnit,
   }) {
     return _card(
       onTap: () {
@@ -536,6 +560,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
             builder: (context) => MonthlyUsageScreen(
               interfaceName: interfaceName,
               monthlyLimitGb: monthlyLimitGb,
+              chartUnit: chartUnit,
             ),
           ),
         );
@@ -545,8 +570,10 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
         children: [
           _titleRow('$interfaceName Monthly Usage', trailing: _subtleArrow()),
           const SizedBox(height: 20),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.end,
             children: [
               FutureBuilder<List<VnstatUsageSample>>(
                 future: _monthlyUsageFuture(interfaceName),
@@ -555,8 +582,10 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                     snapshot.data ?? const [],
                     monthlyLimitGb: monthlyLimitGb,
                   );
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                  return Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.end,
                     children: [
                       Text(
                         _formatUsageTotal(summary.totalBytes),
@@ -568,7 +597,6 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                               height: 0.95,
                             ),
                       ),
-                      const SizedBox(width: 8),
                       Padding(
                         padding: const EdgeInsets.only(bottom: 3),
                         child: Text(
@@ -874,7 +902,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     };
   }
 
-  Widget _usageRangePager(String interfaceName) {
+  Widget _usageRangePager(String interfaceName, UsageChartUnit chartUnit) {
     return Column(
       children: [
         SizedBox(
@@ -889,7 +917,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
             itemCount: _StatsUsageRange.values.length,
             itemBuilder: (context, index) {
               final range = _StatsUsageRange.values[index];
-              return _usageRangePage(interfaceName, range);
+              return _usageRangePage(interfaceName, range, chartUnit);
             },
           ),
         ),
@@ -899,7 +927,11 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     );
   }
 
-  Widget _usageRangePage(String interfaceName, _StatsUsageRange range) {
+  Widget _usageRangePage(
+    String interfaceName,
+    _StatsUsageRange range,
+    UsageChartUnit chartUnit,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -910,7 +942,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
               range,
               snapshot.data ?? const [],
             );
-            return _usageBarGraph(samples, range: range);
+            return _usageBarGraph(samples, range: range, chartUnit: chartUnit);
           },
         ),
         const SizedBox(height: 12),
@@ -1023,6 +1055,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     List<({String label, int downloadBytes, int uploadBytes, bool hasData})>
     samples, {
     required _StatsUsageRange range,
+    required UsageChartUnit chartUnit,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
     final maxValue = samples
@@ -1037,6 +1070,12 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
         selectedBar != null && selectedBar >= 0 && selectedBar < samples.length
         ? selectedBar
         : null;
+    final totalLabelStyle = Theme.of(context).textTheme.labelSmall!.copyWith(
+      color: colorScheme.onSurfaceVariant,
+      fontSize: 9,
+      fontWeight: FontWeight.w800,
+      letterSpacing: 0,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1047,10 +1086,24 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
             builder: (context, constraints) {
               final slotWidth = constraints.maxWidth / max(1, samples.length);
               final barWidth = (slotWidth * 0.52).clamp(4.0, 24.0);
-              final maxTotalLabels = (constraints.maxWidth / 42).floor().clamp(
-                2,
-                samples.length,
-              );
+              var labelWidth = 42.0;
+              for (final sample in samples) {
+                final painter = TextPainter(
+                  text: TextSpan(
+                    text: chartUnit.format(
+                      sample.downloadBytes + sample.uploadBytes,
+                    ),
+                    style: totalLabelStyle,
+                  ),
+                  textDirection: Directionality.of(context),
+                  textScaler: MediaQuery.textScalerOf(context),
+                )..layout();
+                labelWidth = max(labelWidth, painter.width + 14);
+                painter.dispose();
+              }
+              final maxTotalLabels = (constraints.maxWidth / labelWidth)
+                  .floor()
+                  .clamp(2, samples.length);
               final totalLabelIndexes = _distributedIndexes(
                 samples.length,
                 maxTotalLabels,
@@ -1161,15 +1214,10 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                               );
                             }
                             return BarTooltipItem(
-                              _formatUsageTotal(
+                              chartUnit.format(
                                 sample.downloadBytes + sample.uploadBytes,
                               ),
-                              Theme.of(context).textTheme.labelSmall!.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0,
-                              ),
+                              totalLabelStyle,
                             );
                           },
                         ),
@@ -1196,8 +1244,13 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                                   index >= samples.length) {
                                 return const SizedBox.shrink();
                               }
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 8),
+                              return SideTitleWidget(
+                                meta: meta,
+                                fitInside: SideTitleFitInsideData.fromTitleMeta(
+                                  meta,
+                                  enabled: true,
+                                  distanceFromEdge: 0,
+                                ),
                                 child: Text(
                                   samples[index].label,
                                   style: Theme.of(context).textTheme.labelSmall
@@ -1412,13 +1465,17 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   }
 
   Widget _usageLegend() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _legendItem('Download', _cyan),
-        const SizedBox(width: 18),
-        _legendItem('Upload', _orange),
-      ],
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _legendItem('Download', _cyan),
+          const SizedBox(width: 18),
+          _legendItem('Upload', _orange),
+        ],
+      ),
     );
   }
 

@@ -18,6 +18,7 @@ import 'package:openwalla/services/vlan_discovery_service.dart';
 import 'package:openwalla/services/throughput_service.dart';
 import 'package:openwalla/models/client.dart';
 import 'package:openwalla/models/adblock_report.dart';
+import 'package:openwalla/models/usage_chart_unit.dart';
 import 'package:openwalla/models/quarantine_notice_state.dart';
 import 'package:openwalla/models/ddns_info.dart';
 import 'package:openwalla/models/router.dart' as model;
@@ -1281,11 +1282,13 @@ class MonthlyUsageSettings {
   final int monthStartDay;
   final String interfaceName;
   final int monthlyLimitGb;
+  final UsageChartUnit chartUnit;
 
   const MonthlyUsageSettings({
     required this.monthStartDay,
     required this.interfaceName,
     this.monthlyLimitGb = 100,
+    this.chartUnit = UsageChartUnit.gb,
   });
 }
 
@@ -12381,6 +12384,7 @@ done | sort -nr | head -n ''' +
                     .clamp(1, 31),
             interfaceName:
                 saved['interfaceName']?.toString() ?? defaults.interfaceName,
+            chartUnit: UsageChartUnit.parse(saved['chartUnit']),
             monthlyLimitGb:
                 (int.tryParse('${saved['monthlyLimitGb']}') ??
                         defaults.monthlyLimitGb)
@@ -12408,6 +12412,7 @@ done | sort -nr | head -n ''' +
               ? interfaceName!
               : defaults.interfaceName,
           monthlyLimitGb: monthlyLimitGb.clamp(0, 100000),
+          chartUnit: UsageChartUnit.parse(dashboard['usage_chart_unit']),
         );
         if (router != null) {
           unawaited(
@@ -12415,6 +12420,7 @@ done | sort -nr | head -n ''' +
               'monthStartDay': settings.monthStartDay,
               'interfaceName': settings.interfaceName,
               'monthlyLimitGb': settings.monthlyLimitGb,
+              'chartUnit': settings.chartUnit.name,
             }),
           );
         }
@@ -12450,6 +12456,7 @@ done | sort -nr | head -n ''' +
         'month_start_day': settings.monthStartDay.clamp(1, 31).toString(),
         'vnstat_interface': settings.interfaceName,
         'monthly_limit_gb': settings.monthlyLimitGb.clamp(0, 100000).toString(),
+        'usage_chart_unit': settings.chartUnit.name,
       },
       context: context,
     );
@@ -12464,6 +12471,7 @@ done | sort -nr | head -n ''' +
         'monthStartDay': settings.monthStartDay.clamp(1, 31),
         'interfaceName': settings.interfaceName,
         'monthlyLimitGb': settings.monthlyLimitGb.clamp(0, 100000),
+        'chartUnit': settings.chartUnit.name,
       }),
     );
     clearStatisticsPreload();
