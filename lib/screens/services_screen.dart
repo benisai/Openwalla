@@ -56,7 +56,9 @@ class _ServicesScreenState extends ConsumerState<ServicesScreen> {
             return const LuciLoadingWidget();
           }
 
-          final services = snapshot.data ?? const <OpenwallaServiceStatus>[];
+          final services = (snapshot.data ?? const <OpenwallaServiceStatus>[])
+              .where((service) => service.installed)
+              .toList();
           if (snapshot.hasError) {
             return _ServicesEmptyState(
               icon: Icons.error_outline_rounded,
