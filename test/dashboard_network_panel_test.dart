@@ -170,24 +170,48 @@ void main() {
     expect(network, 2);
     expect(wifi, 1);
   });
-  testWidgets(
-    'all physical port icons are shown without changing network totals',
-    (tester) async {
-      final data = sample();
-      data['ethernetPorts'] = [
-        for (var i = 1; i <= 5; i++)
-          {'name': 'lan$i', 'label': 'LAN $i', 'up': i.isEven},
-      ];
-      await mount(tester, data, width: 320);
-      for (var i = 1; i <= 5; i++) {
-        expect(find.byKey(ValueKey('network-port-lan$i')), findsOneWidget);
-      }
-      expect(find.text('4 Networks'), findsOneWidget);
-      expect(find.text('2 Wi-Fi'), findsOneWidget);
-      expect(find.text('+1'), findsNothing);
-      expect(tester.takeException(), isNull);
-    },
-  );
+  for (final count in [3, 4, 5, 8]) {
+    testWidgets(
+      '$count physical ports show at most four icons and an accurate overflow',
+      (tester) async {
+        final data = sample();
+        data['ethernetPorts'] = [
+          for (var i = 1; i <= count; i++)
+            {'name': 'lan$i', 'label': 'LAN $i', 'up': i.isEven},
+        ];
+        await mount(tester, data, width: 320);
+        for (var i = 1; i <= count; i++) {
+          expect(
+            find.byKey(ValueKey('network-port-lan$i')),
+            i <= 4 ? findsOneWidget : findsNothing,
+          );
+        }
+        expect(find.text('4 Networks'), findsOneWidget);
+        expect(find.text('2 Wi-Fi'), findsOneWidget);
+        if (count > 4) {
+          expect(find.text('+${count - 4}'), findsOneWidget);
+          expect(
+            find.byTooltip('${count - 4} more Ethernet ports'),
+            findsOneWidget,
+          );
+          final lastPort = tester.getRect(
+            find.byKey(const ValueKey('network-port-lan4')),
+          );
+          final overflow = tester.getRect(
+            find.byKey(const ValueKey('network-port-overflow')),
+          );
+          expect(lastPort.right, lessThanOrEqualTo(overflow.left));
+          expect(lastPort.center.dy, closeTo(overflow.center.dy, 1));
+        } else {
+          expect(
+            find.byKey(const ValueKey('network-port-overflow')),
+            findsNothing,
+          );
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   testWidgets('unknown data differs from reported zero on wired-only routers', (
     tester,
@@ -235,7 +259,13 @@ void main() {
       testWidgets(
         'panel fits $width in ${dark ? 'dark' : 'light'} theme at large text',
         (tester) async {
-          await mount(tester, sample(), width: width, scale: 1.5, dark: dark);
+          final data = sample();
+          data['ethernetPorts'] = [
+            for (var i = 1; i <= 8; i++)
+              {'name': 'lan$i', 'label': 'LAN $i', 'up': i.isEven},
+          ];
+          await mount(tester, data, width: width, scale: 1.5, dark: dark);
+          expect(find.text('+4'), findsOneWidget);
           expect(tester.takeException(), isNull);
           final panel = tester.getRect(
             find.byKey(const ValueKey('dashboard-network-panel')),

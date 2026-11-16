@@ -134,50 +134,68 @@ class DashboardNetworkPanel extends StatelessWidget {
                       style: Theme.of(context).textTheme.labelSmall,
                     )
                   else
-                    Wrap(
-                      spacing: 3,
-                      runSpacing: 4,
-                      children: [
-                        for (final port in ports)
-                          Tooltip(
-                            message:
-                                '${port.label}: ${port.up == null
-                                    ? 'Unknown'
-                                    : port.up!
-                                    ? 'Up'
-                                    : 'Down'}',
-                            child: Semantics(
-                              label:
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        spacing: 3,
+                        children: [
+                          for (final port in ports.take(4))
+                            Tooltip(
+                              message:
                                   '${port.label}: ${port.up == null
                                       ? 'Unknown'
                                       : port.up!
                                       ? 'Up'
                                       : 'Down'}',
-                              child: Container(
-                                key: ValueKey('network-port-${port.name}'),
-                                width: 16,
-                                height: 12,
-                                decoration: BoxDecoration(
-                                  color: port.up == null
-                                      ? colors.onSurfaceVariant.withValues(
-                                          alpha: 0.25,
-                                        )
-                                      : port.up!
-                                      ? _green
-                                      : _orange,
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
-                                child: Icon(
-                                  Icons.settings_ethernet_rounded,
-                                  size: 12,
-                                  color: port.up == null
-                                      ? colors.onSurfaceVariant
-                                      : Colors.black87,
+                              child: Semantics(
+                                label:
+                                    '${port.label}: ${port.up == null
+                                        ? 'Unknown'
+                                        : port.up!
+                                        ? 'Up'
+                                        : 'Down'}',
+                                child: Container(
+                                  key: ValueKey('network-port-${port.name}'),
+                                  width: 16,
+                                  height: 12,
+                                  decoration: BoxDecoration(
+                                    color: port.up == null
+                                        ? colors.onSurfaceVariant.withValues(
+                                            alpha: 0.25,
+                                          )
+                                        : port.up!
+                                        ? _green
+                                        : _orange,
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                  child: Icon(
+                                    Icons.settings_ethernet_rounded,
+                                    size: 12,
+                                    color: port.up == null
+                                        ? colors.onSurfaceVariant
+                                        : Colors.black87,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                      ],
+                          if (ports.length > 4)
+                            Tooltip(
+                              message:
+                                  '${ports.length - 4} more Ethernet ports',
+                              child: Text(
+                                '+${ports.length - 4}',
+                                key: const ValueKey('network-port-overflow'),
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0,
+                                    ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                 ],
               ),
