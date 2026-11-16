@@ -8,6 +8,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:openwalla/widgets/dashboard_network_panel.dart';
 
 Map<String, dynamic> sample() => {
+  'ethernetPorts': [
+    {'name': 'lan1', 'label': 'LAN 1', 'up': true},
+    {'name': 'lan2', 'label': 'LAN 2', 'up': false},
+    {'name': 'wan', 'label': 'WAN'},
+  ],
   'interfaceDump': {
     'interface': [
       {'interface': 'loopback', 'up': true},
@@ -141,9 +146,11 @@ void main() {
       await mount(tester, sample());
       expect(find.text('4 Networks'), findsOneWidget);
       expect(find.text('2 Wi-Fi'), findsOneWidget);
-      expect(find.byTooltip('wwan: Down'), findsOneWidget);
-      expect(find.byTooltip('vpn: Unknown'), findsOneWidget);
-      expect(find.byTooltip('lan: Up'), findsOneWidget);
+      expect(find.byTooltip('LAN 2: Down'), findsOneWidget);
+      expect(find.byTooltip('WAN: Unknown'), findsOneWidget);
+      expect(find.byTooltip('LAN 1: Up'), findsOneWidget);
+      expect(find.byKey(const ValueKey('network-port-vpn')), findsNothing);
+      expect(find.byKey(const ValueKey('network-port-wwan')), findsNothing);
       expect(find.byTooltip('loopback: Up'), findsNothing);
     },
   );
@@ -163,6 +170,24 @@ void main() {
     expect(network, 2);
     expect(wifi, 1);
   });
+  testWidgets(
+    'all physical port icons are shown without changing network totals',
+    (tester) async {
+      final data = sample();
+      data['ethernetPorts'] = [
+        for (var i = 1; i <= 5; i++)
+          {'name': 'lan$i', 'label': 'LAN $i', 'up': i.isEven},
+      ];
+      await mount(tester, data, width: 320);
+      for (var i = 1; i <= 5; i++) {
+        expect(find.byKey(ValueKey('network-port-lan$i')), findsOneWidget);
+      }
+      expect(find.text('4 Networks'), findsOneWidget);
+      expect(find.text('2 Wi-Fi'), findsOneWidget);
+      expect(find.text('+1'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('unknown data differs from reported zero on wired-only routers', (
     tester,
@@ -199,7 +224,8 @@ void main() {
         },
       });
       expect(find.text('20 Networks'), findsOneWidget);
-      expect(find.text('+16'), findsOneWidget);
+      expect(find.text('+16'), findsNothing);
+      expect(find.text('Ports unavailable'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

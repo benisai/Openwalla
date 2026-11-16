@@ -34,7 +34,7 @@
 				"network.interface": ["dump"],
 				"network.wireless": ["status"],
 				"uci": ["get", "changes"],
-				"luci": ["getTimezones"],
+				"luci": ["getTimezones", "getBuiltinEthernetPorts"],
 				"file": ["read"],
 				"system": ["info", "board"],
 				"luci-rpc": ["getDHCPLeases", "getNetworkDevices", "getWirelessDevices", "getBoardJSON"],

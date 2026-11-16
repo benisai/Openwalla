@@ -24,6 +24,10 @@ void main() {
         contains('read'),
       );
       expect((read['ubus'] as Map)['luci'], contains('getTimezones'));
+      expect(
+        (read['ubus'] as Map)['luci'],
+        contains('getBuiltinEthernetPorts'),
+      );
       expect((read['ubus'] as Map)['luci-rpc'], contains('getBoardJSON'));
       expect((write['ubus'] as Map)['uci'], contains('apply'));
     },

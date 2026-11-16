@@ -68,7 +68,6 @@ class DashboardPreferences {
        shortcutOrder = shortcutOrder ?? defaultShortcutOrder;
 
   static const defaultShortcutOrder = [
-    'network',
     'dns',
     'wifi',
     'routes',

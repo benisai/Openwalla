@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:openwalla/models/ethernet_port.dart';
 
 /// Compact overview of reported logical networks and active access points.
 class DashboardNetworkPanel extends StatelessWidget {
@@ -42,6 +43,26 @@ class DashboardNetworkPanel extends StatelessWidget {
     ];
   }
 
+  List<EthernetPort>? get _ports {
+    final cached = data['ethernetPorts'];
+    if (cached is! List) {
+      return EthernetPort.discover(devices: data['networkDevices']);
+    }
+    return [
+      for (final port in cached.whereType<Map>())
+        if (port['name'] is String && (port['name'] as String).isNotEmpty)
+          EthernetPort(
+            port['name'],
+            '${port['label'] ?? port['name']}',
+            _true(port['up'])
+                ? true
+                : _false(port['up'])
+                ? false
+                : null,
+          ),
+    ];
+  }
+
   int? get _wifiCount {
     final wireless = data['wireless'];
     if (wireless is! Map) return null;
@@ -78,6 +99,7 @@ class DashboardNetworkPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final networks = _networks;
+    final ports = _ports;
     return Row(
       key: const ValueKey('dashboard-network-panel'),
       children: [
@@ -106,9 +128,9 @@ class DashboardNetworkPanel extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  if (networks == null || networks.isEmpty)
+                  if (ports == null || ports.isEmpty)
                     Text(
-                      networks == null ? 'Unavailable' : 'No networks',
+                      ports == null ? 'Ports unavailable' : 'No Ethernet ports',
                       style: Theme.of(context).textTheme.labelSmall,
                     )
                   else
@@ -116,31 +138,31 @@ class DashboardNetworkPanel extends StatelessWidget {
                       spacing: 3,
                       runSpacing: 4,
                       children: [
-                        for (final network in networks.take(4))
+                        for (final port in ports)
                           Tooltip(
                             message:
-                                '${network.name}: ${network.up == null
+                                '${port.label}: ${port.up == null
                                     ? 'Unknown'
-                                    : network.up!
+                                    : port.up!
                                     ? 'Up'
                                     : 'Down'}',
                             child: Semantics(
                               label:
-                                  '${network.name}: ${network.up == null
+                                  '${port.label}: ${port.up == null
                                       ? 'Unknown'
-                                      : network.up!
+                                      : port.up!
                                       ? 'Up'
                                       : 'Down'}',
                               child: Container(
-                                key: ValueKey('network-status-${network.name}'),
+                                key: ValueKey('network-port-${port.name}'),
                                 width: 16,
                                 height: 12,
                                 decoration: BoxDecoration(
-                                  color: network.up == null
+                                  color: port.up == null
                                       ? colors.onSurfaceVariant.withValues(
                                           alpha: 0.25,
                                         )
-                                      : network.up!
+                                      : port.up!
                                       ? _green
                                       : _orange,
                                   borderRadius: BorderRadius.circular(2),
@@ -148,17 +170,12 @@ class DashboardNetworkPanel extends StatelessWidget {
                                 child: Icon(
                                   Icons.settings_ethernet_rounded,
                                   size: 12,
-                                  color: network.up == null
+                                  color: port.up == null
                                       ? colors.onSurfaceVariant
                                       : Colors.black87,
                                 ),
                               ),
                             ),
-                          ),
-                        if (networks.length > 4)
-                          Text(
-                            '+${networks.length - 4}',
-                            style: Theme.of(context).textTheme.labelSmall,
                           ),
                       ],
                     ),

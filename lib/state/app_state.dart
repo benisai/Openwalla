@@ -19,6 +19,7 @@ import 'package:openwalla/services/throughput_service.dart';
 import 'package:openwalla/models/client.dart';
 import 'package:openwalla/models/adblock_report.dart';
 import 'package:openwalla/models/usage_chart_unit.dart';
+import 'package:openwalla/models/ethernet_port.dart';
 import 'package:openwalla/models/quarantine_notice_state.dart';
 import 'package:openwalla/models/ddns_info.dart';
 import 'package:openwalla/models/router.dart' as model;
@@ -2331,6 +2332,7 @@ class AppState extends ChangeNotifier {
         'boardInfo',
         'sysInfo',
         'networkDevices',
+        'ethernetPorts',
         'interfaceDump',
         'wireless',
         'associatedWirelessMacs',
@@ -5422,6 +5424,16 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
         method: 'getWirelessDevices',
         params: {},
       );
+      final ethernetInventoryFuture = callOptionalRpc(
+        object: 'luci',
+        method: 'getBuiltinEthernetPorts',
+        params: {},
+      );
+      final ethernetBoardFuture = callOptionalRpc(
+        object: 'luci-rpc',
+        method: 'getBoardJSON',
+        params: {},
+      );
 
       // UCI wireless config is optional — wired-only routers may not have it
       final uciWirelessFuture = callOptionalRpc(
@@ -5544,6 +5556,8 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
         deviceRecordsFuture,
         pingSettingsFuture,
         quarantineFuture,
+        ethernetInventoryFuture,
+        ethernetBoardFuture,
       ]);
       final wirelessRaw = optionalResults[0];
       final uciWirelessRaw = optionalResults[1];
@@ -5551,6 +5565,15 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
       final pingSamples = optionalResults[3] as List<PingMonitorSample>;
       final pingSettings = optionalResults[9] as NetworkMonitorSettings;
       final quarantine = optionalResults[10] as DeviceFirewallState;
+      final builtin = getOptionalData(
+        optionalResults[11],
+        'luci.getBuiltinEthernetPorts',
+      );
+      final ethernetPorts = EthernetPort.discover(
+        devices: networkData,
+        board: getOptionalData(optionalResults[12], 'luci-rpc.getBoardJSON'),
+        builtin: builtin is Map ? builtin['result'] : null,
+      );
       final flowSummary = optionalResults[4] as OpenwallaFlowSummary;
       final notificationCount = optionalResults[5] as int;
       final rulesCount = optionalResults[6] as int;
@@ -5674,6 +5697,7 @@ ${external ? '/etc/init.d/openwalla-netify-collector stop >/dev/null 2>&1 || tru
         'boardInfo': boardInfoData,
         'sysInfo': normalizedSysInfo,
         'networkDevices': networkData,
+        'ethernetPorts': ethernetPorts?.map((port) => port.toJson()).toList(),
         'interfaceDump': interfaceDump,
         'wireless': wirelessData ?? <String, dynamic>{},
         'associatedWirelessMacs': associatedMacs,

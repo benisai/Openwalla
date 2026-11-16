@@ -1197,13 +1197,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     final shortcuts =
         [
           _DashboardShortcutData(
-            id: 'network',
-            label: 'Network',
-            icon: Icons.public_rounded,
-            color: _openwallaCyan,
-            onTap: () => _openNetworkPage(wirelessOnly: false),
-          ),
-          _DashboardShortcutData(
             id: 'dns',
             label: 'DNS',
             icon: Icons.dns_rounded,

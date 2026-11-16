@@ -2,6 +2,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:openwalla/models/dashboard_preferences.dart';
 
 void main() {
+  test(
+    'Network is removed from default and previously saved shortcut orders',
+    () {
+      expect(
+        DashboardPreferences.defaultShortcutOrder,
+        isNot(contains('network')),
+      );
+      final restored = DashboardPreferences.fromJson({
+        'shortcutOrder': ['network', 'wifi', 'dns'],
+      });
+      expect(restored.shortcutOrder, isNot(contains('network')));
+      expect(restored.shortcutOrder.take(2), ['wifi', 'dns']);
+    },
+  );
   for (final count in [3, 6, 9]) {
     test('$count shortcut icons persist through copy and JSON', () {
       final updated = DashboardPreferences().copyWith(

@@ -66,6 +66,7 @@ class _Api implements IApiService {
   Completer<void>? boardGate;
   Map<String, dynamic> firewall = {'values': <String, dynamic>{}};
   bool firewallFails = false;
+  bool portsFail = false;
   @override
   Future<dynamic> call(
     String ipAddress,
@@ -78,6 +79,39 @@ class _Api implements IApiService {
     Duration? receiveTimeout,
     Duration? sendTimeout,
   }) async {
+    if (method == 'getBuiltinEthernetPorts' || method == 'getBoardJSON') {
+      if (portsFail) {
+        throw StateError('Optional hardware inventory unavailable');
+      }
+      if (method == 'getBuiltinEthernetPorts') {
+        return {
+          'result': [
+            {'device': 'lan1', 'role': 'lan'},
+            {'device': 'wan', 'role': 'wan'},
+          ],
+        };
+      }
+      return {
+        'network': {
+          'lan': {
+            'ports': ['lan1'],
+          },
+          'wan': {'device': 'wan'},
+        },
+      };
+    }
+    if (method == 'getNetworkDevices') {
+      return {
+        'lan1': {
+          'devtype': 'dsa',
+          'link': {'carrier': true},
+        },
+        'wan': {
+          'devtype': 'dsa',
+          'link': {'carrier': false},
+        },
+      };
+    }
     if (object == 'system' && method == 'board') {
       if (receiveTimeout == const Duration(seconds: 3)) {
         probes++;
@@ -164,6 +198,27 @@ void main() {
     state.dispose();
     RouterAccessGuard.offline = false;
   });
+  test('physical port inventory is included in dashboard cache', () async {
+    await state.fetchDashboardData();
+    expect(state.dashboardData?['ethernetPorts'], [
+      {'name': 'lan1', 'label': 'LAN (lan1)', 'up': true},
+      {'name': 'wan', 'label': 'WAN (wan)', 'up': false},
+    ]);
+    cache.gate.complete();
+    await Future.wait(cache.writes);
+    final snapshot = cache.saved['router-a:dashboard'] as Map;
+    expect(snapshot['ethernetPorts'], state.dashboardData?['ethernetPorts']);
+  });
+  test(
+    'unsupported port inventory never prevents the dashboard from loading',
+    () async {
+      api.portsFail = true;
+      await state.fetchDashboardData();
+      expect(state.dashboardData, isNotNull);
+      expect(state.dashboardError, isNull);
+      expect((state.dashboardData?['ethernetPorts'] as List).length, 2);
+    },
+  );
 
   test(
     'non-network dashboard errors never enable global offline guard',
