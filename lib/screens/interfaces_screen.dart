@@ -1667,6 +1667,8 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
                 LuciPullToRefresh(
                   onRefresh: _refreshNetworkData,
                   child: CustomScrollView(
+                    key: const PageStorageKey('wifi-access-points'),
+                    primary: false,
                     physics: const AlwaysScrollableScrollPhysics(),
                     slivers: [_buildWirelessSliver(mainActive, mainDisabled)],
                   ),
@@ -1674,6 +1676,8 @@ class _InterfacesScreenState extends ConsumerState<InterfacesScreen> {
                 LuciPullToRefresh(
                   onRefresh: _refreshNetworkData,
                   child: CustomScrollView(
+                    key: const PageStorageKey('wifi-repeaters'),
+                    primary: false,
                     physics: const AlwaysScrollableScrollPhysics(),
                     slivers: [
                       if (staActive.isEmpty && staDisabled.isEmpty)
